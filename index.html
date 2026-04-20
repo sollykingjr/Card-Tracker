@@ -251,13 +251,12 @@ async function loadAll() {
       const saleFees      = num(r[12]);
       const isSold        = salePrice != null && salePrice > 0;
 
-      // Net Profit strategy:
-      // - For SOLD cards: read col N directly (sheet formula: salePrice - saleFees - purchasePrice)
-      // - For UNSOLD cards: col N returns blank from API, so compute as -purchasePrice
-      const netProfitFromSheet = num(r[13]);
+      // Net Profit: for sold cards read from sheet (col N), for unsold compute -purchasePrice
+      // API returns blank for unsold cards regardless of sheet formula
+      const netProfitSheet = num(r[13]);
       const netProfit = isSold
-        ? (netProfitFromSheet != null ? netProfitFromSheet : salePrice - (saleFees || 0) - (purchasePrice || 0))
-        : (purchasePrice != null ? -purchasePrice : null);
+        ? (netProfitSheet != null ? netProfitSheet : salePrice - (saleFees || 0) - (purchasePrice || 0))
+        : (purchasePrice != null ? -purchasePrice : 0);
 
       // Profit % — sheet stores as decimal ratio e.g. 0.425 = 42.5%
       const profitPct = num(r[14]);
@@ -285,6 +284,16 @@ async function loadAll() {
 
     $('sync-info').textContent = allCards.length.toLocaleString() + ' cards';
     $('dot').className = 'dot live';
+
+    // Quick diagnostic
+    const soldCards = allCards.filter(c => c.salePrice != null && c.salePrice > 0);
+    const heldCards = allCards.filter(c => !(c.salePrice != null && c.salePrice > 0));
+    console.log('Sold count:', soldCards.length, 'Held count:', heldCards.length);
+    console.log('Sum netProfit ALL:', allCards.reduce((s,c)=>s+(c.netProfit||0),0).toFixed(2));
+    console.log('Sum netProfit SOLD:', soldCards.reduce((s,c)=>s+(c.netProfit||0),0).toFixed(2));
+    console.log('Sum netProfit HELD:', heldCards.reduce((s,c)=>s+(c.netProfit||0),0).toFixed(2));
+    console.log('Sample held netProfit:', heldCards.slice(0,5).map(c=>({player:c.player,purchasePrice:c.purchasePrice,netProfit:c.netProfit})));
+    console.log('Sample sold netProfit:', soldCards.slice(0,5).map(c=>({player:c.player,purchasePrice:c.purchasePrice,salePrice:c.salePrice,netProfitSheet:num(rows.find(r=>cl(r[7])===c.player)?.[13]),netProfit:c.netProfit})));
     buildDashboard();
     buildFilters();
     applyFilters();
