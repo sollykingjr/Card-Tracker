@@ -249,7 +249,7 @@ async function loadAll() {
       const purchasePrice = num(r[10]);
       const salePrice     = num(r[11]);
       const saleFees      = num(r[12]);
-      const isSold        = salePrice != null;
+      const isSold        = salePrice != null && salePrice > 0;
 
       // Net Profit strategy:
       // - For SOLD cards: read col N directly (sheet formula: salePrice - saleFees - purchasePrice)
@@ -298,8 +298,8 @@ async function loadAll() {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 function buildDashboard() {
-  const sold = allCards.filter(c => c.salePrice != null);
-  const held = allCards.filter(c => c.salePrice == null);
+  const sold = allCards.filter(c => c.salePrice != null && c.salePrice > 0);
+  const held = allCards.filter(c => !(c.salePrice != null && c.salePrice > 0));
 
   const totalInvested  = allCards.reduce((s,c) => s + (c.purchasePrice || 0), 0);
   const inventoryCost  = held.reduce((s,c) => s + (c.purchasePrice || 0), 0);
@@ -454,8 +454,8 @@ function applyFilters() {
       if (!hay.includes(q)) return false;
     }
     if (sp  && c.sport !== sp) return false;
-    if (st === 'sold' && c.salePrice == null) return false;
-    if (st === 'held' && c.salePrice != null) return false;
+    if (st === 'sold' && !(c.salePrice != null && c.salePrice > 0)) return false;
+    if (st === 'held' && (c.salePrice != null && c.salePrice > 0)) return false;
     if (src && c.purchasedFrom !== src) return false;
     return true;
   });
