@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Card Cost Tracker</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 :root {
@@ -19,38 +19,44 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font-family:var(--sans);min-height:100vh}
-header{border-bottom:1px solid var(--bdr);padding:0 28px;display:flex;align-items:center;gap:12px;height:52px;position:sticky;top:0;z-index:100;background:var(--bg)}
-.logo{font-size:14px;font-weight:700;letter-spacing:0.1em}
+header{border-bottom:1px solid var(--bdr);padding:0 28px;display:flex;align-items:center;height:52px;position:sticky;top:0;z-index:100;background:var(--bg)}
+.logo{font-size:14px;font-weight:700;letter-spacing:.1em}
 .logo span{color:var(--acc)}
 .hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .sync-info{font-family:var(--mono);font-size:11px;color:var(--tx2)}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);transition:background .3s}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);transition:background .3s;flex-shrink:0}
 .dot.live{background:var(--acc);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.rfab{width:32px;height:32px;border-radius:50%;background:var(--surf2);border:1px solid var(--bdr2);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--tx2);font-size:16px;line-height:1}
+.rfab{width:32px;height:32px;border-radius:50%;background:var(--surf2);border:1px solid var(--bdr2);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--tx2);font-size:16px;line-height:1;transition:all .15s}
 .rfab:hover{border-color:var(--acc);color:var(--acc)}
 .rfab.spin{animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.tabs{display:flex;gap:0;padding:0 28px;border-bottom:1px solid var(--bdr);background:var(--bg);position:sticky;top:52px;z-index:99}
-.tab{padding:11px 18px;font-size:12px;font-weight:600;color:var(--tx2);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.05em;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--sans)}
+.tabs{display:flex;padding:0 28px;border-bottom:1px solid var(--bdr);background:var(--bg);position:sticky;top:52px;z-index:99}
+.tab{padding:11px 18px;font-size:12px;font-weight:600;color:var(--tx2);cursor:pointer;border:none;border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.05em;background:none;font-family:var(--sans)}
 .tab:hover{color:var(--tx)}
 .tab.on{color:var(--acc);border-bottom-color:var(--acc)}
 main{padding:24px 28px;max-width:1400px}
-.spin-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;gap:14px;color:var(--tx2);font-family:var(--mono);font-size:12px}
+.view{display:none}.view.on{display:block}
+/* Spinner */
+.spin-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;gap:14px;color:var(--tx2);font-family:var(--mono);font-size:12px}
 .spin-ring{width:28px;height:28px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite}
-.err-box{background:var(--red-dim);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:14px 18px;font-size:13px;color:var(--red);line-height:1.6;margin:20px 0}
-.view{display:none}
-.view.on{display:block}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:20px}
-.sc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px}
-.sc-lbl{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px}
-.sc-val{font-size:21px;font-weight:700;line-height:1}
+.err{background:var(--red-dim);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:14px 18px;font-size:13px;color:var(--red);line-height:1.6;margin:20px 0}
+/* Stat cards */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px}
+.sc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:16px}
+.sc-lbl{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+.sc-val{font-size:22px;font-weight:700;line-height:1}
 .sc-sub{font-family:var(--mono);font-size:10px;color:var(--tx3);margin-top:5px}
-.green{color:var(--acc)}.red{color:var(--red)}.amber{color:var(--amber)}.blue{color:var(--blue)}
+.c-blue{color:var(--blue)}.c-amber{color:var(--amber)}.c-green{color:var(--acc)}.c-red{color:var(--red)}
+/* Charts */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
 .cc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:18px}
-.cc-title{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px}
+.cc-title{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
 .chart-wrap{position:relative;height:210px}
+.sleg{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.sleg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--tx2);font-family:var(--mono)}
+.sleg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+/* Recent tables */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
 .tc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:18px}
 .tc-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
@@ -66,7 +72,8 @@ table.mini tr:last-child td{border-bottom:none}
 .pname{font-weight:600;font-size:12px;color:var(--tx)}
 .cmeta{font-family:var(--mono);font-size:10px;color:var(--tx2);margin-top:2px}
 .mono{font-family:var(--mono);font-size:12px}
-.controls{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+/* Card list */
+.controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
 .srch{flex:1;min-width:200px;position:relative}
 .srch input{width:100%;background:var(--surf);border:1px solid var(--bdr);color:var(--tx);border-radius:8px;padding:8px 12px 8px 32px;font-family:var(--sans);font-size:13px}
 .srch input:focus{outline:none;border-color:var(--bdr2)}
@@ -83,17 +90,14 @@ table.ct tbody tr{border-bottom:1px solid var(--bdr);transition:background .1s}
 table.ct tbody tr:last-child{border-bottom:none}
 table.ct tbody tr:hover{background:var(--surf2)}
 table.ct td{padding:9px 14px;font-size:12px;vertical-align:middle}
-.sport-tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr);white-space:nowrap}
-.st-sold{background:var(--acc-dim);color:var(--acc)}
-.st-held{background:var(--blue-dim);color:var(--blue)}
+.sport-tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr);white-space:nowrap;display:inline-block}
+.tag-sold{background:var(--acc-dim);color:var(--acc);border-color:transparent}
+.tag-held{background:var(--blue-dim);color:var(--blue);border-color:transparent}
 .pgn{display:flex;align-items:center;gap:8px;padding:12px 14px;border-top:1px solid var(--bdr);font-family:var(--mono);font-size:11px;color:var(--tx2)}
 .pg-btn{background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:var(--mono);font-size:11px}
 .pg-btn:hover{border-color:var(--bdr2)}
 .pg-btn:disabled{opacity:.3;cursor:not-allowed}
-.sleg{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-.sleg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--tx2)}
-.sleg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
-@media(max-width:860px){.charts-row,.two-col{grid-template-columns:1fr}main,header,.tabs{padding-left:16px;padding-right:16px}}
+@media(max-width:860px){.charts-row,.two-col{grid-template-columns:1fr}main{padding:16px}header,.tabs{padding-left:16px;padding-right:16px}}
 </style>
 </head>
 <body>
@@ -114,9 +118,7 @@ table.ct td{padding:9px 14px;font-size:12px;vertical-align:middle}
 
 <main>
   <div class="view on" id="view-dashboard">
-    <div id="dash-inner">
-      <div class="spin-state"><div class="spin-ring"></div>Fetching from Google Sheets...</div>
-    </div>
+    <div id="dash-inner"><div class="spin-wrap"><div class="spin-ring"></div>Fetching from Google Sheets...</div></div>
   </div>
   <div class="view" id="view-cards">
     <div class="controls">
@@ -166,170 +168,162 @@ table.ct td{padding:9px 14px;font-size:12px;vertical-align:middle}
 </main>
 
 <script>
+// ── Config ────────────────────────────────────────────────────────────────────
 const SID  = '12sNofzPwhb8uR68hT_bJNiLD2MrM0rdoQMPXGTlx2_s';
 const KEY  = 'AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE';
 const BASE = `https://sheets.googleapis.com/v4/spreadsheets/${SID}/values/`;
 
-let allCards=[], filtered=[];
-let sortKey='datePurchased', sortDir=-1;
-let page=1, pageSize=50;
-let sportChart, timeChart;
-
 const SPORT_COLORS = {
-  'Baseball':'#60a5fa','Football':'#f87171','Basketball':'#fbbf24',
-  'Hockey':'#a78bfa','Soccer':'#4ade80','Pokemon':'#fb923c',
-  'Wrestling':'#f472b6','Non-Sports':'#94a3b8','Marvel':'#ef4444',
-  'YuGiOh':'#c084fc','MultiSport':'#67e8f9','Racing':'#a3e635',
-  'MMA':'#fb7185','Tennis':'#86efac'
+  'Baseball':'#60a5fa','Football':'#f87171','Basketball':'#fbbf24','Hockey':'#a78bfa',
+  'Soccer':'#4ade80','Pokemon':'#fb923c','Wrestling':'#f472b6','Non-Sports':'#94a3b8',
+  'Marvel':'#ef4444','YuGiOh':'#c084fc','MultiSport':'#67e8f9','Racing':'#a3e635',
+  'MMA':'#fb7185','Tennis':'#86efac','One Piece':'#fdba74','Star Wars':'#fde68a','Gaming':'#6ee7b7'
 };
 
-const cl = v => (!v||String(v).trim()===''||v==='-'||v==='—') ? null : String(v).trim();
-const $  = id => document.getElementById(id);
+// ── State ─────────────────────────────────────────────────────────────────────
+let allCards = [], filtered = [];
+let sortKey = 'datePurchased', sortDir = -1;
+let page = 1, pageSize = 50;
+let sportChart, timeChart;
 
-function fmtMoney(v) {
-  const n = parseFloat(String(v||'').replace(/[^0-9.-]/g,''));
-  if (isNaN(n)) return '—';
-  return (n<0?'-$':'$') + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-function fmtPct(v) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+// Clean string — return null for empty/dash values
+const cl = v => (v == null || String(v).trim() === '' || v === '-' || v === '—') ? null : String(v).trim();
+
+// Parse a raw number from the API (UNFORMATTED_VALUE returns actual numbers, not strings)
+// But guard against nulls and occasional string formatting
+const num = v => {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return v;
+  // String fallback: strip currency symbols, preserve sign
+  const s = String(v).trim();
+  const neg = s.startsWith('-') || s.startsWith('(');
+  const n = parseFloat(s.replace(/[^0-9.]/g, ''));
+  return isNaN(n) ? null : (neg ? -n : n);
+};
+
+// Format a number as currency
+const fmtMoney = v => {
   if (v == null || isNaN(v)) return '—';
-  // profitPct is stored as a decimal ratio: 0.425 = 42.5%
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+};
+
+// Format profit % — sheet stores as decimal ratio (0.425 = 42.5%)
+const fmtPct = v => {
+  if (v == null || isNaN(v)) return '—';
   return (v * 100).toFixed(1) + '%';
-}
-function fmtDate(v) {
+};
+
+const fmtDate = v => {
   if (!v) return '—';
   const d = new Date(v);
-  return isNaN(d) ? '—' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-}
-function colorClass(n) {
-  return (n==null||isNaN(n)) ? '' : n>=0 ? 'green' : 'red';
-}
+  return isNaN(d) ? '—' : d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'2-digit'});
+};
 
-async function fetchRange(rng) {
-  const url = BASE + encodeURIComponent(rng) + '?valueRenderOption=UNFORMATTED_VALUE&key=' + KEY;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return (await r.json()).values || [];
-}
+const cc = v => (v == null || isNaN(v)) ? '' : v >= 0 ? 'c-green' : 'c-red';
 
+// ── Data fetch ────────────────────────────────────────────────────────────────
 async function loadAll() {
   $('rfab').classList.add('spin');
   $('sync-info').textContent = 'Loading...';
   $('dot').className = 'dot';
-  $('dash-inner').innerHTML = '<div class="spin-state"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
+  $('dash-inner').innerHTML = '<div class="spin-wrap"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
 
   try {
-    const rows = await fetchRange("'Card Cost Tracker Final'!A2:W10000");
+    const url = BASE + encodeURIComponent("'Card Cost Tracker Final'!A2:W10000")
+              + '?valueRenderOption=UNFORMATTED_VALUE&key=' + KEY;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = (await res.json()).values || [];
 
-    // Log first 3 rows to console for debugging column mapping
-    console.log('=== RAW ROWS SAMPLE ===');
-    rows.slice(0,3).forEach((r,i) => {
-      console.log(`Row ${i+2} (${r.length} cols):`, r.map((v,j)=>`[${j}]=${JSON.stringify(v)}`).join(', '));
-    });
-    // Find a sold card and log it
-    const soldRaw = rows.find(r => r[11] && r[11] !== '');
-    if (soldRaw) console.log('Sold card raw:', soldRaw.map((v,j)=>`[${j}]=${JSON.stringify(v)}`).join(', '));
-    console.log('Net profit col[13] samples:', rows.slice(0,10).map(r => `${JSON.stringify(r[13])}`));
-
-    const pf = v => {
-      if (v == null || String(v).trim() === '') return null;
-      const s = String(v).trim();
-      // Handle percentage strings like "42.5%" -> store as ratio 0.425
-      if (s.endsWith('%')) {
-        const n = parseFloat(s);
-        return isNaN(n) ? null : n / 100;
-      }
-      // Preserve negative: check for leading minus or accounting parens
-      const neg = s.startsWith('-') || s.startsWith('(');
-      // Strip everything except digits and decimal point
-      const n = parseFloat(s.replace(/[^0-9.]/g, ''));
-      if (isNaN(n)) return null;
-      return neg ? -n : n;
-    };
+    // Column map (0-indexed):
+    // A=0 ItemID, B=1 Sport, C=2 Year, D=3 Set, E=4 Variation, F=5 Version,
+    // G=6 CardNo, H=7 PlayerName, I=8 SerialNo, J=9 QtyMfg,
+    // K=10 PurchasePrice, L=11 SalePrice, M=12 SaleFees, N=13 NetProfit, O=14 ProfitPct,
+    // P=15 DatePurchased, Q=16 TransactionDate, R=17 PurchasedFrom, S=18 PurchasedBy,
+    // T=19 DateSold, U=20 DaysOwned, V=21 Grade, W=22 FullCard
 
     allCards = rows.filter(r => cl(r[7])).map(r => {
-      const purchasePrice = pf(r[10]);
-      const salePrice     = pf(r[11]);
-      const saleFees      = pf(r[12]);
-      // Calculate client-side to match sheet exactly — don't trust API rendering of col N
-      const netProfit = salePrice != null
-        ? salePrice - (saleFees || 0) - (purchasePrice || 0)
-        : purchasePrice != null ? -purchasePrice : null;
-      const profitPct = (salePrice != null && purchasePrice != null && purchasePrice !== 0)
-        ? netProfit / purchasePrice
-        : pf(r[14]);
+      const purchasePrice = num(r[10]);
+      const salePrice     = num(r[11]);
+      const saleFees      = num(r[12]);
+      const isSold        = salePrice != null;
+
+      // Net Profit strategy:
+      // - For SOLD cards: read col N directly (sheet formula: salePrice - saleFees - purchasePrice)
+      // - For UNSOLD cards: col N returns blank from API, so compute as -purchasePrice
+      const netProfitFromSheet = num(r[13]);
+      const netProfit = isSold
+        ? (netProfitFromSheet != null ? netProfitFromSheet : salePrice - (saleFees || 0) - (purchasePrice || 0))
+        : (purchasePrice != null ? -purchasePrice : null);
+
+      // Profit % — sheet stores as decimal ratio e.g. 0.425 = 42.5%
+      const profitPct = num(r[14]);
+
       return {
-        itemId:          cl(r[0])||'',
-        sport:           (cl(r[1])||'Unknown').trim(),
-        year:            cl(r[2])||'',
-        set:             cl(r[3])||'',
-        variation:       cl(r[4])||'',
-        version:         cl(r[5])||'',
-        cardNo:          cl(r[6])||'',
-        player:          cl(r[7])||'',
+        itemId:          cl(r[0])  || '',
+        sport:           (cl(r[1]) || 'Unknown').trim(),
+        year:            cl(r[2])  || '',
+        set:             cl(r[3])  || '',
+        variation:       cl(r[4])  || '',
+        player:          cl(r[7])  || '',
         serialNo:        cl(r[8]),
         purchasePrice,
         salePrice,
         saleFees,
         netProfit,
         profitPct,
-        datePurchased:   cl(r[15])||'',
-        transactionDate: cl(r[16])||'',
-        purchasedFrom:   cl(r[17])||'',
-        purchasedBy:     cl(r[18])||'',
-        dateSold:        cl(r[19])||'',
-        daysOwned:       pf(r[20]),
-        grade:           cl(r[21])||'',
-        fullCard:        cl(r[22])||'',
+        datePurchased:   cl(r[15]) || '',
+        transactionDate: cl(r[16]) || '',
+        purchasedFrom:   cl(r[17]) || '',
+        grade:           cl(r[21]) || '',
+        fullCard:        cl(r[22]) || '',
       };
     });
 
-    // Log parsed sample to console
-    console.log('=== PARSED SAMPLE ===');
-    allCards.slice(0,3).forEach((c,i) => console.log(`Card ${i}:`, JSON.stringify({player:c.player,purchasePrice:c.purchasePrice,salePrice:c.salePrice,netProfit:c.netProfit,profitPct:c.profitPct})));
-    const soldSample = allCards.filter(c=>c.salePrice!=null).slice(0,3);
-    console.log('Sold sample:', JSON.stringify(soldSample.map(c=>({player:c.player,purchasePrice:c.purchasePrice,salePrice:c.salePrice,netProfit:c.netProfit}))));
-    console.log('Total sold:', allCards.filter(c=>c.salePrice!=null).length);
-
-    $('sync-info').textContent = allCards.length.toLocaleString()+' cards';
+    $('sync-info').textContent = allCards.length.toLocaleString() + ' cards';
     $('dot').className = 'dot live';
     buildDashboard();
     buildFilters();
     applyFilters();
 
   } catch(e) {
-    $('dash-inner').innerHTML = `<div class="err-box"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
+    $('dash-inner').innerHTML = `<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
     $('sync-info').textContent = 'Error';
   }
   $('rfab').classList.remove('spin');
 }
 
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 function buildDashboard() {
   const sold = allCards.filter(c => c.salePrice != null);
   const held = allCards.filter(c => c.salePrice == null);
-  const totalInvested  = allCards.reduce((s,c)=>s+(c.purchasePrice||0),0);
-  const inventoryCost  = held.reduce((s,c)=>s+(c.purchasePrice||0),0);
-  const realizedProfit = sold.reduce((s,c)=>s+(c.netProfit||0),0);
-  const soldCost       = sold.reduce((s,c)=>s+(c.purchasePrice||0),0);
-  const roi            = soldCost>0 ? realizedProfit/soldCost : 0;
-  const avgProfit      = sold.length>0 ? realizedProfit/sold.length : 0;
-  // Net cash = sum of netProfit across ALL cards (unsold = -purchasePrice, sold = actual P&L)
-  const netCash = allCards.reduce((s,c) => s + (c.netProfit || 0), 0);
+
+  const totalInvested  = allCards.reduce((s,c) => s + (c.purchasePrice || 0), 0);
+  const inventoryCost  = held.reduce((s,c) => s + (c.purchasePrice || 0), 0);
+  // Net cash = sum of ALL netProfit values (sold cards = actual P&L, unsold = -purchasePrice)
+  const netCash        = allCards.reduce((s,c) => s + (c.netProfit || 0), 0);
+  const realizedProfit = sold.reduce((s,c) => s + (c.netProfit || 0), 0);
+  const soldCost       = sold.reduce((s,c) => s + (c.purchasePrice || 0), 0);
+  const roi            = soldCost > 0 ? realizedProfit / soldCost : 0;
+  const avgProfit      = sold.length > 0 ? realizedProfit / sold.length : 0;
 
   $('dash-inner').innerHTML = `
     <div class="stats-grid">
-      <div class="sc"><div class="sc-lbl">Total Invested</div><div class="sc-val blue">${fmtMoney(totalInvested)}</div><div class="sc-sub">${allCards.length.toLocaleString()} total cards</div></div>
-      <div class="sc"><div class="sc-lbl">Inventory Cost</div><div class="sc-val amber">${fmtMoney(inventoryCost)}</div><div class="sc-sub">${held.length.toLocaleString()} cards held</div></div>
-      <div class="sc"><div class="sc-lbl">Net Cash Position</div><div class="sc-val ${colorClass(netCash)}">${fmtMoney(netCash)}</div><div class="sc-sub">revenue minus all spend</div></div>
-      <div class="sc"><div class="sc-lbl">Realized Profit</div><div class="sc-val ${colorClass(realizedProfit)}">${fmtMoney(realizedProfit)}</div><div class="sc-sub">${sold.length.toLocaleString()} cards sold</div></div>
-      <div class="sc"><div class="sc-lbl">Overall ROI</div><div class="sc-val ${colorClass(roi)}">${(roi*100).toFixed(1)}%</div><div class="sc-sub">on sold cards</div></div>
-      <div class="sc"><div class="sc-lbl">Avg Profit / Sale</div><div class="sc-val ${colorClass(avgProfit)}">${fmtMoney(avgProfit)}</div><div class="sc-sub">per sold card</div></div>
+      <div class="sc"><div class="sc-lbl">Total Invested</div><div class="sc-val c-blue">${fmtMoney(totalInvested)}</div><div class="sc-sub">${allCards.length.toLocaleString()} total cards</div></div>
+      <div class="sc"><div class="sc-lbl">Inventory Cost</div><div class="sc-val c-amber">${fmtMoney(inventoryCost)}</div><div class="sc-sub">${held.length.toLocaleString()} cards held</div></div>
+      <div class="sc"><div class="sc-lbl">Net Cash Position</div><div class="sc-val ${cc(netCash)}">${fmtMoney(netCash)}</div><div class="sc-sub">running P&L incl. inventory</div></div>
+      <div class="sc"><div class="sc-lbl">Realized Profit</div><div class="sc-val ${cc(realizedProfit)}">${fmtMoney(realizedProfit)}</div><div class="sc-sub">${sold.length.toLocaleString()} cards sold</div></div>
+      <div class="sc"><div class="sc-lbl">Overall ROI</div><div class="sc-val ${cc(roi)}">${(roi*100).toFixed(1)}%</div><div class="sc-sub">on sold cards</div></div>
+      <div class="sc"><div class="sc-lbl">Avg Profit / Sale</div><div class="sc-val ${cc(avgProfit)}">${fmtMoney(avgProfit)}</div><div class="sc-sub">per sold card</div></div>
     </div>
     <div class="charts-row">
       <div class="cc">
-        <div class="cc-title">Profit / Loss by Sport</div>
+        <div class="cc-title">Realized Profit by Sport</div>
         <div class="sleg" id="sport-legend"></div>
-        <div class="chart-wrap"><canvas id="sportChart" role="img" aria-label="Profit and loss by sport"></canvas></div>
+        <div class="chart-wrap"><canvas id="sportChart" role="img" aria-label="Realized profit by sport"></canvas></div>
       </div>
       <div class="cc">
         <div class="cc-title">Purchases Over Time</div>
@@ -351,156 +345,183 @@ function buildDashboard() {
 
   buildSportChart(sold);
   buildTimeChart();
-  buildRecentTables();
+  buildRecentTables(sold);
 }
 
 function buildSportChart(sold) {
   const map = {};
-  sold.forEach(c => { const s=c.sport; map[s]=(map[s]||0)+(c.netProfit||0); });
-  const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  const labels  = entries.map(e=>e[0]);
-  const data    = entries.map(e=>parseFloat(e[1].toFixed(2)));
-  const colors  = labels.map(l=>SPORT_COLORS[l]||'#888');
+  sold.forEach(c => { map[c.sport] = (map[c.sport] || 0) + (c.netProfit || 0); });
+  const entries = Object.entries(map).sort((a,b) => b[1]-a[1]);
+  const labels  = entries.map(e => e[0]);
+  const data    = entries.map(e => parseFloat(e[1].toFixed(2)));
+  const colors  = labels.map(l => SPORT_COLORS[l] || '#888');
 
-  $('sport-legend').innerHTML = labels.slice(0,10).map((l,i)=>
+  $('sport-legend').innerHTML = labels.slice(0,12).map((l,i) =>
     `<div class="sleg-item"><div class="sleg-dot" style="background:${colors[i]}"></div>${l}</div>`
   ).join('');
 
   if (sportChart) sportChart.destroy();
-  sportChart = new Chart($('sportChart'),{
-    type:'bar',
-    data:{labels, datasets:[{data, backgroundColor:colors.map(c=>c+'bb'), borderColor:colors, borderWidth:1, borderRadius:3}]},
-    options:{
+  sportChart = new Chart($('sportChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors.map(c=>c+'bb'), borderColor: colors, borderWidth:1, borderRadius:3 }] },
+    options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{color:'#7c8494',font:{family:"'DM Mono',monospace",size:10},maxRotation:45},grid:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#7c8494',font:{family:"'DM Mono',monospace",size:10},callback:v=>'$'+v.toLocaleString()},grid:{color:'rgba(255,255,255,.04)'}}
+      plugins:{ legend:{ display:false } },
+      scales: {
+        x: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 }, maxRotation:45 }, grid:{ color:'rgba(255,255,255,.04)' } },
+        y: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 }, callback: v => '$'+v.toLocaleString() }, grid:{ color:'rgba(255,255,255,.04)' } }
       }
     }
   });
 }
 
 function buildTimeChart() {
-  const byMonth={};
-  allCards.forEach(c=>{
-    if(!c.datePurchased) return;
-    const d=new Date(c.datePurchased); if(isNaN(d)) return;
-    const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    byMonth[k]=(byMonth[k]||0)+1;
+  const byMonth = {};
+  allCards.forEach(c => {
+    if (!c.datePurchased) return;
+    const d = new Date(c.datePurchased);
+    if (isNaN(d)) return;
+    const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    byMonth[k] = (byMonth[k] || 0) + 1;
   });
-  const keys=Object.keys(byMonth).sort();
-  const labels=keys.map(k=>{const[y,m]=k.split('-');return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]+" '"+y.slice(2);});
+  const keys = Object.keys(byMonth).sort();
+  const labels = keys.map(k => {
+    const [y,m] = k.split('-');
+    return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1] + " '" + y.slice(2);
+  });
+
   if (timeChart) timeChart.destroy();
-  timeChart = new Chart($('timeChart'),{
-    type:'line',
-    data:{labels, datasets:[{data:keys.map(k=>byMonth[k]), borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.07)', fill:true, tension:.4, pointRadius:2, pointBackgroundColor:'#60a5fa'}]},
-    options:{
+  timeChart = new Chart($('timeChart'), {
+    type: 'line',
+    data: { labels, datasets: [{ data: keys.map(k=>byMonth[k]), borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.07)', fill:true, tension:.4, pointRadius:2, pointBackgroundColor:'#60a5fa' }] },
+    options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{ticks:{color:'#7c8494',font:{family:"'DM Mono',monospace",size:10},maxTicksLimit:10},grid:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#7c8494',font:{family:"'DM Mono',monospace",size:10}},grid:{color:'rgba(255,255,255,.04)'}}
+      plugins:{ legend:{ display:false } },
+      scales: {
+        x: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 }, maxTicksLimit:10 }, grid:{ color:'rgba(255,255,255,.04)' } },
+        y: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 } }, grid:{ color:'rgba(255,255,255,.04)' } }
       }
     }
   });
 }
 
-function buildRecentTables() {
-  const recP = [...allCards].filter(c=>c.datePurchased)
-    .sort((a,b)=>new Date(b.datePurchased)-new Date(a.datePurchased)).slice(0,10);
-  $('rec-purchases').innerHTML = recP.map(c=>`
+function buildRecentTables(sold) {
+  const recP = [...allCards]
+    .filter(c => c.datePurchased)
+    .sort((a,b) => new Date(b.datePurchased) - new Date(a.datePurchased))
+    .slice(0,10);
+
+  $('rec-purchases').innerHTML = recP.map(c => `
     <tr>
       <td><div class="pname">${c.player}</div><div class="cmeta">${c.sport} · ${c.year}</div></td>
-      <td class="tr mono">${c.purchasePrice!=null?fmtMoney(c.purchasePrice):'—'}</td>
+      <td class="tr mono">${fmtMoney(c.purchasePrice)}</td>
       <td class="tr mono" style="color:var(--tx2)">${fmtDate(c.datePurchased)}</td>
     </tr>`).join('');
 
-  const recS = [...allCards].filter(c=>c.salePrice!=null&&c.transactionDate)
-    .sort((a,b)=>new Date(b.transactionDate)-new Date(a.transactionDate)).slice(0,10);
-  $('rec-sales').innerHTML = recS.map(c=>`
+  const recS = [...sold]
+    .filter(c => c.transactionDate)
+    .sort((a,b) => new Date(b.transactionDate) - new Date(a.transactionDate))
+    .slice(0,10);
+
+  $('rec-sales').innerHTML = recS.map(c => `
     <tr>
       <td><div class="pname">${c.player}</div><div class="cmeta">${c.sport} · ${c.year}</div></td>
-      <td class="tr mono ${colorClass(c.netProfit)}">${fmtMoney(c.netProfit)}</td>
-      <td class="tr mono ${colorClass(c.profitPct)}">${fmtPct(c.profitPct)}</td>
+      <td class="tr mono ${cc(c.netProfit)}">${fmtMoney(c.netProfit)}</td>
+      <td class="tr mono ${cc(c.profitPct)}">${fmtPct(c.profitPct)}</td>
     </tr>`).join('');
 }
 
+// ── Card list ─────────────────────────────────────────────────────────────────
 function buildFilters() {
-  const sports=[...new Set(allCards.map(c=>c.sport))].sort();
-  $('flt-sport').innerHTML='<option value="">All Sports</option>'+sports.map(s=>`<option value="${s}">${s}</option>`).join('');
-  const sources=[...new Set(allCards.map(c=>c.purchasedFrom).filter(Boolean))].sort();
-  $('flt-source').innerHTML='<option value="">All Sources</option>'+sources.slice(0,100).map(s=>`<option value="${s}">${s}</option>`).join('');
+  const sports = [...new Set(allCards.map(c => c.sport))].sort();
+  $('flt-sport').innerHTML = '<option value="">All Sports</option>' +
+    sports.map(s => `<option value="${s}">${s}</option>`).join('');
+
+  const sources = [...new Set(allCards.map(c => c.purchasedFrom).filter(Boolean))].sort();
+  $('flt-source').innerHTML = '<option value="">All Sources</option>' +
+    sources.slice(0,100).map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
 function applyFilters() {
-  const q=$('search').value.toLowerCase();
-  const sp=$('flt-sport').value;
-  const st=$('flt-status').value;
-  const src=$('flt-source').value;
-  filtered=allCards.filter(c=>{
-    if(q){const hay=[c.player,c.sport,c.set,c.year,c.variation,c.fullCard,c.purchasedFrom].join(' ').toLowerCase();if(!hay.includes(q))return false;}
-    if(sp&&c.sport!==sp)return false;
-    if(st==='sold'&&c.salePrice==null)return false;
-    if(st==='held'&&c.salePrice!=null)return false;
-    if(src&&c.purchasedFrom!==src)return false;
+  const q   = $('search').value.toLowerCase();
+  const sp  = $('flt-sport').value;
+  const st  = $('flt-status').value;
+  const src = $('flt-source').value;
+
+  filtered = allCards.filter(c => {
+    if (q) {
+      const hay = [c.player, c.sport, c.set, c.year, c.variation, c.fullCard, c.purchasedFrom].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (sp  && c.sport !== sp) return false;
+    if (st === 'sold' && c.salePrice == null) return false;
+    if (st === 'held' && c.salePrice != null) return false;
+    if (src && c.purchasedFrom !== src) return false;
     return true;
   });
-  page=1; doSort(true);
+
+  page = 1;
+  doSort(true);
 }
 
 function sortBy(key) {
-  if(sortKey===key)sortDir*=-1; else{sortKey=key;sortDir=-1;}
+  if (sortKey === key) sortDir *= -1;
+  else { sortKey = key; sortDir = -1; }
   doSort(false);
 }
 
 function doSort() {
-  document.querySelectorAll('table.ct th').forEach(th=>th.classList.remove('srt'));
-  const el=$('s-'+sortKey);
-  if(el){el.textContent=sortDir===1?'↑':'↓';el.closest('th').classList.add('srt');}
-  filtered.sort((a,b)=>{
-    const av=a[sortKey],bv=b[sortKey];
-    if(av==null)return 1; if(bv==null)return -1;
-    if(typeof av==='number'&&typeof bv==='number')return(av-bv)*sortDir;
-    return String(av).localeCompare(String(bv))*sortDir;
+  document.querySelectorAll('table.ct th').forEach(th => th.classList.remove('srt'));
+  const el = $('s-' + sortKey);
+  if (el) { el.textContent = sortDir === 1 ? '↑' : '↓'; el.closest('th').classList.add('srt'); }
+
+  filtered.sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv)) * sortDir;
   });
   renderTable();
 }
 
 function renderTable() {
-  const total=Math.max(1,Math.ceil(filtered.length/pageSize));
-  page=Math.min(page,total);
-  const slice=filtered.slice((page-1)*pageSize,page*pageSize);
-  $('res-count').textContent=filtered.length.toLocaleString()+' cards';
-  $('pg-info').textContent=`Page ${page} of ${total}`;
-  $('btn-prev').disabled=page<=1;
-  $('btn-next').disabled=page>=total;
-  $('tbl-body').innerHTML=slice.map(c=>{
-    const isSold=c.salePrice!=null;
-    const setStr=[c.set,c.variation].filter(Boolean).join(' – ');
+  const total = Math.max(1, Math.ceil(filtered.length / pageSize));
+  page = Math.min(page, total);
+  const slice = filtered.slice((page-1)*pageSize, page*pageSize);
+
+  $('res-count').textContent = filtered.length.toLocaleString() + ' cards';
+  $('pg-info').textContent = `Page ${page} of ${total}`;
+  $('btn-prev').disabled = page <= 1;
+  $('btn-next').disabled = page >= total;
+
+  $('tbl-body').innerHTML = slice.map(c => {
+    const isSold = c.salePrice != null;
+    const setStr = [c.set, c.variation].filter(Boolean).join(' – ');
     return `<tr>
       <td><div class="pname">${c.player}</div><div class="cmeta">${c.year}</div></td>
       <td><span class="sport-tag">${c.sport}</span></td>
-      <td class="mono" style="color:var(--tx2)">${c.year||'—'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2);font-size:11px">${setStr||'—'}</td>
-      <td class="mono">${c.purchasePrice!=null?fmtMoney(c.purchasePrice):'—'}</td>
-      <td class="mono">${isSold?fmtMoney(c.salePrice):'—'}</td>
-      <td class="mono ${isSold?colorClass(c.netProfit):''}">${isSold?fmtMoney(c.netProfit):'—'}</td>
-      <td class="mono ${isSold?colorClass(c.profitPct):''}">${isSold?fmtPct(c.profitPct):'—'}</td>
-      <td class="mono" style="color:var(--tx3);font-size:10px">${c.itemId||'—'}</td>
+      <td class="mono" style="color:var(--tx2)">${c.year || '—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2);font-size:11px">${setStr || '—'}</td>
+      <td class="mono">${fmtMoney(c.purchasePrice)}</td>
+      <td class="mono">${isSold ? fmtMoney(c.salePrice) : '—'}</td>
+      <td class="mono ${isSold ? cc(c.netProfit) : ''}">${isSold ? fmtMoney(c.netProfit) : '—'}</td>
+      <td class="mono ${isSold ? cc(c.profitPct) : ''}">${isSold ? fmtPct(c.profitPct) : '—'}</td>
+      <td class="mono" style="color:var(--tx3);font-size:10px">${c.itemId || '—'}</td>
       <td class="mono" style="color:var(--tx2)">${fmtDate(c.datePurchased)}</td>
     </tr>`;
   }).join('');
 }
 
-function changePage(dir){page+=dir;renderTable();}
+function changePage(dir) { page += dir; renderTable(); }
 
-document.querySelector('.tabs').addEventListener('click',e=>{
-  const t=e.target.closest('.tab');if(!t)return;
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
-  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelector('.tabs').addEventListener('click', e => {
+  const t = e.target.closest('.tab'); if (!t) return;
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('on'));
   t.classList.add('on');
-  $('view-'+t.dataset.v).classList.add('on');
+  $('view-' + t.dataset.v).classList.add('on');
 });
 
 loadAll();
