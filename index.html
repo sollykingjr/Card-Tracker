@@ -2,538 +2,62 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Card Cost Tracker</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<style>
-:root {
-  --bg:#0d0f12; --surf:#161920; --surf2:#1e2229;
-  --bdr:rgba(255,255,255,0.07); --bdr2:rgba(255,255,255,0.14);
-  --tx:#f0f1f3; --tx2:#7c8494; --tx3:#4a5060;
-  --acc:#4ade80; --acc-dim:rgba(74,222,128,0.12);
-  --red:#f87171; --red-dim:rgba(248,113,113,0.12);
-  --amber:#fbbf24; --amber-dim:rgba(251,191,36,0.10);
-  --blue:#60a5fa; --blue-dim:rgba(96,165,250,0.10);
-  --mono:'DM Mono',monospace; --sans:'Syne',sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--tx);font-family:var(--sans);min-height:100vh}
-header{border-bottom:1px solid var(--bdr);padding:0 28px;display:flex;align-items:center;height:52px;position:sticky;top:0;z-index:100;background:var(--bg)}
-.logo{font-size:14px;font-weight:700;letter-spacing:.1em}
-.logo span{color:var(--acc)}
-.hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-.sync-info{font-family:var(--mono);font-size:11px;color:var(--tx2)}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);transition:background .3s;flex-shrink:0}
-.dot.live{background:var(--acc);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.rfab{width:32px;height:32px;border-radius:50%;background:var(--surf2);border:1px solid var(--bdr2);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--tx2);font-size:16px;line-height:1;transition:all .15s}
-.rfab:hover{border-color:var(--acc);color:var(--acc)}
-.rfab.spin{animation:spin .7s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.tabs{display:flex;padding:0 28px;border-bottom:1px solid var(--bdr);background:var(--bg);position:sticky;top:52px;z-index:99}
-.tab{padding:11px 18px;font-size:12px;font-weight:600;color:var(--tx2);cursor:pointer;border:none;border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.05em;background:none;font-family:var(--sans)}
-.tab:hover{color:var(--tx)}
-.tab.on{color:var(--acc);border-bottom-color:var(--acc)}
-main{padding:24px 28px;max-width:1400px}
-.view{display:none}.view.on{display:block}
-/* Spinner */
-.spin-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;gap:14px;color:var(--tx2);font-family:var(--mono);font-size:12px}
-.spin-ring{width:28px;height:28px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite}
-.err{background:var(--red-dim);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:14px 18px;font-size:13px;color:var(--red);line-height:1.6;margin:20px 0}
-/* Stat cards */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px}
-.sc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:16px}
-.sc-lbl{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
-.sc-val{font-size:22px;font-weight:700;line-height:1}
-.sc-sub{font-family:var(--mono);font-size:10px;color:var(--tx3);margin-top:5px}
-.c-blue{color:var(--blue)}.c-amber{color:var(--amber)}.c-green{color:var(--acc)}.c-red{color:var(--red)}
-/* Charts */
-.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-.cc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:18px}
-.cc-title{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
-.chart-wrap{position:relative;height:210px}
-.sleg{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-.sleg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--tx2);font-family:var(--mono)}
-.sleg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
-/* Recent tables */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-.tc{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:18px}
-.tc-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-.tc-title{font-family:var(--mono);font-size:10px;color:var(--tx2);letter-spacing:.08em;text-transform:uppercase}
-.pill{font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:20px}
-.pill-g{background:var(--acc-dim);color:var(--acc)}
-.pill-b{background:var(--blue-dim);color:var(--blue)}
-table.mini{width:100%;border-collapse:collapse}
-table.mini th{font-family:var(--mono);font-size:10px;color:var(--tx3);text-align:left;padding:0 0 8px;border-bottom:1px solid var(--bdr);text-transform:uppercase;letter-spacing:.06em}
-table.mini td{font-size:12px;padding:7px 0;border-bottom:1px solid var(--bdr);vertical-align:middle}
-table.mini tr:last-child td{border-bottom:none}
-.tr{text-align:right}
-.pname{font-weight:600;font-size:12px;color:var(--tx)}
-.cmeta{font-family:var(--mono);font-size:10px;color:var(--tx2);margin-top:2px}
-.mono{font-family:var(--mono);font-size:12px}
-/* Card list */
-.controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
-.srch{flex:1;min-width:200px;position:relative}
-.srch input{width:100%;background:var(--surf);border:1px solid var(--bdr);color:var(--tx);border-radius:8px;padding:8px 12px 8px 32px;font-family:var(--sans);font-size:13px}
-.srch input:focus{outline:none;border-color:var(--bdr2)}
-.srch-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--tx3);font-size:13px;pointer-events:none}
-select.flt{background:var(--surf);border:1px solid var(--bdr);color:var(--tx);border-radius:8px;padding:8px 10px;font-family:var(--sans);font-size:12px;cursor:pointer}
-select.flt:focus{outline:none}
-.res-count{font-family:var(--mono);font-size:11px;color:var(--tx2);margin-bottom:10px}
-.tbl-wrap{overflow-x:auto;background:var(--surf);border:1px solid var(--bdr);border-radius:10px}
-table.ct{width:100%;border-collapse:collapse;min-width:860px}
-table.ct thead th{font-family:var(--mono);font-size:10px;color:var(--tx3);text-align:left;padding:11px 14px;border-bottom:1px solid var(--bdr);text-transform:uppercase;letter-spacing:.06em;cursor:pointer;white-space:nowrap;user-select:none}
-table.ct thead th:hover{color:var(--tx2)}
-table.ct thead th.srt{color:var(--acc)}
-table.ct tbody tr{border-bottom:1px solid var(--bdr);transition:background .1s}
-table.ct tbody tr:last-child{border-bottom:none}
-table.ct tbody tr:hover{background:var(--surf2)}
-table.ct td{padding:9px 14px;font-size:12px;vertical-align:middle}
-.sport-tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;background:var(--surf2);color:var(--tx2);border:1px solid var(--bdr);white-space:nowrap;display:inline-block}
-.tag-sold{background:var(--acc-dim);color:var(--acc);border-color:transparent}
-.tag-held{background:var(--blue-dim);color:var(--blue);border-color:transparent}
-.pgn{display:flex;align-items:center;gap:8px;padding:12px 14px;border-top:1px solid var(--bdr);font-family:var(--mono);font-size:11px;color:var(--tx2)}
-.pg-btn{background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:var(--mono);font-size:11px}
-.pg-btn:hover{border-color:var(--bdr2)}
-.pg-btn:disabled{opacity:.3;cursor:not-allowed}
-@media(max-width:860px){.charts-row,.two-col{grid-template-columns:1fr}main{padding:16px}header,.tabs{padding-left:16px;padding-right:16px}}
-</style>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f7f5ef">
+<title>Prospect Search</title>
+<link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
-<header>
-  <div class="logo">VAULT<span>.</span></div>
-  <div class="hdr-right">
-    <span class="sync-info" id="sync-info">—</span>
-    <div class="dot" id="dot"></div>
-    <button class="rfab" id="rfab" title="Refresh" onclick="loadAll()">↻</button>
-  </div>
-</header>
-
-<div class="tabs">
-  <button class="tab on" data-v="dashboard">Dashboard</button>
-  <button class="tab" data-v="cards">Card List</button>
+<div class="tabs" id="tabs">
+  <button class="tab on" data-t="all">All</button>
+  <button class="tab" data-t="t200">Top 200 Hitters</button>
+  <button class="tab" data-t="t100">Top 100 Pitchers</button>
+  <button class="tab" data-t="hs">Hot Sheet</button>
+  <button class="tab" data-t="port">Portfolio</button>
 </div>
 
-<main>
-  <div class="view on" id="view-dashboard">
-    <div id="dash-inner"><div class="spin-wrap"><div class="spin-ring"></div>Fetching from Google Sheets...</div></div>
+<div class="hdr">
+  <div class="si">
+    <input id="search" placeholder="Search player or team..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button id="clear">×</button>
   </div>
-  <div class="view" id="view-cards">
-    <div class="controls">
-      <div class="srch">
-        <span class="srch-icon">⌕</span>
-        <input id="search" placeholder="Search player, set, year..." autocomplete="off" oninput="applyFilters()">
-      </div>
-      <select class="flt" id="flt-sport" onchange="applyFilters()"><option value="">All Sports</option></select>
-      <select class="flt" id="flt-status" onchange="applyFilters()">
-        <option value="">All</option>
-        <option value="sold">Sold</option>
-        <option value="held">In Inventory</option>
-      </select>
-      <select class="flt" id="flt-source" onchange="applyFilters()"><option value="">All Sources</option></select>
-    </div>
-    <div class="res-count" id="res-count"></div>
-    <div class="tbl-wrap">
-      <table class="ct">
-        <thead><tr>
-          <th onclick="sortBy('player')">Player <span id="s-player"></span></th>
-          <th onclick="sortBy('sport')">Sport <span id="s-sport"></span></th>
-          <th onclick="sortBy('year')">Year <span id="s-year"></span></th>
-          <th>Set / Variation</th>
-          <th onclick="sortBy('purchasePrice')">Cost <span id="s-purchasePrice"></span></th>
-          <th onclick="sortBy('salePrice')">Sale <span id="s-salePrice"></span></th>
-          <th onclick="sortBy('netProfit')">Profit <span id="s-netProfit"></span></th>
-          <th onclick="sortBy('profitPct')">ROI <span id="s-profitPct"></span></th>
-          <th onclick="sortBy('itemId')">Item ID <span id="s-itemId"></span></th>
-          <th onclick="sortBy('datePurchased')">Purchased <span id="s-datePurchased"></span></th>
-        </tr></thead>
-        <tbody id="tbl-body"></tbody>
-      </table>
-      <div class="pgn">
-        <button class="pg-btn" id="btn-prev" onclick="changePage(-1)">← Prev</button>
-        <span id="pg-info"></span>
-        <button class="pg-btn" id="btn-next" onclick="changePage(1)">Next →</button>
-        <span style="margin-left:auto">
-          <select class="flt" onchange="pageSize=+this.value;page=1;renderTable()">
-            <option value="50">50 / page</option>
-            <option value="100">100 / page</option>
-            <option value="250">250 / page</option>
-          </select>
-        </span>
-      </div>
-    </div>
+</div>
+
+<div class="chips" id="chips">
+  <button class="chip on" data-f="all">All BR</button>
+  <button class="chip" data-f="5">BR 5</button>
+  <button class="chip" data-f="4">BR 4+</button>
+  <button class="chip" data-f="owned">Owned</button>
+  <button class="chip" data-f="sold">Sold</button>
+</div>
+<div class="chips2" id="chips2">
+  <button class="chip on" data-p="all">All</button>
+  <button class="chip" data-p="hit">Hitters</button>
+  <button class="chip" data-p="pit">Pitchers</button>
+</div>
+
+<div class="meta"><span id="cntlbl">Loading...</span><div class="sort-chips" id="sortchips"></div></div>
+<div class="list" id="list"><div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div></div>
+
+<button class="rfab" id="rfab" title="Refresh">
+  <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+</button>
+
+<div class="mwrap" id="mwrap">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div id="mcontent"></div>
+    <button class="close-btn" id="closebtn">Close</button>
   </div>
-</main>
+</div>
 
-<script>
-// ── Config ────────────────────────────────────────────────────────────────────
-const SID  = '12sNofzPwhb8uR68hT_bJNiLD2MrM0rdoQMPXGTlx2_s';
-const KEY  = 'AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE';
-const BASE = `https://sheets.googleapis.com/v4/spreadsheets/${SID}/values/`;
-
-const SPORT_COLORS = {
-  'Baseball':'#60a5fa','Football':'#f87171','Basketball':'#fbbf24','Hockey':'#a78bfa',
-  'Soccer':'#4ade80','Pokemon':'#fb923c','Wrestling':'#f472b6','Non-Sports':'#94a3b8',
-  'Marvel':'#ef4444','YuGiOh':'#c084fc','MultiSport':'#67e8f9','Racing':'#a3e635',
-  'MMA':'#fb7185','Tennis':'#86efac','One Piece':'#fdba74','Star Wars':'#fde68a','Gaming':'#6ee7b7'
-};
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let allCards = [], filtered = [];
-let sortKey = 'datePurchased', sortDir = -1;
-let page = 1, pageSize = 50;
-let sportChart, timeChart;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-
-// Clean string — return null for empty/dash values
-const cl = v => (v == null || String(v).trim() === '' || v === '-' || v === '—') ? null : String(v).trim();
-
-// Parse a raw number from the API (UNFORMATTED_VALUE returns actual numbers, not strings)
-// But guard against nulls and occasional string formatting
-const num = v => {
-  if (v == null || v === '') return null;
-  if (typeof v === 'number') return v;
-  // String fallback: strip currency symbols, preserve sign
-  const s = String(v).trim();
-  const neg = s.startsWith('-') || s.startsWith('(');
-  const n = parseFloat(s.replace(/[^0-9.]/g, ''));
-  return isNaN(n) ? null : (neg ? -n : n);
-};
-
-// Format a number as currency
-const fmtMoney = v => {
-  if (v == null || isNaN(v)) return '—';
-  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-};
-
-// Format profit % — sheet stores as decimal ratio (0.425 = 42.5%)
-const fmtPct = v => {
-  if (v == null || isNaN(v)) return '—';
-  return (v * 100).toFixed(1) + '%';
-};
-
-const fmtDate = v => {
-  if (!v) return '—';
-  const d = new Date(v);
-  return isNaN(d) ? '—' : d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'2-digit'});
-};
-
-const cc = v => (v == null || isNaN(v)) ? '' : v >= 0 ? 'c-green' : 'c-red';
-
-// ── Data fetch ────────────────────────────────────────────────────────────────
-async function loadAll() {
-  $('rfab').classList.add('spin');
-  $('sync-info').textContent = 'Loading...';
-  $('dot').className = 'dot';
-  $('dash-inner').innerHTML = '<div class="spin-wrap"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
-
-  try {
-    const url = BASE + encodeURIComponent("'Card Cost Tracker Final'!A2:W10000")
-              + '?valueRenderOption=UNFORMATTED_VALUE&key=' + KEY;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rows = (await res.json()).values || [];
-
-    // Column map (0-indexed):
-    // A=0 ItemID, B=1 Sport, C=2 Year, D=3 Set, E=4 Variation, F=5 Version,
-    // G=6 CardNo, H=7 PlayerName, I=8 SerialNo, J=9 QtyMfg,
-    // K=10 PurchasePrice, L=11 SalePrice, M=12 SaleFees, N=13 NetProfit, O=14 ProfitPct,
-    // P=15 DatePurchased, Q=16 TransactionDate, R=17 PurchasedFrom, S=18 PurchasedBy,
-    // T=19 DateSold, U=20 DaysOwned, V=21 Grade, W=22 FullCard
-
-    allCards = rows.filter(r => cl(r[7])).map(r => {
-      const purchasePrice = num(r[10]);
-      const salePrice     = num(r[11]);
-      const saleFees      = num(r[12]);
-      const isSold        = salePrice != null && salePrice > 0;
-
-      // Net Profit: for sold cards read from sheet (col N), for unsold compute -purchasePrice
-      // API returns blank for unsold cards regardless of sheet formula
-      const netProfitSheet = num(r[13]);
-      const netProfit = isSold
-        ? (netProfitSheet != null ? netProfitSheet : salePrice - (saleFees || 0) - (purchasePrice || 0))
-        : (purchasePrice != null ? -purchasePrice : 0);
-
-      // Profit % — sheet stores as decimal ratio e.g. 0.425 = 42.5%
-      const profitPct = num(r[14]);
-
-      return {
-        itemId:          cl(r[0])  || '',
-        sport:           (cl(r[1]) || 'Unknown').trim(),
-        year:            cl(r[2])  || '',
-        set:             cl(r[3])  || '',
-        variation:       cl(r[4])  || '',
-        player:          cl(r[7])  || '',
-        serialNo:        cl(r[8]),
-        purchasePrice,
-        salePrice,
-        saleFees,
-        netProfit,
-        profitPct,
-        datePurchased:   cl(r[15]) || '',
-        transactionDate: cl(r[16]) || '',
-        purchasedFrom:   cl(r[17]) || '',
-        grade:           cl(r[21]) || '',
-        fullCard:        cl(r[22]) || '',
-      };
-    });
-
-    $('sync-info').textContent = allCards.length.toLocaleString() + ' cards';
-    $('dot').className = 'dot live';
-
-    // Quick diagnostic
-    const soldCards = allCards.filter(c => c.salePrice != null && c.salePrice > 0);
-    const heldCards = allCards.filter(c => !(c.salePrice != null && c.salePrice > 0));
-    console.log('Sold count:', soldCards.length, 'Held count:', heldCards.length);
-    console.log('Sum netProfit ALL:', allCards.reduce((s,c)=>s+(c.netProfit||0),0).toFixed(2));
-    console.log('Sum netProfit SOLD:', soldCards.reduce((s,c)=>s+(c.netProfit||0),0).toFixed(2));
-    console.log('Sum netProfit HELD:', heldCards.reduce((s,c)=>s+(c.netProfit||0),0).toFixed(2));
-    console.log('Sample held netProfit:', heldCards.slice(0,5).map(c=>({player:c.player,purchasePrice:c.purchasePrice,netProfit:c.netProfit})));
-    console.log('Sample sold netProfit:', soldCards.slice(0,5).map(c=>({player:c.player,purchasePrice:c.purchasePrice,salePrice:c.salePrice,netProfitSheet:num(rows.find(r=>cl(r[7])===c.player)?.[13]),netProfit:c.netProfit})));
-    buildDashboard();
-    buildFilters();
-    applyFilters();
-
-  } catch(e) {
-    $('dash-inner').innerHTML = `<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
-    $('sync-info').textContent = 'Error';
-  }
-  $('rfab').classList.remove('spin');
-}
-
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-function buildDashboard() {
-  const sold = allCards.filter(c => c.salePrice != null && c.salePrice > 0);
-  const held = allCards.filter(c => !(c.salePrice != null && c.salePrice > 0));
-
-  const totalInvested  = allCards.reduce((s,c) => s + (c.purchasePrice || 0), 0);
-  const inventoryCost  = held.reduce((s,c) => s + (c.purchasePrice || 0), 0);
-  // Net cash = sum of ALL netProfit values (sold cards = actual P&L, unsold = -purchasePrice)
-  const netCash        = allCards.reduce((s,c) => s + (c.netProfit || 0), 0);
-  const realizedProfit = sold.reduce((s,c) => s + (c.netProfit || 0), 0);
-  const soldCost       = sold.reduce((s,c) => s + (c.purchasePrice || 0), 0);
-  const roi            = soldCost > 0 ? realizedProfit / soldCost : 0;
-  const avgProfit      = sold.length > 0 ? realizedProfit / sold.length : 0;
-
-  $('dash-inner').innerHTML = `
-    <div class="stats-grid">
-      <div class="sc"><div class="sc-lbl">Total Invested</div><div class="sc-val c-blue">${fmtMoney(totalInvested)}</div><div class="sc-sub">${allCards.length.toLocaleString()} total cards</div></div>
-      <div class="sc"><div class="sc-lbl">Inventory Cost</div><div class="sc-val c-amber">${fmtMoney(inventoryCost)}</div><div class="sc-sub">${held.length.toLocaleString()} cards held</div></div>
-      <div class="sc"><div class="sc-lbl">Net Cash Position</div><div class="sc-val ${cc(netCash)}">${fmtMoney(netCash)}</div><div class="sc-sub">running P&L incl. inventory</div></div>
-      <div class="sc"><div class="sc-lbl">Realized Profit</div><div class="sc-val ${cc(realizedProfit)}">${fmtMoney(realizedProfit)}</div><div class="sc-sub">${sold.length.toLocaleString()} cards sold</div></div>
-      <div class="sc"><div class="sc-lbl">Overall ROI</div><div class="sc-val ${cc(roi)}">${(roi*100).toFixed(1)}%</div><div class="sc-sub">on sold cards</div></div>
-      <div class="sc"><div class="sc-lbl">Avg Profit / Sale</div><div class="sc-val ${cc(avgProfit)}">${fmtMoney(avgProfit)}</div><div class="sc-sub">per sold card</div></div>
-    </div>
-    <div class="charts-row">
-      <div class="cc">
-        <div class="cc-title">Realized Profit by Sport</div>
-        <div class="sleg" id="sport-legend"></div>
-        <div class="chart-wrap"><canvas id="sportChart" role="img" aria-label="Realized profit by sport"></canvas></div>
-      </div>
-      <div class="cc">
-        <div class="cc-title">Purchases Over Time</div>
-        <div class="chart-wrap"><canvas id="timeChart" role="img" aria-label="Card purchases over time"></canvas></div>
-      </div>
-    </div>
-    <div class="two-col">
-      <div class="tc">
-        <div class="tc-hdr"><div class="tc-title">Recent Purchases</div><span class="pill pill-b">Latest 10</span></div>
-        <table class="mini"><thead><tr><th>Card</th><th class="tr">Cost</th><th class="tr">Date</th></tr></thead>
-        <tbody id="rec-purchases"></tbody></table>
-      </div>
-      <div class="tc">
-        <div class="tc-hdr"><div class="tc-title">Recent Sales</div><span class="pill pill-g">Latest 10</span></div>
-        <table class="mini"><thead><tr><th>Card</th><th class="tr">Profit</th><th class="tr">ROI</th></tr></thead>
-        <tbody id="rec-sales"></tbody></table>
-      </div>
-    </div>`;
-
-  buildSportChart(sold);
-  buildTimeChart();
-  buildRecentTables(sold);
-}
-
-function buildSportChart(sold) {
-  const map = {};
-  sold.forEach(c => { map[c.sport] = (map[c.sport] || 0) + (c.netProfit || 0); });
-  const entries = Object.entries(map).sort((a,b) => b[1]-a[1]);
-  const labels  = entries.map(e => e[0]);
-  const data    = entries.map(e => parseFloat(e[1].toFixed(2)));
-  const colors  = labels.map(l => SPORT_COLORS[l] || '#888');
-
-  $('sport-legend').innerHTML = labels.slice(0,12).map((l,i) =>
-    `<div class="sleg-item"><div class="sleg-dot" style="background:${colors[i]}"></div>${l}</div>`
-  ).join('');
-
-  if (sportChart) sportChart.destroy();
-  sportChart = new Chart($('sportChart'), {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: colors.map(c=>c+'bb'), borderColor: colors, borderWidth:1, borderRadius:3 }] },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales: {
-        x: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 }, maxRotation:45 }, grid:{ color:'rgba(255,255,255,.04)' } },
-        y: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 }, callback: v => '$'+v.toLocaleString() }, grid:{ color:'rgba(255,255,255,.04)' } }
-      }
-    }
-  });
-}
-
-function buildTimeChart() {
-  const byMonth = {};
-  allCards.forEach(c => {
-    if (!c.datePurchased) return;
-    const d = new Date(c.datePurchased);
-    if (isNaN(d)) return;
-    const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    byMonth[k] = (byMonth[k] || 0) + 1;
-  });
-  const keys = Object.keys(byMonth).sort();
-  const labels = keys.map(k => {
-    const [y,m] = k.split('-');
-    return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1] + " '" + y.slice(2);
-  });
-
-  if (timeChart) timeChart.destroy();
-  timeChart = new Chart($('timeChart'), {
-    type: 'line',
-    data: { labels, datasets: [{ data: keys.map(k=>byMonth[k]), borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.07)', fill:true, tension:.4, pointRadius:2, pointBackgroundColor:'#60a5fa' }] },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales: {
-        x: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 }, maxTicksLimit:10 }, grid:{ color:'rgba(255,255,255,.04)' } },
-        y: { ticks:{ color:'#7c8494', font:{ family:"'DM Mono',monospace", size:10 } }, grid:{ color:'rgba(255,255,255,.04)' } }
-      }
-    }
-  });
-}
-
-function buildRecentTables(sold) {
-  const recP = [...allCards]
-    .filter(c => c.datePurchased)
-    .sort((a,b) => new Date(b.datePurchased) - new Date(a.datePurchased))
-    .slice(0,10);
-
-  $('rec-purchases').innerHTML = recP.map(c => `
-    <tr>
-      <td><div class="pname">${c.player}</div><div class="cmeta">${c.sport} · ${c.year}</div></td>
-      <td class="tr mono">${fmtMoney(c.purchasePrice)}</td>
-      <td class="tr mono" style="color:var(--tx2)">${fmtDate(c.datePurchased)}</td>
-    </tr>`).join('');
-
-  const recS = [...sold]
-    .filter(c => c.transactionDate)
-    .sort((a,b) => new Date(b.transactionDate) - new Date(a.transactionDate))
-    .slice(0,10);
-
-  $('rec-sales').innerHTML = recS.map(c => `
-    <tr>
-      <td><div class="pname">${c.player}</div><div class="cmeta">${c.sport} · ${c.year}</div></td>
-      <td class="tr mono ${cc(c.netProfit)}">${fmtMoney(c.netProfit)}</td>
-      <td class="tr mono ${cc(c.profitPct)}">${fmtPct(c.profitPct)}</td>
-    </tr>`).join('');
-}
-
-// ── Card list ─────────────────────────────────────────────────────────────────
-function buildFilters() {
-  const sports = [...new Set(allCards.map(c => c.sport))].sort();
-  $('flt-sport').innerHTML = '<option value="">All Sports</option>' +
-    sports.map(s => `<option value="${s}">${s}</option>`).join('');
-
-  const sources = [...new Set(allCards.map(c => c.purchasedFrom).filter(Boolean))].sort();
-  $('flt-source').innerHTML = '<option value="">All Sources</option>' +
-    sources.slice(0,100).map(s => `<option value="${s}">${s}</option>`).join('');
-}
-
-function applyFilters() {
-  const q   = $('search').value.toLowerCase();
-  const sp  = $('flt-sport').value;
-  const st  = $('flt-status').value;
-  const src = $('flt-source').value;
-
-  filtered = allCards.filter(c => {
-    if (q) {
-      const hay = [c.player, c.sport, c.set, c.year, c.variation, c.fullCard, c.purchasedFrom].join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    if (sp  && c.sport !== sp) return false;
-    if (st === 'sold' && !(c.salePrice != null && c.salePrice > 0)) return false;
-    if (st === 'held' && (c.salePrice != null && c.salePrice > 0)) return false;
-    if (src && c.purchasedFrom !== src) return false;
-    return true;
-  });
-
-  page = 1;
-  doSort(true);
-}
-
-function sortBy(key) {
-  if (sortKey === key) sortDir *= -1;
-  else { sortKey = key; sortDir = -1; }
-  doSort(false);
-}
-
-function doSort() {
-  document.querySelectorAll('table.ct th').forEach(th => th.classList.remove('srt'));
-  const el = $('s-' + sortKey);
-  if (el) { el.textContent = sortDir === 1 ? '↑' : '↓'; el.closest('th').classList.add('srt'); }
-
-  filtered.sort((a, b) => {
-    const av = a[sortKey], bv = b[sortKey];
-    if (av == null) return 1;
-    if (bv == null) return -1;
-    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
-    return String(av).localeCompare(String(bv)) * sortDir;
-  });
-  renderTable();
-}
-
-function renderTable() {
-  const total = Math.max(1, Math.ceil(filtered.length / pageSize));
-  page = Math.min(page, total);
-  const slice = filtered.slice((page-1)*pageSize, page*pageSize);
-
-  $('res-count').textContent = filtered.length.toLocaleString() + ' cards';
-  $('pg-info').textContent = `Page ${page} of ${total}`;
-  $('btn-prev').disabled = page <= 1;
-  $('btn-next').disabled = page >= total;
-
-  $('tbl-body').innerHTML = slice.map(c => {
-    const isSold = c.salePrice != null;
-    const setStr = [c.set, c.variation].filter(Boolean).join(' – ');
-    return `<tr>
-      <td><div class="pname">${c.player}</div><div class="cmeta">${c.year}</div></td>
-      <td><span class="sport-tag">${c.sport}</span></td>
-      <td class="mono" style="color:var(--tx2)">${c.year || '—'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2);font-size:11px">${setStr || '—'}</td>
-      <td class="mono">${fmtMoney(c.purchasePrice)}</td>
-      <td class="mono">${isSold ? fmtMoney(c.salePrice) : '—'}</td>
-      <td class="mono ${isSold ? cc(c.netProfit) : ''}">${isSold ? fmtMoney(c.netProfit) : '—'}</td>
-      <td class="mono ${isSold ? cc(c.profitPct) : ''}">${isSold ? fmtPct(c.profitPct) : '—'}</td>
-      <td class="mono" style="color:var(--tx3);font-size:10px">${c.itemId || '—'}</td>
-      <td class="mono" style="color:var(--tx2)">${fmtDate(c.datePurchased)}</td>
-    </tr>`;
-  }).join('');
-}
-
-function changePage(dir) { page += dir; renderTable(); }
-
-// ── Tab switching ─────────────────────────────────────────────────────────────
-document.querySelector('.tabs').addEventListener('click', e => {
-  const t = e.target.closest('.tab'); if (!t) return;
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
-  document.querySelectorAll('.view').forEach(x => x.classList.remove('on'));
-  t.classList.add('on');
-  $('view-' + t.dataset.v).classList.add('on');
-});
-
-loadAll();
-</script>
+<script src="js/config.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
