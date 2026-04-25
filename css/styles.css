@@ -171,4 +171,5 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;bac
 @media(min-width:600px){
   .wl-title{min-height:40px;rows:2}
   .wl-btns{flex-wrap:nowrap}
+  .wl-save{background:var(--acc-bg);color:var(--acc)}
 }
