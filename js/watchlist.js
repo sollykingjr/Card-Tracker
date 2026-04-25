@@ -96,3 +96,34 @@ function copyText(text, btn) {
     }, 1200);
   });
 }
+
+// ── Save title to Worker ──────────────────────────────────────────────────────
+async function saveTitle(itemId, title, btn) {
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${WORKER_URL}/save-title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId, title })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Saved!';
+      btn.style.background = 'var(--b5-bg)';
+      btn.style.color = 'var(--b5-tx)';
+      setTimeout(() => {
+        btn.textContent = 'Save';
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.disabled = false;
+      }, 1500);
+    } else {
+      btn.textContent = 'Error';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    btn.textContent = 'Error';
+    btn.disabled = false;
+  }
+}
