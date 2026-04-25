@@ -37,17 +37,22 @@ const invTier=amt=>{
   if(amt<=100) return 'inv3'; return 'inv4';
 };
 
+// ── mostRecentStatic ──────────────────────────────────────────────────────────
+function mostRecentStatic(arr) {
+  const seen = new Map();
+  arr.forEach(r=>{ const ts=parseDate(r.date); if(!seen.has(r.name)||ts>seen.get(r.name)._ts) seen.set(r.name,{...r,_ts:ts}); });
+  return [...seen.values()];
+}
+
 // ── Build global cache after data load ───────────────────────────────────────
 function buildCache() {
   CACHE = new Map();
 
-  // Pre-compute max weeks for hitter/pitcher hot sheet streaks
   const hitWeeks = hotsheet.filter(h=>!(h.pos||'').toLowerCase().includes('pitcher')).map(h=>parseInt(h.week)||0);
   const pitWeeks = hotsheet.filter(h=>(h.pos||'').toLowerCase().includes('pitcher')).map(h=>parseInt(h.week)||0);
   const maxHitWk = hitWeeks.length ? Math.max(...hitWeeks) : 0;
   const maxPitWk = pitWeeks.length ? Math.max(...pitWeeks) : 0;
 
-  // Collect all unique player names across all sources
   const allNames = new Set([
     ...players.map(p=>p.name),
     ...top200.map(p=>p.name),
@@ -61,7 +66,6 @@ function buildCache() {
     const nm = normName(name);
     const entry = {};
 
-    // ── Resolved data (price, rank, label, priceChange) ──
     const srcPri = {top:0, hs:1, orig:2, buy:3};
     const candidates = [];
     const buyEntry = players.find(b=>normName(b.name)===nm);
@@ -83,7 +87,6 @@ function buildCache() {
       entry.price = best.price;
       entry.buy   = buyEntry ? cl(buyEntry.buy) : null;
 
-      // HS label from most recent HS entry
       let hsLabel = null;
       if(hsEntries.length) {
         const hs = hsEntries.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a);
@@ -92,7 +95,6 @@ function buildCache() {
       }
       entry.hsLabel = hsLabel;
 
-      // Price change
       const buyPrice = buyEntry ? cl(buyEntry.price) : null;
       entry.priceChange = null;
       if(buyPrice && best.price && best.src!=='buy') {
@@ -103,7 +105,6 @@ function buildCache() {
       entry.rank=null; entry.price=null; entry.buy=null; entry.hsLabel=null; entry.priceChange=null;
     }
 
-    // ── Card stats ──
     const playerCards = cards.filter(c=>normName(c.player)===nm);
     const owned = playerCards.filter(c=>!c.salePrice);
     const sold  = playerCards.filter(c=> c.salePrice);
@@ -115,7 +116,6 @@ function buildCache() {
     const bestFlip= sold.reduce((best,c)=>{ const p=safeNum(c.netProfit,true); return (!best||p>safeNum(best.netProfit,true))?c:best; },null);
     entry.cards = {owned, sold, totalInvested, totalSoldFor, totalNetProfit, avgHold, bestFlip};
 
-    // ── Hot sheet info ──
     const isPit = (players.find(p=>normName(p.name)===nm)?.pos||'').toLowerCase().includes('pitcher') ||
                   (hsEntries[0]?.pos||'').toLowerCase().includes('pitcher');
     const maxWk = isPit ? maxPitWk : maxHitWk;
@@ -165,13 +165,13 @@ async function loadAll() {
       lastYr:cl(r[13]),chg:cl(r[14]),notes:cl(r[15])
     }));
 
-     top200 = h2.filter(r=>r[2]).map(r=>({
-  date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
-  age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
+    top200 = h2.filter(r=>r[2]).map(r=>({
+      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
+      age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
     }));
     top100 = p1.filter(r=>r[2]).map(r=>({
-  date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
-  age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
+      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
+      age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
     }));
 
     origTop200 = oh2.filter(r=>r[2]).map(r=>({
@@ -202,6 +202,29 @@ async function loadAll() {
     }));
 
     buildCache();
+
+    // Inject players from rankings/hotsheet not in Players All
+    const knownNames = new Set(players.map(p => normName(p.name)));
+
+    mostRecentStatic([...top200,...top100]).filter(e => !knownNames.has(normName(e.name))).forEach(e => {
+      players.push({
+        date:e.date, team:e.team||'',
+        pos:top100.find(p=>normName(p.name)===normName(e.name))?'Pitcher':'Hitter',
+        name:e.name, age:e.age||'', price:e.price||'',
+        mlb:'', dd:'', roto:'', sts:'', ba:'', hobby:'', buy:'', lastYr:'', chg:'', notes:''
+      });
+      knownNames.add(normName(e.name));
+    });
+
+    mostRecentStatic(hotsheet).filter(h => !knownNames.has(normName(h.name))).forEach(h => {
+      players.push({
+        date:h.date, team:h.aff||'',
+        pos:(h.pos||'').toLowerCase().includes('pitcher')?'Pitcher':'Hitter',
+        name:h.name, age:h.age||'', price:h.auto||'',
+        mlb:'', dd:'', roto:'', sts:'', ba:'', hobby:'', buy:'', lastYr:'', chg:'', notes:''
+      });
+    });
+
     render();
   } catch(e) {
     document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
