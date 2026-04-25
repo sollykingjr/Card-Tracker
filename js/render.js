@@ -429,4 +429,3 @@ function renderWatchlist() {
 
   startCountdownTick();
 }
-}
