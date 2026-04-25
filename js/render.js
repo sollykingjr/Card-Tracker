@@ -290,6 +290,8 @@ function showDetail(p, tp) {
       <div><div class="sc-l">Rank</div><div class="sc-v">#${topE.rank}</div></div>
       <div><div class="sc-l">Prev</div><div class="sc-v">${fmt(topE.prev)}</div></div>
       <div><div class="sc-l">Change</div><div class="sc-v">${fmtDiff(topE.diff)}</div></div>
+    </div>
+    ${topE.notes?`<div style="font-size:12px;line-height:1.6;color:var(--tx2);border-top:.5px solid var(--bdr);padding-top:8px;margin-top:8px">${topE.notes}</div>`:''}
     </div></div>`:''}
     ${master&&master.lastYr?`<div class="srow"><div class="srow-t">Year over year</div><div class="s3">
       <div><div class="sc-l">Last year</div><div class="sc-v">$${master.lastYr}</div></div>
