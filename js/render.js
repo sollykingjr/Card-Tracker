@@ -46,6 +46,7 @@ function getPool() {
   if(tab==='t100'){ const b=mostRecent(top100).filter(r=>matchQ(r.name,r.team)); return applySort(b,p=>p.slice().sort((a,b)=>parseInt(a.rank)-parseInt(b.rank))); }
   if(tab==='hs')  { const b=mostRecent(hotsheet).filter(r=>matchQ(r.name,r.aff)); return applySort(b,p=>p.slice().sort((a,b)=>parseDate(b.date)-parseDate(a.date))); }
   if(tab==='port') return [];
+  if(tab==='watch') return [];
 
   let pool=[...players];
   if(brf==='5') pool=pool.filter(p=>parseInt(p.buy)===5);
@@ -84,7 +85,6 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
   let labelHtml='';
   if(hsLabel){ const cls=isRepeat?'repeat':isSleeper?'sleeper':''; labelHtml=`<span class="hs-label${cls?' '+cls:''}">${hsLabel}</span>`; }
 
-  // Week badges — Hot Sheet tab only
   let wkHtml='';
   if(tab==='hs' && hi.totalAppearances>0){
     if(hi.streak>=2) wkHtml+=`<span class="wk-badge streak">${hi.streak} Straight</span>`;
@@ -92,7 +92,6 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
     if(hi.totalAppearances>1) wkHtml+=`<span class="wk-badge">x${hi.totalAppearances}</span>`;
   }
 
-  // Inventory badges
   let invHtml='';
   if(cs.owned.length>0){ const tier=invTier(cs.totalInvested); invHtml+=`<span class="inv-badge ${tier}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`; }
   if(cs.sold.length>0) invHtml+=`<span class="sold-badge">${cs.sold.length} sold</span>`;
@@ -114,12 +113,13 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function render() {
-  const isTop=tab==='t200'||tab==='t100', isHS=tab==='hs', isPort=tab==='port';
-  const showChips=!isTop&&!isHS&&!isPort;
+  const isTop=tab==='t200'||tab==='t100', isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
+  const showChips=!isTop&&!isHS&&!isPort&&!isWatch;
   document.getElementById('chips').style.display=showChips?'flex':'none';
   document.getElementById('chips2').style.display=showChips?'flex':'none';
   renderSortChips();
   if(isPort){ renderPortfolio(); return; }
+  if(isWatch){ renderWatchlist(); return; }
 
   const pool=getPool();
   document.getElementById('cntlbl').textContent=`${pool.length} player${pool.length===1?'':'s'}`;
@@ -266,21 +266,18 @@ function showDetail(p, tp) {
   const html=`
     <div class="mname">${p.name}</div>
     <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}${master&&master.buy?' · Buy Rating '+master.buy:''}</div>
-
     <div class="sgrid">
       <div class="scard"><div class="slbl">Rank</div><div class="sval">${currentRank}</div></div>
       <div class="scard"><div class="slbl">Price</div><div class="sval">${currentPrice}</div></div>
       <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
       <div class="scard"><div class="slbl">Buy Rating</div><div class="sval">${fmt(master?master.buy:null)}</div></div>
     </div>
-
     ${master&&master.notes?`<div class="srow" style="padding:0;overflow:hidden">
       <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
         <span class="lbl">Buy Sheet Notes</span><span class="arr">▼</span>
       </button>
       <div class="notes-body"><p>${master.notes}</p></div>
     </div>`:''}
-
     ${master?`<div class="srow"><div class="srow-t">Source ranks</div><div class="s3">
       <div><div class="sc-l">MLB</div><div class="sc-v">${fmt(master.mlb)}</div></div>
       <div><div class="sc-l">DD</div><div class="sc-v">${fmt(master.dd)}</div></div>
@@ -289,25 +286,21 @@ function showDetail(p, tp) {
       <div><div class="sc-l">BA</div><div class="sc-v">${fmt(master.ba)}</div></div>
       <div><div class="sc-l">Hobby</div><div class="sc-v">${fmt(master.hobby)}</div></div>
     </div></div>`:''}
-
     ${topE?`<div class="srow"><div class="srow-t">Latest ranking</div><div class="s3">
       <div><div class="sc-l">Rank</div><div class="sc-v">#${topE.rank}</div></div>
       <div><div class="sc-l">Prev</div><div class="sc-v">${fmt(topE.prev)}</div></div>
       <div><div class="sc-l">Change</div><div class="sc-v">${fmtDiff(topE.diff)}</div></div>
     </div></div>`:''}
-
     ${master&&master.lastYr?`<div class="srow"><div class="srow-t">Year over year</div><div class="s3">
       <div><div class="sc-l">Last year</div><div class="sc-v">$${master.lastYr}</div></div>
       <div><div class="sc-l">Now</div><div class="sc-v">${fmtP(master.price)}</div></div>
       <div><div class="sc-l">Change</div><div class="sc-v">${fmtPct(master.chg)}</div></div>
     </div></div>`:''}
-
     ${d.priceChange?`<div class="srow"><div class="srow-t">Price movement</div><div class="s3">
       <div><div class="sc-l">Original</div><div class="sc-v">$${safeNum(d.priceChange.orig).toFixed(2)}</div></div>
       <div><div class="sc-l">Current</div><div class="sc-v">$${safeNum(d.priceChange.now).toFixed(2)}</div></div>
       <div><div class="sc-l">Change</div><div class="sc-v">${fmtPct(d.priceChange.pct)}</div></div>
     </div></div>`:''}
-
     ${buildHistoryCharts(p.name)}
     ${wksHtml}
     ${modalHsHistory(hist)}
@@ -396,4 +389,41 @@ function openPlayerFromPortfolio(nameLower) {
   if(p){ showDetail(p,'player'); return; }
   const c=cards.find(cd=>normName(cd.player)===nameLower);
   if(c) showDetail({name:c.player.replace(/\b\w/g,l=>l.toUpperCase()),team:'',pos:'',aff:''},'player');
+}
+
+// ── Watchlist render ──────────────────────────────────────────────────────────
+function renderWatchlist() {
+  const list = document.getElementById('list');
+  const cnt  = document.getElementById('cntlbl');
+
+  if (!watchlistItems.length) {
+    list.innerHTML = '<div class="empty-msg">No active watchlist items</div>';
+    cnt.textContent = '0 items';
+    return;
+  }
+
+  cnt.textContent = `${watchlistItems.length} item${watchlistItems.length===1?'':'s'}`;
+
+  list.innerHTML = watchlistItems.map((item, i) => {
+    const { text: cdText, cls: cdCls } = getCountdown(item.endTime);
+    const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
+    const safeTitle = (item.title||'').replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+
+    return `<div class="wl-card">
+      <div class="wl-top">
+        <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
+        ${price ? `<span class="wl-price">${price}</span>` : ''}
+      </div>
+      <textarea class="wl-title" id="wlt-${i}" rows="2">${safeTitle}</textarea>
+      <div class="wl-btns">
+        <button class="wl-btn wl-copy" onclick="copyText(document.getElementById('wlt-${i}').value, this)">Copy</button>
+        <button class="wl-btn wl-cl" onclick="window.open(searchUrl.cardladder(document.getElementById('wlt-${i}').value),'_blank')">Card Ladder</button>
+        <button class="wl-btn wl-comc" onclick="window.open(searchUrl.comc(document.getElementById('wlt-${i}').value),'_blank')">COMC</button>
+        <button class="wl-btn wl-ebay" onclick="window.open(searchUrl.ebay(document.getElementById('wlt-${i}').value),'_blank')">eBay</button>
+        <button class="wl-btn wl-id" onclick="copyText('${item.itemId}', this)">Copy ID</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  startCountdownTick();
 }
