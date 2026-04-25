@@ -36,7 +36,10 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
 html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--tx);font-size:15px;overscroll-behavior-y:contain}
-.tabs{position:sticky;top:0;z-index:10;display:flex;background:var(--bg);border-bottom:.5px solid var(--bdr)}
+.top-tabs{position:sticky;top:0;z-index:10;display:flex;background:var(--bg);border-bottom:.5px solid var(--bdr)}
+.top-tab{flex:1;padding:13px 2px 11px;border:none;background:transparent;color:var(--tx2);font-size:13px;font-weight:500;cursor:pointer;border-bottom:3px solid transparent;font-family:inherit;margin-bottom:-1px}
+.top-tab.on{color:var(--acc);border-bottom-color:var(--acc)}
+.tabs{position:sticky;top:43px;z-index:9;display:flex;background:var(--bg);border-bottom:.5px solid var(--bdr)}
 .tab{flex:1;padding:11px 2px 9px;border:none;background:transparent;color:var(--tx2);font-size:10px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;line-height:1.2}
 .tab.on{color:var(--acc);border-bottom-color:var(--acc)}
 .hdr{padding:10px 14px 8px;background:var(--bg)}
@@ -155,21 +158,17 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;bac
 .wl-countdown.wl-urgent{background:#FCEBEB;color:var(--dn)}
 .wl-countdown.wl-ended{background:var(--b2-bg);color:var(--tx3)}
 .wl-price{font-size:13px;font-weight:600;color:var(--tx)}
-.wl-title{width:100%;padding:7px 9px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--bg);color:var(--tx);font-size:13px;font-family:inherit;line-height:1.4;resize:none;margin-bottom:8px}
+.wl-title{width:100%;padding:7px 9px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--bg);color:var(--tx);font-size:13px;font-family:inherit;line-height:1.4;resize:none;margin-bottom:8px;min-height:60px}
 .wl-title:focus{outline:none;border-color:var(--acc)}
 .wl-btns{display:flex;gap:5px;flex-wrap:wrap}
 .wl-btn{flex:1;min-width:0;padding:6px 4px;border:none;border-radius:7px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap}
 .wl-copy{background:var(--b2-bg);color:var(--tx2)}
+.wl-listing{background:var(--b5-bg);color:var(--b5-tx)}
 .wl-cl{background:var(--acc-bg);color:var(--acc)}
 .wl-comc{background:var(--inv1-bg);color:var(--inv1-tx)}
 .wl-ebay{background:#FFF3E0;color:#E65100}
 .wl-id{background:var(--b4-bg);color:var(--b4-tx)}
+.wl-save{background:var(--acc-bg);color:var(--acc)}
 @media(prefers-color-scheme:dark){
   .wl-ebay{background:#3D2000;color:#FFB74D}
-.wl-listing{background:var(--b5-bg);color:var(--b5-tx)}
-.wl-title{min-height:60px}
-@media(min-width:600px){
-  .wl-title{min-height:40px;rows:2}
-  .wl-btns{flex-wrap:nowrap}
-  .wl-save{background:var(--acc-bg);color:var(--acc)}
 }
