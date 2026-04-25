@@ -407,7 +407,8 @@ function renderWatchlist() {
   list.innerHTML = watchlistItems.map((item, i) => {
     const { text: cdText, cls: cdCls } = getCountdown(item.endTime);
     const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
-    const safeTitle = (item.title||'').replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    const rawTitle = item.savedTitle || item.title || '';
+    const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
     const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
 
     return `<div class="wl-card">
