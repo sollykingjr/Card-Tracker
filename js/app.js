@@ -14,8 +14,28 @@ const matchQ=(name,team)=>{
 document.getElementById('tabs').addEventListener('click',e=>{
   const t=e.target.closest('.tab'); if(!t) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
-  t.classList.add('on'); tab=t.dataset.t; sortBy='default'; window.scrollTo(0,0); render();
+  t.classList.add('on');
+  tab=t.dataset.t;
+  sortBy='default';
+  window.scrollTo(0,0);
+
+  const isWatch = tab==='watch';
+  document.getElementById('hdr').style.display = isWatch ? 'none' : '';
+  document.getElementById('chips').style.display = 'none';
+  document.getElementById('chips2').style.display = 'none';
+  document.getElementById('sortchips').innerHTML = '';
+
+  if(isWatch){
+    if(!watchlistLoaded){
+      loadWatchlist();
+    } else {
+      renderWatchlist();
+    }
+  } else {
+    render();
+  }
 });
+
 document.getElementById('sortchips').addEventListener('click',e=>{
   const c=e.target.closest('.schip'); if(!c) return;
   sortBy=c.dataset.s; render();
@@ -41,7 +61,14 @@ document.getElementById('clear').addEventListener('click',()=>{
 });
 document.getElementById('closebtn').addEventListener('click',()=>document.getElementById('mwrap').classList.remove('on'));
 document.getElementById('mwrap').addEventListener('click',e=>{ if(e.target===document.getElementById('mwrap')) document.getElementById('mwrap').classList.remove('on'); });
-document.getElementById('rfab').addEventListener('click',loadAll);
+document.getElementById('rfab').addEventListener('click',()=>{
+  if(tab==='watch'){
+    watchlistLoaded=false;
+    loadWatchlist();
+  } else {
+    loadAll();
+  }
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadAll();
