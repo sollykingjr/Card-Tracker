@@ -408,22 +408,25 @@ function renderWatchlist() {
     const { text: cdText, cls: cdCls } = getCountdown(item.endTime);
     const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
     const safeTitle = (item.title||'').replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
 
     return `<div class="wl-card">
       <div class="wl-top">
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}
       </div>
-      <textarea class="wl-title" id="wlt-${i}" rows="2">${safeTitle}</textarea>
+      <textarea class="wl-title" id="wlt-${i}" rows="3">${safeTitle}</textarea>
       <div class="wl-btns">
+        <button class="wl-btn wl-listing" onclick="window.open('${ebayUrl}','_blank')">Listing</button>
         <button class="wl-btn wl-copy" onclick="copyText(document.getElementById('wlt-${i}').value, this)">Copy</button>
         <button class="wl-btn wl-cl" onclick="window.open(searchUrl.cardladder(document.getElementById('wlt-${i}').value),'_blank')">Card Ladder</button>
         <button class="wl-btn wl-comc" onclick="window.open(searchUrl.comc(document.getElementById('wlt-${i}').value),'_blank')">COMC</button>
-        <button class="wl-btn wl-ebay" onclick="window.open(searchUrl.ebay(document.getElementById('wlt-${i}').value),'_blank')">eBay</button>
+        <button class="wl-btn wl-ebay" onclick="window.open(searchUrl.ebay(document.getElementById('wlt-${i}').value),'_blank')">eBay Search</button>
         <button class="wl-btn wl-id" onclick="copyText('${item.itemId}', this)">Copy ID</button>
       </div>
     </div>`;
   }).join('');
 
   startCountdownTick();
+}
 }
