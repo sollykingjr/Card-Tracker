@@ -149,8 +149,8 @@ async function loadAll() {
   try {
     const [pR,h2,p1,oh2,op1,hsR,cR] = await Promise.all([
       fetchRange("'Players All'!A2:P2000"),
-      fetchRange("'Top 200 Hitters Updated'!A2:H2000"),
-      fetchRange("'Top 100 Pitchers Updated'!A2:H2000"),
+      fetchRange("'Top 200 Hitters Updated'!A2:I2000"),
+      fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
       fetchRange("'200 Hitters Original'!A2:G2000"),
       fetchRange("'100 Pitchers Original'!A2:G2000"),
       fetchRange("'Hot Sheet'!A2:AE2000"),
@@ -165,13 +165,13 @@ async function loadAll() {
       lastYr:cl(r[13]),chg:cl(r[14]),notes:cl(r[15])
     }));
 
-    top200 = h2.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
-      age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7])
+     top200 = h2.filter(r=>r[2]).map(r=>({
+  date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
+  age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
     }));
     top100 = p1.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
-      age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7])
+  date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
+  age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
     }));
 
     origTop200 = oh2.filter(r=>r[2]).map(r=>({
