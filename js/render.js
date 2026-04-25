@@ -415,7 +415,7 @@ function renderWatchlist() {
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}
       </div>
-      <textarea class="wl-title" id="wlt-${i}" rows="3">${safeTitle}</textarea>
+     <textarea class="wl-title" id="wlt-${i}" rows="3">${safeTitle}</textarea>
       <div class="wl-btns">
         <button class="wl-btn wl-listing" onclick="window.open('${ebayUrl}','_blank')">Listing</button>
         <button class="wl-btn wl-copy" onclick="copyText(document.getElementById('wlt-${i}').value, this)">Copy</button>
@@ -423,6 +423,7 @@ function renderWatchlist() {
         <button class="wl-btn wl-comc" onclick="window.open(searchUrl.comc(document.getElementById('wlt-${i}').value),'_blank')">COMC</button>
         <button class="wl-btn wl-ebay" onclick="window.open(searchUrl.ebay(document.getElementById('wlt-${i}').value),'_blank')">eBay Search</button>
         <button class="wl-btn wl-id" onclick="copyText('${item.itemId}', this)">Copy ID</button>
+        <button class="wl-btn wl-save" onclick="saveTitle('${item.itemId}', document.getElementById('wlt-${i}').value, this)">Save</button>
       </div>
     </div>`;
   }).join('');
