@@ -166,4 +166,9 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;bac
 .wl-id{background:var(--b4-bg);color:var(--b4-tx)}
 @media(prefers-color-scheme:dark){
   .wl-ebay{background:#3D2000;color:#FFB74D}
+.wl-listing{background:var(--b5-bg);color:var(--b5-tx)}
+.wl-title{min-height:60px}
+@media(min-width:600px){
+  .wl-title{min-height:40px;rows:2}
+  .wl-btns{flex-wrap:nowrap}
 }
