@@ -172,3 +172,7 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;bac
 @media(prefers-color-scheme:dark){
   .wl-ebay{background:#3D2000;color:#FFB74D}
 }
+
+.pp-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:.5px solid var(--bdr)}
+.pp-row:last-child{border-bottom:none}
+.pp-name{font-size:13px;color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px}
