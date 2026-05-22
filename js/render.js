@@ -208,6 +208,8 @@ function modalCards(name) {
   const {owned, sold, totalInvested, totalNetProfit, avgHold, bestFlip} = cs;
   if(!owned.length && !sold.length) return '';
 
+  const currentPrice = safeNum(getResolved(name).price);
+
   const summary = `<div class="srow" style="margin-bottom:9px"><div class="srow-t">Cards summary</div><div class="s3">
     <div><div class="sc-l">Owned</div><div class="sc-v">${owned.length}</div></div>
     <div><div class="sc-l">Invested</div><div class="sc-v">$${totalInvested.toFixed(0)}</div></div>
@@ -224,14 +226,21 @@ function modalCards(name) {
       <div><div class="sc-l">Net</div><div class="sc-v"><span class="up">+$${safeNum(bestFlip.netProfit,true).toFixed(2)}</span></div></div>
     </div></div>` : '';
 
-  const ownedRows = owned.map(c=>`<div class="ct-entry owned">
-    <div class="ct-name">${c.fullCard||'—'}</div>
-    <div class="ct-row">
-      <div class="ct-stat"><div class="ct-l">Purchased</div><div class="ct-v">${fmtShortDate(c.datePurchased||c.transactionDate)}</div></div>
-      <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
-    </div>
-    ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
-  </div>`).join('');
+  const ownedRows = owned.map(c=>{
+    const cost = safeNum(c.purchasePrice);
+    const pctHtml = (currentPrice>0 && cost>0)
+      ? (()=>{ const pct=((currentPrice-cost)/cost*100); return `<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`; })()
+      : '';
+    return `<div class="ct-entry owned">
+      <div class="ct-name">${c.fullCard||'—'}</div>
+      <div class="ct-row">
+        <div class="ct-stat"><div class="ct-l">Purchased</div><div class="ct-v">${fmtShortDate(c.datePurchased||c.transactionDate)}</div></div>
+        <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
+        ${pctHtml}
+      </div>
+      ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
+    </div>`;
+  }).join('');
 
   const soldRows = sold.map(c=>{ const p=safeNum(c.netProfit,true); return `<div class="ct-entry sold">
     <div class="ct-name">${c.fullCard||'—'}</div>
@@ -260,11 +269,23 @@ function showDetail(p, tp) {
   const currentPrice = d.price?(String(d.price).startsWith('$')?d.price:'$'+d.price):'—';
   const currentRank  = d.rank?'#'+d.rank:'—';
 
+  const cs = getCardStats(p.name);
+  const currentPriceNum = safeNum(d.price);
+  let overallPctHtml = '';
+  if(cs.owned.length>0 && currentPriceNum>0){
+    const oldest = cs.owned.reduce((a,b)=>parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
+    const oldestCost = safeNum(oldest.purchasePrice);
+    if(oldestCost>0){
+      const pct = (currentPriceNum-oldestCost)/oldestCost*100;
+      overallPctHtml = `<span class="${pct>=0?'up':'dn'}" style="font-size:14px;font-weight:600;margin-left:8px">${pct>=0?'+':''}${pct.toFixed(0)}%</span>`;
+    }
+  }
+
   const hsWeeks=[...new Set(hist.map(h=>h.week).filter(Boolean))].sort((a,b)=>parseInt(a)-parseInt(b));
   const wksHtml=hsWeeks.length?`<div style="margin-bottom:9px">${hsWeeks.map(w=>`<span class="wk-badge">Wk${w}</span>`).join('')}</div>`:'';
 
   const html=`
-    <div class="mname">${p.name}</div>
+    <div class="mname" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${overallPctHtml}</div>
     <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}${master&&master.buy?' · Buy Rating '+master.buy:''}</div>
     <div class="sgrid">
       <div class="scard"><div class="slbl">Rank</div><div class="sval">${currentRank}</div></div>
@@ -310,6 +331,41 @@ function showDetail(p, tp) {
 
   document.getElementById('mcontent').innerHTML=html;
   document.getElementById('mwrap').classList.add('on');
+}
+
+// ── Price performance ─────────────────────────────────────────────────────────
+function buildPricePerformance(playerList) {
+  const withPct = playerList.map(entry=>{
+    const d = getResolved(entry.name);
+    const currentPrice = safeNum(d.price);
+    if(!entry.ownedCards.length || currentPrice===0) return null;
+    const oldest = entry.ownedCards.reduce((a,b)=>parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
+    const cost = safeNum(oldest.purchasePrice);
+    if(!cost) return null;
+    const pct = (currentPrice-cost)/cost*100;
+    const dispName = players.find(p=>normName(p.name)===entry.name)?.name||entry.name.replace(/\b\w/g,l=>l.toUpperCase());
+    return {name:dispName, normName:entry.name, pct};
+  }).filter(Boolean).sort((a,b)=>b.pct-a.pct);
+
+  if(!withPct.length) return '';
+
+  const gainers = withPct.filter(e=>e.pct>=0).slice(0,5);
+  const losers  = [...withPct].reverse().filter(e=>e.pct<0).slice(0,5);
+  const preview = [...gainers, ...losers].sort((a,b)=>b.pct-a.pct);
+  const all     = withPct;
+
+  const rowHtml = items => items.map(e=>`
+    <div class="pp-row">
+      <span class="pp-name">${e.name}</span>
+      <span class="${e.pct>=0?'up':'dn'}" style="font-weight:600;font-size:13px">${e.pct>=0?'+':''}${e.pct.toFixed(0)}%</span>
+    </div>`).join('');
+
+  return `<div class="srow" style="margin-bottom:11px">
+    <div class="srow-t">Price performance</div>
+    <div id="pp-preview">${rowHtml(preview)}</div>
+    <div id="pp-full" style="display:none">${rowHtml(all)}</div>
+    ${all.length>preview.length?`<button onclick="document.getElementById('pp-preview').style.display='none';document.getElementById('pp-full').style.display='';this.style.display='none'" style="width:100%;padding:6px;background:none;border:.5px solid var(--bdr2);border-radius:7px;color:var(--tx2);font-size:12px;cursor:pointer;margin-top:6px;font-family:inherit">Show all ${all.length}</button>`:''}
+  </div>`;
 }
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
@@ -382,7 +438,8 @@ function renderPortfolio() {
       </div>`;
     }).join('')}`:'<div class="empty-msg" style="padding:20px 0">No prospect cards found</div>';
 
-  document.getElementById('list').innerHTML=summaryHtml+recentHtml+holdingsHtml;
+  const perfHtml = buildPricePerformance(playerList);
+  document.getElementById('list').innerHTML=summaryHtml+perfHtml+recentHtml+holdingsHtml;
   document.getElementById('cntlbl').textContent=`${playerList.length} player${playerList.length===1?'':'s'}`;
 }
 
@@ -418,7 +475,7 @@ function renderWatchlist() {
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}
       </div>
-     <textarea class="wl-title" id="wlt-${i}" rows="3">${safeTitle}</textarea>
+      <textarea class="wl-title" id="wlt-${i}" rows="3">${safeTitle}</textarea>
       <div class="wl-btns">
         <button class="wl-btn wl-listing" onclick="window.open('${ebayUrl}','_blank')">Listing</button>
         <button class="wl-btn wl-copy" onclick="copyText(document.getElementById('wlt-${i}').value, this)">Copy</button>
