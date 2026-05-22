@@ -228,9 +228,24 @@ function modalCards(name) {
 
   const ownedRows = owned.map(c=>{
     const cost = safeNum(c.purchasePrice);
-    const pctHtml = (currentPrice>0 && cost>0)
-      ? (()=>{ const pct=((currentPrice-cost)/cost*100); return `<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`; })()
-      : '';
+    const cardTs = parseDate(c.datePurchased||c.transactionDate);
+    const cardPriceHistory = [];
+    [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===normName(name)).forEach(e=>{
+      const ts=parseDate(e.date); const pr=safeNum(e.price);
+      if(ts&&pr) cardPriceHistory.push({ts,price:pr});
+    });
+    hotsheet.filter(h=>normName(h.name)===normName(name)).forEach(h=>{
+      const ts=parseDate(h.date); const pr=safeNum(h.auto);
+      if(ts&&pr) cardPriceHistory.push({ts,price:pr});
+    });
+    let pctHtml = '';
+    if(currentPrice>0 && cardTs && cardPriceHistory.length){
+      const closest = cardPriceHistory.reduce((a,b)=>Math.abs(b.ts-cardTs)<Math.abs(a.ts-cardTs)?b:a);
+      if(closest.price){
+        const pct = (currentPrice-closest.price)/closest.price*100;
+        pctHtml = `<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`;
+      }
+    }
     return `<div class="ct-entry owned">
       <div class="ct-name">${c.fullCard||'—'}</div>
       <div class="ct-row">
@@ -274,10 +289,22 @@ function showDetail(p, tp) {
   let overallPctHtml = '';
   if(cs.owned.length>0 && currentPriceNum>0){
     const oldest = cs.owned.reduce((a,b)=>parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
-    const oldestCost = safeNum(oldest.purchasePrice);
-    if(oldestCost>0){
-      const pct = (currentPriceNum-oldestCost)/oldestCost*100;
-      overallPctHtml = `<span class="${pct>=0?'up':'dn'}" style="font-size:14px;font-weight:600;margin-left:8px">${pct>=0?'+':''}${pct.toFixed(0)}%</span>`;
+    const oldestTs = parseDate(oldest.datePurchased||oldest.transactionDate);
+    const priceHistory = [];
+    [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{
+      const ts=parseDate(e.date); const pr=safeNum(e.price);
+      if(ts&&pr) priceHistory.push({ts,price:pr});
+    });
+    hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{
+      const ts=parseDate(h.date); const pr=safeNum(h.auto);
+      if(ts&&pr) priceHistory.push({ts,price:pr});
+    });
+    if(priceHistory.length && oldestTs){
+      const closest = priceHistory.reduce((a,b)=>Math.abs(b.ts-oldestTs)<Math.abs(a.ts-oldestTs)?b:a);
+      if(closest.price){
+        const pct = (currentPriceNum-closest.price)/closest.price*100;
+        overallPctHtml = `<span class="${pct>=0?'up':'dn'}" style="font-size:14px;font-weight:600;margin-left:8px">${pct>=0?'+':''}${pct.toFixed(0)}%</span>`;
+      }
     }
   }
 
@@ -339,23 +366,46 @@ function buildPricePerformance(playerList) {
     const d = getResolved(entry.name);
     const currentPrice = safeNum(d.price);
     if(!entry.ownedCards.length || currentPrice===0) return null;
-    const oldest = entry.ownedCards.reduce((a,b)=>parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
-    const cost = safeNum(oldest.purchasePrice);
-    if(!cost) return null;
-    const pct = (currentPrice-cost)/cost*100;
-    const dispName = players.find(p=>normName(p.name)===entry.name)?.name||entry.name.replace(/\b\w/g,l=>l.toUpperCase());
-    return {name:dispName, normName:entry.name, pct};
+
+    // Find oldest owned card date
+    const oldest = entry.ownedCards.reduce((a,b)=>
+      parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
+    const oldestTs = parseDate(oldest.datePurchased||oldest.transactionDate);
+    if(!oldestTs) return null;
+
+    // Build price history from sheet data for this player
+    const nm = entry.name;
+    const priceHistory = [];
+    [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{
+      const ts=parseDate(e.date); const p=safeNum(e.price);
+      if(ts&&p) priceHistory.push({ts,price:p});
+    });
+    hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{
+      const ts=parseDate(h.date); const p=safeNum(h.auto);
+      if(ts&&p) priceHistory.push({ts,price:p});
+    });
+
+    if(!priceHistory.length) return null;
+
+    // Find closest price to oldest purchase date
+    const closest = priceHistory.reduce((a,b)=>
+      Math.abs(b.ts-oldestTs)<Math.abs(a.ts-oldestTs)?b:a);
+    if(!closest.price) return null;
+
+    const pct = (currentPrice-closest.price)/closest.price*100;
+    const dispName = players.find(p=>normName(p.name)===nm)?.name||nm.replace(/\b\w/g,l=>l.toUpperCase());
+    return {name:dispName, normName:nm, pct};
   }).filter(Boolean).sort((a,b)=>b.pct-a.pct);
 
   if(!withPct.length) return '';
 
   const gainers = withPct.filter(e=>e.pct>=0).slice(0,5);
   const losers  = [...withPct].reverse().filter(e=>e.pct<0).slice(0,5);
-  const preview = [...gainers, ...losers].sort((a,b)=>b.pct-a.pct);
+  const preview = [...gainers,...losers].sort((a,b)=>b.pct-a.pct);
   const all     = withPct;
 
   const rowHtml = items => items.map(e=>`
-    <div class="pp-row">
+    <div class="pp-row" onclick="openPlayerFromPortfolio('${e.normName}')" style="cursor:pointer">
       <span class="pp-name">${e.name}</span>
       <span class="${e.pct>=0?'up':'dn'}" style="font-weight:600;font-size:13px">${e.pct>=0?'+':''}${e.pct.toFixed(0)}%</span>
     </div>`).join('');
