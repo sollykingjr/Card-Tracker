@@ -1,5 +1,5 @@
 // ── State ─────────────────────────────────────────────────────────────────────
-let players=[], top200=[], top100=[], origTop200=[], origTop100=[], hotsheet=[], cards=[];
+let players=[], top200=[], top100=[], origTop200=[], origTop100=[], hotsheet=[], cards=[], buyScores=[];
 
 // Global cache — built once after load, cleared on refresh
 let CACHE = null;
@@ -85,7 +85,11 @@ function buildCache() {
         ? topEntries.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a).rank : null;
       entry.rank  = cl(topRank);
       entry.price = best.price;
-      entry.buy   = buyEntry ? cl(buyEntry.buy) : null;
+      const bsMatches = buyScores.filter(b=>normName(b.name)===nm);
+      const bsBest = bsMatches.length
+        ? bsMatches.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a)
+        : null;
+      entry.buy = bsBest ? cl(bsBest.score) : (buyEntry ? cl(buyEntry.buy) : null);
 
       let hsLabel = null;
       if(hsEntries.length) {
@@ -147,7 +151,7 @@ async function loadAll() {
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
-    const [pR,h2,p1,oh2,op1,hsR,cR] = await Promise.all([
+    const [pR,h2,p1,oh2,op1,hsR,cR,bsR] = await Promise.all([
       fetchRange("'Players All'!A2:P2000"),
       fetchRange("'Top 200 Hitters Updated'!A2:I2000"),
       fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
@@ -156,6 +160,7 @@ async function loadAll() {
       fetchRange("'Hot Sheet'!A2:AE2000"),
       fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W2000")}?key=${KEY}`)
         .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
+    fetchRange("'Buy Score'!A2:H2000"),
     ]);
 
     players = pR.filter(r=>r[3]).map(r=>({
@@ -201,6 +206,12 @@ async function loadAll() {
       serialNo:cl(r[8]),daysOwned:cl(r[20])
     }));
 
+buyScores = bsR.filter(r=>r[2]).map(r=>({
+      date:cl(r[0]), rank:cl(r[1]), name:cl(r[2])||'',
+      team:cl(r[3])||'', age:cl(r[4]), price:cl(r[5]),
+      score:cl(r[6]), notes:cl(r[7])
+    }));
+    
     buildCache();
 
     // Inject players from rankings/hotsheet not in Players All
