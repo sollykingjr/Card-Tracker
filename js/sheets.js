@@ -90,7 +90,10 @@ function buildCache() {
       const relevantBS  = buyScores.filter(b=>normName(b.name)===nm);
 
       const maxTopDate = relevantTop.length ? Math.max(...relevantTop.map(r=>parseDate(r.date))) : 0;
-      const maxBSDate  = relevantBS.length  ? Math.max(...relevantBS.map(r=>parseDate(r.date)))  : 0;
+      const allBSForType = isPitcher 
+        ? buyScores.filter(b=>(b.pos||'').toLowerCase().includes('pitcher'))
+        : buyScores.filter(b=>!(b.pos||'').toLowerCase().includes('pitcher'));
+      const maxBSDate = allBSForType.length ? Math.max(...allBSForType.map(r=>parseDate(r.date))) : 0;
 
       let topRank = null;
       if(maxBSDate >= maxTopDate && maxBSDate > 0) {
