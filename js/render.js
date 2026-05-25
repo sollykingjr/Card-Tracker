@@ -149,7 +149,8 @@ function buildHistoryCharts(name) {
   if(buyE){ add(buyE.date,buyE.price,pricePoints); add(buyE.date,buyE.hobby,rankPoints); }
   [...origTop200,...origTop100].filter(e=>normName(e.name)===nm).forEach(e=>{ add(e.date,e.price,pricePoints); add(e.date,e.rank,rankPoints); });
   [...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{ add(e.date,e.price,pricePoints); add(e.date,e.rank,rankPoints); });
-  hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{ add(h.date,h.auto,pricePoints); add(h.date,h.hobby,rankPoints); });
+  hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{ add(h.date,h.auto,pricePoints); add(h.date,h.hobby,rankPoints); });   
+  buyScores.filter(b=>normName(b.name)===nm).forEach(b=>{ add(b.date,b.price,pricePoints); add(b.date,b.rank,rankPoints); });
 
   const dedup=pts=>{ pts.sort((a,b)=>a.ts-b.ts); const m=new Map(); pts.forEach(p=>{ if(!m.has(p.ts)) m.set(p.ts,p); }); return [...m.values()]; };
   const prices=dedup(pricePoints).filter(p=>!isNaN(p.val));
