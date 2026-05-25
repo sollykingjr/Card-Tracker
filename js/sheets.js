@@ -28,8 +28,9 @@ const fmtPct=v=>{
 };
 const badge=br=>{
   if(!br) return '';
-  const n=parseInt(br); if(isNaN(n)) return '';
-  return `<span class="badge ${{5:'b5',4:'b4',3:'b3'}[n]||'b2'}">BR ${n}</span>`;
+  const n=parseFloat(br); if(isNaN(n)) return '';
+  const cls = n>=5?'b5':n>=4.5?'b45':n>=4?'b4':n>=3.5?'b35':n>=3?'b3':'b2';
+  return `<span class="badge ${cls}">BS ${n}</span>`;
 };
 const invTier=amt=>{
   if(amt<=0) return null;
