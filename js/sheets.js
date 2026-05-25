@@ -84,9 +84,25 @@ function buildCache() {
     if(candidates.length) {
       candidates.sort((a,b)=>b.ts!==a.ts?b.ts-a.ts:srcPri[a.src]-srcPri[b.src]);
       const best = candidates[0];
-      const topRank = topEntries.length
-        ? topEntries.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a).rank : null;
-      entry.rank  = cl(topRank);
+      const isPitcher = (players.find(p=>normName(p.name)===nm)?.pos||'').toLowerCase().includes('pitcher') ||
+                        buyScores.find(b=>normName(b.name)===nm)?.pos?.toLowerCase().includes('pitcher');
+      const relevantTop = isPitcher ? top100 : top200;
+      const relevantBS  = buyScores.filter(b=>normName(b.name)===nm);
+
+      const maxTopDate = relevantTop.length ? Math.max(...relevantTop.map(r=>parseDate(r.date))) : 0;
+      const maxBSDate  = relevantBS.length  ? Math.max(...relevantBS.map(r=>parseDate(r.date)))  : 0;
+
+      let topRank = null;
+      if(maxBSDate >= maxTopDate && maxBSDate > 0) {
+        const bsRecent = relevantBS.filter(b=>parseDate(b.date)===maxBSDate);
+        const bsEntry  = bsRecent.find(b=>normName(b.name)===nm);
+        topRank = bsEntry ? cl(bsEntry.rank) : null;
+      } else if(maxTopDate > 0) {
+        const topRecent = relevantTop.filter(r=>parseDate(r.date)===maxTopDate);
+        const topEntry  = topRecent.find(r=>normName(r.name)===nm);
+        topRank = topEntry ? cl(topEntry.rank) : null;
+      }
+      entry.rank = topRank;
       entry.price = best.price;
       const bsMatches = buyScores.filter(b=>normName(b.name)===nm);
       const bsBest = bsMatches.length
@@ -209,10 +225,10 @@ async function loadAll() {
       serialNo:cl(r[8]),daysOwned:cl(r[20])
     }));
 
-buyScores = bsR.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]), rank:cl(r[1]), name:cl(r[2])||'',
-      team:cl(r[3])||'', age:cl(r[4]), price:cl(r[5]),
-      score:cl(r[6]), notes:cl(r[7])
+buyScores = bsR.filter(r=>r[3]).map(r=>({
+      date:cl(r[0]), pos:cl(r[1]), rank:cl(r[2]), name:cl(r[3])||'',
+      team:cl(r[4])||'', age:cl(r[5]), price:cl(r[6]),
+      score:cl(r[7]), notes:cl(r[8])
     }));
     
     buildCache();
