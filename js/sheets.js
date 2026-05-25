@@ -67,10 +67,12 @@ function buildCache() {
     const nm = normName(name);
     const entry = {};
 
-    const srcPri = {top:0, hs:1, orig:2, buy:3};
+    const srcPri = {bs:0, top:1, hs:2, orig:3, buy:4};
     const candidates = [];
     const buyEntry = players.find(b=>normName(b.name)===nm);
     if(buyEntry) candidates.push({src:'buy', ts:parseDate(buyEntry.date), rank:null, price:cl(buyEntry.price)});
+    const bsCandidates = buyScores.filter(b=>normName(b.name)===nm);
+    bsCandidates.forEach(b=>candidates.push({src:'bs', ts:parseDate(b.date), rank:null, price:cl(b.price)}));
 
     const topEntries = [...top200,...top100].filter(e=>normName(e.name)===nm);
     topEntries.forEach(e=>candidates.push({src:'top', ts:parseDate(e.date), rank:cl(e.rank), price:cl(e.price)}));
