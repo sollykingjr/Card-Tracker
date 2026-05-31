@@ -171,7 +171,7 @@ function renderHotSheet() {
         const priceStr= price ? (String(price).startsWith('$') ? price : '$'+price) : '—';
         const catRaw  = (r.category||'').trim();
         const cat     = IGNORE_CATS.has(catRaw.toLowerCase()) ? '' : catRaw;
-        const isRepeat= (r.repeat||'').toLowerCase().includes('yes') || catRaw.toLowerCase().includes('repeat');
+        const isRepeat= String(r.repeat||'').toLowerCase().includes('yes') || catRaw.toLowerCase().includes('repeat');
 
         const bsHtml  = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}</span>` : '';
         const catHtml = cat ? `<span class="hs-row-cat${isRepeat?' repeat':''}">${cat}</span>` : '';
