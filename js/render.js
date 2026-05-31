@@ -47,17 +47,18 @@ function getPool() {
   if(tab==='watch') return [];
 
   let pool=[...players];
-  if(brf==='5') pool=pool.filter(p=>parseInt(p.buy)===5);
-  else if(brf==='4') pool=pool.filter(p=>parseInt(p.buy)>=4);
+  if(brf==='5') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=5);
+  else if(brf==='4') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4);
   else if(brf==='owned') pool=pool.filter(p=>getCardStats(p.name).owned.length>0);
   else if(brf==='sold')  pool=pool.filter(p=>getCardStats(p.name).sold.length>0);
   if(posf==='hit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('hitter'));
   else if(posf==='pit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('pitcher'));
   pool=pool.filter(p=>matchQ(p.name,p.team));
+  if(!q && brf==='all') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4);
   return applySort(pool,p=>p.slice().sort((a,b)=>{
-    const ab=parseInt(a.buy)||0,bb=parseInt(b.buy)||0;
+    const ab=parseFloat(getResolved(a.name).buy||0),bb=parseFloat(getResolved(b.name).buy||0);
     if(ab!==bb) return bb-ab;
-    return safeNum(b.price)-safeNum(a.price);
+    return safeNum(getResolved(b.name).price)-safeNum(getResolved(a.name).price);
   }));
 }
 
