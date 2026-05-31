@@ -76,8 +76,8 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
   const isPitcher = (pos||'').toLowerCase().includes('pitcher');
 
   const rankHtml = rank
-    ? `<div class="rnum${isPitcher?' pitcher':''}">#${rank}</div>`
-    : `<div class="rnum empty">—</div>`;
+    ? `<div class="rnum${isPitcher?' pitcher':''}" style="font-size:10px;font-weight:500">#${rank}</div>`
+    : `<div class="rnum empty" style="font-size:10px">—</div>`;
 
   const priceStr = price?(String(price).startsWith('$')?price:'$'+price):'';
   const priceHtml= priceStr?`<div class="pbox">${priceStr}</div>`:`<div class="pbox empty">—</div>`;
@@ -104,7 +104,7 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
       <div class="r1"><span class="pname">${name}</span></div>
       <div class="r2">
         <span>${team||''}</span><span>${pos||''}</span>
-        ${labelHtml}${d.buy?badge(d.buy):''}${wkHtml}${invHtml}
+      ${d.buy?badge(d.buy):''}${cs.owned.length>0?`<span class="inv-badge ${invTier(cs.totalInvested)}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`:''}
       </div>
     </div>
     ${priceHtml}
