@@ -186,8 +186,8 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;bac
 .hs-section-hdr:first-child{margin-top:0}
 .hs-level-hdr{font-size:10px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px;padding-left:2px}
 .hs-row-level{font-size:11px;color:var(--tx3)}
-.hs-filters{display:flex;gap:8px;margin-bottom:12px}
-.hs-filter-btn{flex:1;padding:7px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
+.hs-filters{display:flex;gap:6px;margin-bottom:12px}
+.hs-filter-btn{padding:5px 14px;border:.5px solid var(--bdr2);border-radius:20px;background:var(--surf);color:var(--tx2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
 .hs-filter-btn.on{background:var(--acc-bg);color:var(--acc);border-color:var(--acc)}
 .hs-row{display:flex;align-items:center;justify-content:space-between;padding:10px 11px;background:var(--surf);border:.5px solid var(--bdr);border-radius:9px;margin-bottom:5px;cursor:pointer;gap:8px}
 .hs-row:active{opacity:.7}
