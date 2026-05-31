@@ -42,8 +42,6 @@ function mostRecent(arr) {
 }
 
 function getPool() {
-  if(tab==='t200'){ const b=mostRecent(top200).filter(r=>matchQ(r.name,r.team)); return applySort(b,p=>p.slice().sort((a,b)=>parseInt(a.rank)-parseInt(b.rank))); }
-  if(tab==='t100'){ const b=mostRecent(top100).filter(r=>matchQ(r.name,r.team)); return applySort(b,p=>p.slice().sort((a,b)=>parseInt(a.rank)-parseInt(b.rank))); }
   if(tab==='hs')  { const b=mostRecent(hotsheet).filter(r=>matchQ(r.name,r.aff)); return applySort(b,p=>p.slice().sort((a,b)=>parseDate(b.date)-parseDate(a.date))); }
   if(tab==='port') return [];
   if(tab==='watch') return [];
@@ -113,8 +111,8 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function render() {
-  const isTop=tab==='t200'||tab==='t100', isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
-  const showChips=!isTop&&!isHS&&!isPort&&!isWatch;
+  const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
+  const showChips=!isHS&&!isPort&&!isWatch;
   document.getElementById('chips').style.display=showChips?'flex':'none';
   document.getElementById('chips2').style.display=showChips?'flex':'none';
   renderSortChips();
@@ -127,7 +125,6 @@ function render() {
 
   let html='';
   if(isHS) html=pool.map((r,i)=>buildCard(r.name,r.aff,r.pos,i,'hs')).join('');
-  else if(isTop) html=pool.map((r,i)=>buildCard(r.name,r.team,tab==='t200'?'Hitter':'Pitcher',i,'top',{rank:r.rank,price:r.price})).join('');
   else html=pool.map((p,i)=>buildCard(p.name,p.team,p.pos,i,'player')).join('');
 
   document.getElementById('list').innerHTML=html;
