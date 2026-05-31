@@ -111,6 +111,8 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
 }
 
 // ── Hot Sheet render ──────────────────────────────────────────────────────────
+let hsFilter = 'hitter';
+
 function renderHotSheet() {
   const list = document.getElementById('list');
   const cnt  = document.getElementById('cntlbl');
@@ -120,81 +122,62 @@ function renderHotSheet() {
   const hitters  = hotsheet.filter(r => !isPitcher(r.pos));
   const pitchers = hotsheet.filter(r =>  isPitcher(r.pos));
 
-  // Find the most recent date independently for each group
   const latestDate = arr => {
     let max = 0;
     arr.forEach(r => { const ts = parseDate(r.date); if(ts > max) max = ts; });
     return max;
   };
-  const hLatest  = latestDate(hitters);
-  const pLatest  = latestDate(pitchers);
+  const hLatest = latestDate(hitters);
+  const pLatest = latestDate(pitchers);
 
   const thisWeekH = hitters.filter(r => parseDate(r.date) === hLatest);
   const thisWeekP = pitchers.filter(r => parseDate(r.date) === pLatest);
 
-  const totalCount = thisWeekH.length + thisWeekP.length;
-  cnt.textContent = `${totalCount} player${totalCount===1?'':'s'}`;
+  const active = hsFilter === 'hitter' ? thisWeekH : thisWeekP;
+  active.sort((a,b) => (parseFloat(b.buyScore)||0) - (parseFloat(a.buyScore)||0));
 
-  if(!totalCount) {
-    list.innerHTML = '<div class="empty-msg">No hot sheet data found</div>';
+  cnt.textContent = `${active.length} player${active.length===1?'':'s'}`;
+
+  const IGNORE_CATS = new Set(['no','none','']);
+
+  const filterHtml = `<div class="hs-filters">
+    <button class="hs-filter-btn${hsFilter==='hitter'?' on':''}" onclick="hsFilter='hitter';renderHotSheet()">Hitters</button>
+    <button class="hs-filter-btn${hsFilter==='pitcher'?' on':''}" onclick="hsFilter='pitcher';renderHotSheet()">Pitchers</button>
+  </div>`;
+
+  if(!active.length) {
+    list.innerHTML = filterHtml + '<div class="empty-msg">No hot sheet data found</div>';
     return;
   }
 
-  const LEVEL_ORDER = ['Triple-A','Double-A','High-A','Single-A','Complex League'];
-  const IGNORE_CATS = new Set(['no','none','']);
+  let rowsHtml = '';
+  active.forEach(r => {
+    const d       = getResolved(r.name);
+    const bs      = parseFloat(r.buyScore || d.buy || 0);
+    const price   = r.auto || d.price || '';
+    const priceStr= price ? (String(price).startsWith('$') ? price : '$'+price) : '—';
+    const catRaw  = (r.category||'').trim();
+    const cat     = IGNORE_CATS.has(catRaw.toLowerCase()) ? '' : catRaw;
+    const isRepeat= String(r.repeat||'').toLowerCase().includes('yes') || catRaw.toLowerCase().includes('repeat');
 
-  const buildSection = (entries, sectionTitle) => {
-    if(!entries.length) return '';
+    const bsHtml  = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}</span>` : '';
+    const catHtml = cat ? `<span class="hs-row-cat${isRepeat?' repeat':''}">${cat}</span>` : '';
 
-    // Group by level in defined order
-    const byLevel = new Map();
-    LEVEL_ORDER.forEach(l => byLevel.set(l, []));
-    entries.forEach(r => {
-      const l = r.level || 'Other';
-      if(!byLevel.has(l)) byLevel.set(l, []);
-      byLevel.get(l).push(r);
-    });
+    rowsHtml += `<div class="hs-row" data-name="${r.name}" data-pos="${r.pos||''}" data-aff="${r.aff||''}">
+      <div class="hs-row-left">
+        <span class="hs-row-name">${r.name}</span>
+        <span class="hs-row-level">${r.level||''}</span>
+        ${catHtml}
+      </div>
+      <div class="hs-row-right">
+        ${bsHtml}
+        <span class="hs-row-price">${priceStr}</span>
+      </div>
+    </div>`;
+  });
 
-    let html = `<div class="hs-section-hdr">${sectionTitle}</div>`;
+  list.innerHTML = filterHtml + rowsHtml;
 
-    byLevel.forEach((players, level) => {
-      if(!players.length) return;
-
-      // Sort by buy score desc within each level
-      players.sort((a,b) => (parseFloat(b.buyScore)||0) - (parseFloat(a.buyScore)||0));
-
-      html += `<div class="hs-level-hdr">${level}</div>`;
-      players.forEach((r, i) => {
-        const d       = getResolved(r.name);
-        const bs      = parseFloat(r.buyScore || d.buy || 0);
-        const price   = r.auto || d.price || '';
-        const priceStr= price ? (String(price).startsWith('$') ? price : '$'+price) : '—';
-        const catRaw  = (r.category||'').trim();
-        const cat     = IGNORE_CATS.has(catRaw.toLowerCase()) ? '' : catRaw;
-        const isRepeat= String(r.repeat||'').toLowerCase().includes('yes') || catRaw.toLowerCase().includes('repeat');
-
-        const bsHtml  = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}</span>` : '';
-        const catHtml = cat ? `<span class="hs-row-cat${isRepeat?' repeat':''}">${cat}</span>` : '';
-
-        html += `<div class="hs-row" data-name="${r.name}" data-pos="${r.pos||''}" data-aff="${r.aff||''}">
-          <div class="hs-row-left">
-            <span class="hs-row-name">${r.name}</span>
-            ${catHtml}
-          </div>
-          <div class="hs-row-right">
-            ${bsHtml}
-            <span class="hs-row-price">${priceStr}</span>
-          </div>
-        </div>`;
-      });
-    });
-
-    return html;
-  };
-
-  list.innerHTML = buildSection(thisWeekH, 'Hitters') + buildSection(thisWeekP, 'Pitchers');
-
-  // Attach tap handlers
   list.querySelectorAll('.hs-row').forEach(row => {
     row.addEventListener('click', () => {
       const name = row.dataset.name;
