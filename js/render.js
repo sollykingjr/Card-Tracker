@@ -186,10 +186,6 @@ function buildHistoryCharts(name) {
 function modalHsHistory(hist) {
   if(!hist.length) return '';
   const rows = hist.map(h=>{
-    const isPit=h.pos==='Pitcher';
-    const stats=isPit
-      ?`<div><div class="hs-sl">IP</div><div class="hs-sv">${fmt(h.ip)}</div></div><div><div class="hs-sl">ERA</div><div class="hs-sv">${fmt(h.era)}</div></div><div><div class="hs-sl">WHIP</div><div class="hs-sv">${fmt(h.whip)}</div></div><div><div class="hs-sl">K/9</div><div class="hs-sv">${fmt(h.k9)}</div></div><div><div class="hs-sl">SO</div><div class="hs-sv">${fmt(h.sop)}</div></div><div><div class="hs-sl">BB</div><div class="hs-sv">${fmt(h.bbp)}</div></div>`
-      :`<div><div class="hs-sl">OPS</div><div class="hs-sv">${fmt(h.ops)}</div></div><div><div class="hs-sl">BA</div><div class="hs-sv">${fmt(h.ba)}</div></div><div><div class="hs-sl">HR</div><div class="hs-sv">${fmt(h.hr)}</div></div><div><div class="hs-sl">RBI</div><div class="hs-sv">${fmt(h.rbi)}</div></div><div><div class="hs-sl">SB</div><div class="hs-sv">${fmt(h.sb)}</div></div><div><div class="hs-sl">OBP</div><div class="hs-sv">${fmt(h.obp)}</div></div>`;
     return `<div class="hs-entry${h.repeat?' repeat':''}">
       <div class="hs-hdr">
         <span class="hs-wk">${fmtDateLabel(h.date)||'Wk '+h.week}</span>
@@ -197,7 +193,11 @@ function modalHsHistory(hist) {
         ${h.category?`<span class="hs-cat">${h.category}</span>`:''}
         ${h.auto?`<span style="margin-left:auto;font-size:12px;font-weight:500">${h.auto}</span>`:''}
       </div>
-      <div class="hs-stats">${stats}</div>
+      <div class="hs-stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div><div class="hs-sl">14-Day</div><div class="hs-sv">${fmt(h.day14)}</div></div>
+        <div><div class="hs-sl">Hobby</div><div class="hs-sv">${fmt(h.hobby)}</div></div>
+        <div><div class="hs-sl">Buy Score</div><div class="hs-sv">${fmt(h.buyScore)}</div></div>
+      </div>
       ${h.notes?`<div class="hs-notes">${h.notes}</div>`:''}
     </div>`;
   }).join('');
