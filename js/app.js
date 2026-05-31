@@ -28,6 +28,7 @@ function setSection(s) {
   window.scrollTo(0, 0);
 
   if (isWatch) {
+    tab = 'watch';
     document.getElementById('cntlbl').textContent = '';
     if (!watchlistLoaded) {
       loadWatchlist();
@@ -35,9 +36,11 @@ function setSection(s) {
       renderWatchlist();
     }
   } else {
+    tab = 'all';
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+    document.querySelector('.tab[data-t="all"]').classList.add('on');
     render();
   }
-}
 
 // ── Top tab events ────────────────────────────────────────────────────────────
 document.getElementById('toptabs').addEventListener('click', e => {
