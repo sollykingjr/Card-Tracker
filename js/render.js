@@ -300,6 +300,7 @@ function showCardsSubview(type, name) {
 }
 // ── Detail modal ──────────────────────────────────────────────────────────────
 let _modalMainHtml = '';
+let _modalCurrentPlayer = '';
 
 function attachModalEvents() {
   document.getElementById('closebtn').onclick = () => document.getElementById('mwrap').classList.remove('on');
@@ -347,14 +348,22 @@ function showDetail(p, tp) {
     ${noteHtml}
     ${buildHistoryCharts(p.name)}
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
-      ${hist.length?`<button onclick="showHsSubview('${p.name}')" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
-      ${master?`<button onclick="showSourceRanksSubview('${p.name}')" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-      ${master&&master.notes?`<button onclick="showBuyNotesSubview('${p.name}')" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${hist.length?`<button data-action="hs" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
+      ${master?`<button data-action="ranks" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${master&&master.notes?`<button data-action="notes" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
     </div>`;
 
   _modalMainHtml = html;
+  _modalCurrentPlayer = p.name;
   document.getElementById('mcontent').innerHTML = html;
   document.getElementById('mwrap').classList.add('on');
+  document.getElementById('mcontent').addEventListener('click', e=>{
+    const btn = e.target.closest('[data-action]'); if(!btn) return;
+    const action = btn.dataset.action;
+    if(action==='hs') showHsSubview(_modalCurrentPlayer);
+    if(action==='ranks') showSourceRanksSubview(_modalCurrentPlayer);
+    if(action==='notes') showBuyNotesSubview(_modalCurrentPlayer);
+  });
 }
 
 function showHsSubview(name) {
