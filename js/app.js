@@ -21,7 +21,8 @@ function setSection(s) {
   document.getElementById('prospects-section').style.display = '';
   const tabsEl = document.getElementById('tabs');
   if(tabsEl) tabsEl.style.display = isWatch ? 'none' : '';
-  document.getElementById('hdr').style.display = '';
+  const hdrEl = document.getElementById('hdr');
+  if(hdrEl) hdrEl.style.display = '';
   document.getElementById('chips').style.display = 'none';
   document.getElementById('chips2').style.display = 'none';
   document.getElementById('sortchips').innerHTML = '';
