@@ -360,13 +360,14 @@ function showDetail(p, tp) {
 function showHsSubview(name) {
   const nm = normName(name);
   const hist = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
+  const content = modalHsHistory(hist);
   document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml" 
+    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
       style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
       ← Back
     </button>
     <div class="section-hdr">Hot Sheet History — ${name}</div>
-    ${modalHsHistory(hist)}`;
+    ${content||'<div class="empty-msg">No hot sheet entries found</div>'}`;
 }
 
 function showSourceRanksSubview(name) {
