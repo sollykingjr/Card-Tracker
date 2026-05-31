@@ -335,7 +335,7 @@ function showDetail(p, tp) {
     <div class="notes-body" style="display:none"><p>${recentNote}</p></div>
   </div>` : '';
 
-  const html=`
+ const html=`
     <div class="mname">${p.name}</div>
     <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}</div>
     <div class="sgrid" style="margin-bottom:9px">
@@ -344,14 +344,14 @@ function showDetail(p, tp) {
       <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
       <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
     </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
+      ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
+      ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${master&&master.notes?`<button onclick="showBuyNotesSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+    </div>
     ${modalCards(p.name)}
     ${noteHtml}
-    ${buildHistoryCharts(p.name)}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;position:relative;z-index:10">
-      ${hist.length?`<button data-action="hs" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
-      ${master?`<button data-action="ranks" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-      ${master&&master.notes?`<button data-action="notes" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-    </div>`;
+    ${buildHistoryCharts(p.name)}`;
 
   _modalMainHtml = html;
   _modalCurrentPlayer = p.name;
