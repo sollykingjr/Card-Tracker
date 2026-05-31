@@ -42,24 +42,23 @@ function mostRecent(arr) {
 }
 
 function getPool() {
-  if(tab==='t200'){ const b=mostRecent(top200).filter(r=>matchQ(r.name,r.team)); return applySort(b,p=>p.slice().sort((a,b)=>parseInt(a.rank)-parseInt(b.rank))); }
-  if(tab==='t100'){ const b=mostRecent(top100).filter(r=>matchQ(r.name,r.team)); return applySort(b,p=>p.slice().sort((a,b)=>parseInt(a.rank)-parseInt(b.rank))); }
   if(tab==='hs')  { const b=mostRecent(hotsheet).filter(r=>matchQ(r.name,r.aff)); return applySort(b,p=>p.slice().sort((a,b)=>parseDate(b.date)-parseDate(a.date))); }
   if(tab==='port') return [];
   if(tab==='watch') return [];
 
   let pool=[...players];
-  if(brf==='5') pool=pool.filter(p=>parseInt(p.buy)===5);
-  else if(brf==='4') pool=pool.filter(p=>parseInt(p.buy)>=4);
+  if(brf==='5') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=5);
+  else if(brf==='4') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4);
   else if(brf==='owned') pool=pool.filter(p=>getCardStats(p.name).owned.length>0);
   else if(brf==='sold')  pool=pool.filter(p=>getCardStats(p.name).sold.length>0);
   if(posf==='hit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('hitter'));
   else if(posf==='pit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('pitcher'));
   pool=pool.filter(p=>matchQ(p.name,p.team));
+  if(!q && brf==='all') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4);
   return applySort(pool,p=>p.slice().sort((a,b)=>{
-    const ab=parseInt(a.buy)||0,bb=parseInt(b.buy)||0;
+    const ab=parseFloat(getResolved(a.name).buy||0),bb=parseFloat(getResolved(b.name).buy||0);
     if(ab!==bb) return bb-ab;
-    return safeNum(b.price)-safeNum(a.price);
+    return safeNum(getResolved(b.name).price)-safeNum(getResolved(a.name).price);
   }));
 }
 
@@ -76,8 +75,8 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
   const isPitcher = (pos||'').toLowerCase().includes('pitcher');
 
   const rankHtml = rank
-    ? `<div class="rnum${isPitcher?' pitcher':''}">#${rank}</div>`
-    : `<div class="rnum empty">—</div>`;
+    ? `<div class="rnum${isPitcher?' pitcher':''}" style="font-size:10px;font-weight:500">#${rank}</div>`
+    : `<div class="rnum empty" style="font-size:10px">—</div>`;
 
   const priceStr = price?(String(price).startsWith('$')?price:'$'+price):'';
   const priceHtml= priceStr?`<div class="pbox">${priceStr}</div>`:`<div class="pbox empty">—</div>`;
@@ -104,7 +103,7 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
       <div class="r1"><span class="pname">${name}</span></div>
       <div class="r2">
         <span>${team||''}</span><span>${pos||''}</span>
-        ${labelHtml}${d.buy?badge(d.buy):''}${wkHtml}${invHtml}
+      ${d.buy?badge(d.buy):''}${cs.owned.length>0?`<span class="inv-badge ${invTier(cs.totalInvested)}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`:''}
       </div>
     </div>
     ${priceHtml}
@@ -113,10 +112,8 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function render() {
-  const isTop=tab==='t200'||tab==='t100', isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
-  const showChips=!isTop&&!isHS&&!isPort&&!isWatch;
-  document.getElementById('chips').style.display=showChips?'flex':'none';
-  document.getElementById('chips2').style.display=showChips?'flex':'none';
+  const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
+  const showChips=!isHS&&!isPort&&!isWatch;
   renderSortChips();
   if(isPort){ renderPortfolio(); return; }
   if(isWatch){ renderWatchlist(); return; }
@@ -127,7 +124,6 @@ function render() {
 
   let html='';
   if(isHS) html=pool.map((r,i)=>buildCard(r.name,r.aff,r.pos,i,'hs')).join('');
-  else if(isTop) html=pool.map((r,i)=>buildCard(r.name,r.team,tab==='t200'?'Hitter':'Pitcher',i,'top',{rank:r.rank,price:r.price})).join('');
   else html=pool.map((p,i)=>buildCard(p.name,p.team,p.pos,i,'player')).join('');
 
   document.getElementById('list').innerHTML=html;
@@ -143,22 +139,22 @@ function buildHistoryCharts(name) {
   const add=(dateVal,rawVal,list)=>{
     const ts=parseDate(dateVal); if(!ts||!rawVal) return;
     const n=parseFloat(String(rawVal).replace(/[^0-9.]/g,'')); if(isNaN(n)) return;
-    list.push({label:fmtDateLabel(dateVal),ts,val:n});
+    list.push({ts,val:n,fullDate:dateVal});
   };
   const buyE=players.find(b=>normName(b.name)===nm);
   if(buyE){ add(buyE.date,buyE.price,pricePoints); add(buyE.date,buyE.hobby,rankPoints); }
   [...origTop200,...origTop100].filter(e=>normName(e.name)===nm).forEach(e=>{ add(e.date,e.price,pricePoints); add(e.date,e.rank,rankPoints); });
   [...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{ add(e.date,e.price,pricePoints); add(e.date,e.rank,rankPoints); });
-  hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{ add(h.date,h.auto,pricePoints); add(h.date,h.hobby,rankPoints); });   
+  hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{ add(h.date,h.auto,pricePoints); add(h.date,h.hobby,rankPoints); });
   buyScores.filter(b=>normName(b.name)===nm).forEach(b=>{ add(b.date,b.price,pricePoints); add(b.date,b.rank,rankPoints); });
 
   const dedup=pts=>{ pts.sort((a,b)=>a.ts-b.ts); const m=new Map(); pts.forEach(p=>{ if(!m.has(p.ts)) m.set(p.ts,p); }); return [...m.values()]; };
   const prices=dedup(pricePoints).filter(p=>!isNaN(p.val));
   const ranks=dedup(rankPoints).filter(p=>!isNaN(p.val));
 
-  const makeSvg=(points,isRank)=>{
+  const makeSvg=(points,isRank,chartId)=>{
     if(points.length<2) return '';
-    const W=280,H=68,Pt=20,Pb=22,Pl=10,Pr=10,iW=W-Pl-Pr,iH=H-Pt-Pb;
+    const W=280,H=80,Pt=12,Pb=22,Pl=10,Pr=10,iW=W-Pl-Pr,iH=H-Pt-Pb;
     const vals=points.map(p=>p.val);
     let minV=Math.min(...vals),maxV=Math.max(...vals);
     if(minV===maxV){minV=Math.max(0,minV*0.85);maxV=maxV*1.15||1;}
@@ -167,199 +163,203 @@ function buildHistoryCharts(name) {
     const pts=points.map((p,i)=>({...p,x:xS(i),y:yS(p.val)}));
     const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const cls=isRank?'chart-line-rank':'chart-line', dc=isRank?'chart-dot-rank':'chart-dot';
-    const dots=pts.map((p,i)=>{
-      const first=i===0,last=i===pts.length-1,anc=first?'start':last?'end':'middle';
-      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" class="${dc}"/>
-        ${(first||last)?`<text x="${p.x.toFixed(1)}" y="${(p.y-6).toFixed(1)}" text-anchor="${anc}" class="chart-val">${isRank?'#':'$'}${p.val}</text>`:''}
-        <text x="${p.x.toFixed(1)}" y="${(H-3).toFixed(1)}" text-anchor="${anc}" class="chart-label">${p.label}</text>`;
+
+    // Month checkpoint x-axis labels
+    const monthsSeen=new Set();
+    const xLabels=pts.map((p,i)=>{
+      const d=new Date(p.ts); const mk=`${d.getFullYear()}-${d.getMonth()}`;
+      const d1=new Date(d.getFullYear(),d.getMonth(),1).getTime();
+      // Find the point closest to 1st of this month
+      const isCheckpoint = !monthsSeen.has(mk) && pts.reduce((a,b)=>Math.abs(b.ts-d1)<Math.abs(a.ts-d1)?b:a).ts===p.ts;
+      if(isCheckpoint) monthsSeen.add(mk);
+      const lbl=isCheckpoint?`${d.getMonth()+1}/1`:'';
+      return lbl?`<text x="${p.x.toFixed(1)}" y="${(H-3).toFixed(1)}" text-anchor="middle" class="chart-label">${lbl}</text>`:'';
     }).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg"><polyline points="${poly}" class="${cls}"/>${dots}</svg>`;
+
+    const dots=pts.map((p,i)=>{
+      const prefix=isRank?'#':'$';
+      const tooltip=`${prefix}${p.val} · ${fmtShortDate(p.fullDate)}`;
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" class="${dc}" style="cursor:pointer"
+        onclick="showChartTooltip(event,'${chartId}','${tooltip}')"/>`;
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg" onclick="hideChartTooltip('${chartId}')">
+      <polyline points="${poly}" class="${cls}"/>
+      ${dots}${xLabels}
+      <text id="${chartId}-tip" x="140" y="10" text-anchor="middle" class="chart-val" style="display:none;font-size:10px;fill:var(--acc)"></text>
+    </svg>`;
   };
+
+  const pct = prices.length>=2 ? ((prices[prices.length-1].val-prices[0].val)/prices[0].val*100) : null;
+  const pctHtml = pct!==null ? `<span class="${pct>=0?'up':'dn'}" style="font-size:10px;margin-left:6px">${pct>=0?'+':''}${pct.toFixed(0)}%</span>` : '';
+
   let html='';
-  const pSvg=makeSvg(prices,false), rSvg=makeSvg(ranks,true);
-  if(pSvg) html+=`<div class="chart-wrap"><div class="chart-title">Price history</div>${pSvg}</div>`;
+  const pSvg=makeSvg(prices,false,'pchart'), rSvg=makeSvg(ranks,true,'rchart');
+  if(pSvg) html+=`<div class="chart-wrap"><div class="chart-title">Price history${pctHtml}</div>${pSvg}</div>`;
   if(rSvg) html+=`<div class="chart-wrap"><div class="chart-title">Rank history <span style="font-size:9px;color:var(--tx3)">(lower = better)</span></div>${rSvg}</div>`;
   return html;
 }
 
-// ── Modal sections ────────────────────────────────────────────────────────────
-function modalHsHistory(hist) {
-  if(!hist.length) return '';
-  const rows = hist.map(h=>{
-    return `<div class="hs-entry${h.repeat?' repeat':''}">
-      <div class="hs-hdr">
-        <span class="hs-wk">${fmtDateLabel(h.date)||'Wk '+h.week}</span>
-        <span class="hs-lvl">${h.level}</span>
-        ${h.category?`<span class="hs-cat">${h.category}</span>`:''}
-        ${h.auto?`<span style="margin-left:auto;font-size:12px;font-weight:500">${h.auto}</span>`:''}
-      </div>
-      <div class="hs-stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        <div><div class="hs-sl">14-Day</div><div class="hs-sv">${fmt(h.day14)}</div></div>
-        <div><div class="hs-sl">Hobby</div><div class="hs-sv">${fmt(h.hobby)}</div></div>
-        <div><div class="hs-sl">Buy Score</div><div class="hs-sv">${fmt(h.buyScore)}</div></div>
-      </div>
-      ${h.notes?`<div class="hs-notes">${h.notes}</div>`:''}
-    </div>`;
-  }).join('');
-  return `<div class="section-hdr">Hot sheet history</div>${rows}`;
+function showChartTooltip(e, chartId, text) {
+  e.stopPropagation();
+  const tip = document.getElementById(chartId+'-tip');
+  if(!tip) return;
+  tip.textContent = text;
+  tip.style.display = '';
+}
+function hideChartTooltip(chartId) {
+  const tip = document.getElementById(chartId+'-tip');
+  if(tip) tip.style.display = 'none';
 }
 
+// ── Modal sections ────────────────────────────────────────────────────────────
 function modalCards(name) {
   const cs = getCardStats(name);
-  const {owned, sold, totalInvested, totalNetProfit, avgHold, bestFlip} = cs;
+  const {owned, sold, totalInvested, totalNetProfit, totalSoldFor} = cs;
   if(!owned.length && !sold.length) return '';
 
-  const currentPrice = safeNum(getResolved(name).price);
+  const roi = totalSoldFor>0 ? ((totalNetProfit/totalSoldFor)*100) : null;
 
-  const summary = `<div class="srow" style="margin-bottom:9px"><div class="srow-t">Cards summary</div><div class="s3">
-    <div><div class="sc-l">Owned</div><div class="sc-v">${owned.length}</div></div>
-    <div><div class="sc-l">Invested</div><div class="sc-v">$${totalInvested.toFixed(0)}</div></div>
-    <div><div class="sc-l">Sold</div><div class="sc-v">${sold.length}</div></div>
-    ${totalNetProfit!==0?`<div><div class="sc-l">Net profit</div><div class="sc-v"><span class="${totalNetProfit>=0?'up':'dn'}">${totalNetProfit>=0?'+':''}$${Math.abs(totalNetProfit).toFixed(2)}</span></div></div>`:''}
-    ${avgHold!==null?`<div><div class="sc-l">Avg hold</div><div class="sc-v">${avgHold}d</div></div>`:''}
-  </div></div>`;
-
-  const flip = bestFlip && safeNum(bestFlip.netProfit,true)>0 ? `<div class="srow" style="margin-bottom:9px"><div class="srow-t">Best flip</div>
-    <div style="font-size:12px;color:var(--tx2);margin-bottom:4px">${bestFlip.fullCard||'—'}</div>
-    <div class="s3">
-      <div><div class="sc-l">Cost</div><div class="sc-v">${fmtMoney(bestFlip.purchasePrice)}</div></div>
-      <div><div class="sc-l">Sold</div><div class="sc-v">${fmtMoney(bestFlip.salePrice)}</div></div>
-      <div><div class="sc-l">Net</div><div class="sc-v"><span class="up">+$${safeNum(bestFlip.netProfit,true).toFixed(2)}</span></div></div>
-    </div></div>` : '';
-
-  const ownedRows = owned.map(c=>{
-    const cost = safeNum(c.purchasePrice);
-    const cardTs = parseDate(c.datePurchased||c.transactionDate);
-    const cardPriceHistory = [];
-    [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===normName(name)).forEach(e=>{
-      const ts=parseDate(e.date); const pr=safeNum(e.price);
-      if(ts&&pr) cardPriceHistory.push({ts,price:pr});
-    });
-    hotsheet.filter(h=>normName(h.name)===normName(name)).forEach(h=>{
-      const ts=parseDate(h.date); const pr=safeNum(h.auto);
-      if(ts&&pr) cardPriceHistory.push({ts,price:pr});
-    });
-    let pctHtml = '';
-    if(currentPrice>0 && cardTs && cardPriceHistory.length){
-      const closest = cardPriceHistory.reduce((a,b)=>Math.abs(b.ts-cardTs)<Math.abs(a.ts-cardTs)?b:a);
-      if(closest.price){
-        const pct = (currentPrice-closest.price)/closest.price*100;
-        pctHtml = `<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`;
-      }
-    }
-    return `<div class="ct-entry owned">
-      <div class="ct-name">${c.fullCard||'—'}</div>
-      <div class="ct-row">
-        <div class="ct-stat"><div class="ct-l">Purchased</div><div class="ct-v">${fmtShortDate(c.datePurchased||c.transactionDate)}</div></div>
-        <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
-        ${pctHtml}
-      </div>
-      ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
-    </div>`;
-  }).join('');
-
-  const soldRows = sold.map(c=>{ const p=safeNum(c.netProfit,true); return `<div class="ct-entry sold">
-    <div class="ct-name">${c.fullCard||'—'}</div>
-    <div class="ct-row">
-      <div class="ct-stat"><div class="ct-l">Sold</div><div class="ct-v">${fmtShortDate(c.transactionDate)}</div></div>
-      <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
-      <div class="ct-stat"><div class="ct-l">Sold for</div><div class="ct-v">${fmtMoney(c.salePrice)}</div></div>
-      <div class="ct-stat"><div class="ct-l">Net</div><div class="ct-v"><span class="${p>=0?'up':'dn'}">${p>=0?'+':''}$${Math.abs(p).toFixed(2)}</span></div></div>
+  const summary = `<div class="srow" style="margin-bottom:9px">
+    <div class="srow-t">My Cards</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;text-align:center;margin-bottom:10px">
+      <div><div class="sc-l">Owned</div><div class="sc-v">${owned.length}</div></div>
+      <div><div class="sc-l">Invested</div><div class="sc-v">$${totalInvested.toFixed(0)}</div></div>
+      <div><div class="sc-l">Sold</div><div class="sc-v">${sold.length}</div></div>
+      <div><div class="sc-l">Net Profit</div><div class="sc-v"><span class="${totalNetProfit>=0?'up':'dn'}">${totalNetProfit>=0?'+':''}$${Math.abs(totalNetProfit).toFixed(2)}</span></div></div>
+      <div><div class="sc-l">ROI on Sold</div><div class="sc-v">${roi!==null?`<span class="${roi>=0?'up':'dn'}">${roi>=0?'+':''}${roi.toFixed(1)}%</span>`:'—'}</div></div>
     </div>
-    ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
-  </div>`; }).join('');
+    <div style="display:flex;gap:8px">
+      ${owned.length?`<button onclick="showCardsSubview('owned','${name}')" style="flex:1;padding:8px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Owned (${owned.length})</button>`:''}
+      ${sold.length?`<button onclick="showCardsSubview('sold','${name}')" style="flex:1;padding:8px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--b4-bg);color:var(--b4-tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Sold (${sold.length})</button>`:''}
+    </div>
+  </div>`;
 
-  return `<div class="section-hdr">My cards</div>${summary}${flip}
-    ${owned.length?`<div class="section-hdr">Owned (${owned.length})</div>${ownedRows}`:''}
-    ${sold.length?`<div class="section-hdr" style="margin-top:${owned.length?'12px':'0'}">Sold (${sold.length})</div>${soldRows}`:''}`;
+  return summary;
 }
 
+function showCardsSubview(type, name) {
+  const cs = getCardStats(name);
+  const {owned, sold} = cs;
+  const currentPrice = safeNum(getResolved(name).price);
+  const items = type==='owned' ? owned : sold;
+
+  const rows = items.map(c=>{
+    if(type==='owned'){
+      const cardTs = parseDate(c.datePurchased||c.transactionDate);
+      const cardPriceHistory = [];
+      [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===normName(name)).forEach(e=>{
+        const ts=parseDate(e.date); const pr=safeNum(e.price);
+        if(ts&&pr) cardPriceHistory.push({ts,price:pr});
+      });
+      hotsheet.filter(h=>normName(h.name)===normName(name)).forEach(h=>{
+        const ts=parseDate(h.date); const pr=safeNum(h.auto);
+        if(ts&&pr) cardPriceHistory.push({ts,price:pr});
+      });
+      buyScores.filter(b=>normName(b.name)===normName(name)).forEach(b=>{
+        const ts=parseDate(b.date); const pr=safeNum(b.price);
+        if(ts&&pr) cardPriceHistory.push({ts,price:pr});
+      });
+      let pctHtml='';
+      if(currentPrice>0 && cardTs && cardPriceHistory.length){
+        const closest=cardPriceHistory.reduce((a,b)=>Math.abs(b.ts-cardTs)<Math.abs(a.ts-cardTs)?b:a);
+        if(closest.price){ const pct=(currentPrice-closest.price)/closest.price*100;
+          pctHtml=`<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`; }
+      }
+      return `<div class="ct-entry owned">
+        <div class="ct-name">${c.fullCard||'—'}</div>
+        <div class="ct-row">
+          <div class="ct-stat"><div class="ct-l">Purchased</div><div class="ct-v">${fmtShortDate(c.datePurchased||c.transactionDate)}</div></div>
+          <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
+          ${pctHtml}
+        </div>
+        ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
+      </div>`;
+    } else {
+      const p=safeNum(c.netProfit,true);
+      return `<div class="ct-entry sold">
+        <div class="ct-name">${c.fullCard||'—'}</div>
+        <div class="ct-row">
+          <div class="ct-stat"><div class="ct-l">Sold</div><div class="ct-v">${fmtShortDate(c.transactionDate)}</div></div>
+          <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
+          <div class="ct-stat"><div class="ct-l">Sold for</div><div class="ct-v">${fmtMoney(c.salePrice)}</div></div>
+          <div class="ct-stat"><div class="ct-l">Net</div><div class="ct-v"><span class="${p>=0?'up':'dn'}">${p>=0?'+':''}$${Math.abs(p).toFixed(2)}</span></div></div>
+        </div>
+        ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
+      </div>`;
+    }
+  }).join('');
+
+  document.getElementById('mcontent').innerHTML=`
+    <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
+      <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+        style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0">
+        ← Back
+      </button>
+    </div>
+    <div class="section-hdr">Hot Sheet History — ${name}</div>
+    ${rows}`;
+}
 // ── Detail modal ──────────────────────────────────────────────────────────────
+let _modalMainHtml = '';
+let _modalCurrentPlayer = '';
+
+function attachModalEvents() {
+  document.getElementById('closebtn').onclick = () => document.getElementById('mwrap').classList.remove('on');
+}
+
 function showDetail(p, tp) {
   const nm     = normName(p.name);
   const master = players.find(b=>normName(b.name)===nm);
   const d      = getResolved(p.name);
   const hist   = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
-  const topE   = [...mostRecent(top200),...mostRecent(top100)].find(e=>normName(e.name)===nm);
 
   const currentPrice = d.price?(String(d.price).startsWith('$')?d.price:'$'+d.price):'—';
   const currentRank  = d.rank?'#'+d.rank:'—';
 
-  const cs = getCardStats(p.name);
-  const currentPriceNum = safeNum(d.price);
-  let overallPctHtml = '';
-  if(cs.owned.length>0 && currentPriceNum>0){
-    const oldest = cs.owned.reduce((a,b)=>parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
-    const oldestTs = parseDate(oldest.datePurchased||oldest.transactionDate);
-    const priceHistory = [];
-    [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{
-      const ts=parseDate(e.date); const pr=safeNum(e.price);
-      if(ts&&pr) priceHistory.push({ts,price:pr});
-    });
-    hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{
-      const ts=parseDate(h.date); const pr=safeNum(h.auto);
-      if(ts&&pr) priceHistory.push({ts,price:pr});
-    });
-    if(priceHistory.length && oldestTs){
-      const closest = priceHistory.reduce((a,b)=>Math.abs(b.ts-oldestTs)<Math.abs(a.ts-oldestTs)?b:a);
-      if(closest.price){
-        const pct = (currentPriceNum-closest.price)/closest.price*100;
-        overallPctHtml = `<span class="${pct>=0?'up':'dn'}" style="font-size:14px;font-weight:600;margin-left:8px">${pct>=0?'+':''}${pct.toFixed(0)}%</span>`;
-      }
-    }
-  }
+  // Buy Score asterisk if no Buy Score sheet entry
+  const hasBsEntry = buyScores.some(b=>normName(b.name)===nm);
+  const bsDisplay  = d.buy ? `${d.buy}${!hasBsEntry?'*':''}` : '—';
 
-  const hsWeeks=[...new Set(hist.map(h=>h.week).filter(Boolean))].sort((a,b)=>parseInt(a)-parseInt(b));
-  const wksHtml=hsWeeks.length?`<div style="margin-bottom:9px">${hsWeeks.map(w=>`<span class="wk-badge">Wk${w}</span>`).join('')}</div>`:'';
+  // Most recent note across all sources
+  let recentNote = null;
+  const noteCandidates = [];
+  buyScores.filter(b=>normName(b.name)===nm&&b.notes).forEach(b=>noteCandidates.push({ts:parseDate(b.date),note:b.notes}));
+  [...top200,...top100].filter(e=>normName(e.name)===nm&&e.notes).forEach(e=>noteCandidates.push({ts:parseDate(e.date),note:e.notes}));
+  hotsheet.filter(h=>normName(h.name)===nm&&h.notes).forEach(h=>noteCandidates.push({ts:parseDate(h.date),note:h.notes}));
+  if(master&&master.notes) noteCandidates.push({ts:parseDate(master.date)||0,note:master.notes});
+  if(noteCandidates.length) recentNote = noteCandidates.reduce((a,b)=>b.ts>a.ts?b:a).note;
 
-  const html=`
-    <div class="mname" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${p.name}${overallPctHtml}</div>
-    <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}${master&&master.buy?' · Buy Rating '+master.buy:''}</div>
-    <div class="sgrid">
+  const noteHtml = recentNote ? `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
+    <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
+      <span class="lbl">Most Recent Note</span><span class="arr">▼</span>
+    </button>
+    <div class="notes-body" style="display:none"><p>${recentNote}</p></div>
+  </div>` : '';
+
+ const html=`
+    <div class="mname">${p.name}</div>
+    <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}</div>
+    <div class="sgrid" style="margin-bottom:9px">
       <div class="scard"><div class="slbl">Rank</div><div class="sval">${currentRank}</div></div>
       <div class="scard"><div class="slbl">Price</div><div class="sval">${currentPrice}</div></div>
       <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
-      <div class="scard"><div class="slbl">Buy Rating</div><div class="sval">${fmt(master?master.buy:null)}</div></div>
+      <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
     </div>
-    ${master&&master.notes?`<div class="srow" style="padding:0;overflow:hidden">
-      <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
-        <span class="lbl">Buy Sheet Notes</span><span class="arr">▼</span>
-      </button>
-      <div class="notes-body"><p>${master.notes}</p></div>
-    </div>`:''}
-    ${master?`<div class="srow"><div class="srow-t">Source ranks</div><div class="s3">
-      <div><div class="sc-l">MLB</div><div class="sc-v">${fmt(master.mlb)}</div></div>
-      <div><div class="sc-l">DD</div><div class="sc-v">${fmt(master.dd)}</div></div>
-      <div><div class="sc-l">Roto</div><div class="sc-v">${fmt(master.roto)}</div></div>
-      <div><div class="sc-l">StS</div><div class="sc-v">${fmt(master.sts)}</div></div>
-      <div><div class="sc-l">BA</div><div class="sc-v">${fmt(master.ba)}</div></div>
-      <div><div class="sc-l">Hobby</div><div class="sc-v">${fmt(master.hobby)}</div></div>
-    </div></div>`:''}
-    ${topE?`<div class="srow"><div class="srow-t">Latest ranking</div><div class="s3">
-      <div><div class="sc-l">Rank</div><div class="sc-v">#${topE.rank}</div></div>
-      <div><div class="sc-l">Prev</div><div class="sc-v">${fmt(topE.prev)}</div></div>
-      <div><div class="sc-l">Change</div><div class="sc-v">${fmtDiff(topE.diff)}</div></div>
-    </div>
-    ${topE.notes?`<div style="font-size:12px;line-height:1.6;color:var(--tx2);border-top:.5px solid var(--bdr);padding-top:8px;margin-top:8px">${topE.notes}</div>`:''}
-    </div></div>`:''}
-    ${master&&master.lastYr?`<div class="srow"><div class="srow-t">Year over year</div><div class="s3">
-      <div><div class="sc-l">Last year</div><div class="sc-v">$${master.lastYr}</div></div>
-      <div><div class="sc-l">Now</div><div class="sc-v">${fmtP(master.price)}</div></div>
-      <div><div class="sc-l">Change</div><div class="sc-v">${fmtPct(master.chg)}</div></div>
-    </div></div>`:''}
-    ${d.priceChange?`<div class="srow"><div class="srow-t">Price movement</div><div class="s3">
-      <div><div class="sc-l">Original</div><div class="sc-v">$${safeNum(d.priceChange.orig).toFixed(2)}</div></div>
-      <div><div class="sc-l">Current</div><div class="sc-v">$${safeNum(d.priceChange.now).toFixed(2)}</div></div>
-      <div><div class="sc-l">Change</div><div class="sc-v">${fmtPct(d.priceChange.pct)}</div></div>
-    </div></div>`:''}
+${modalCards(p.name)}
+    ${noteHtml}
     ${buildHistoryCharts(p.name)}
-    ${wksHtml}
-    ${modalHsHistory(hist)}
-    ${modalCards(p.name)}`;
-
-  document.getElementById('mcontent').innerHTML=html;
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
+      ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
+      ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${master&&master.notes?`<button onclick="showBuyNotesSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+    </div>`;
+  _modalMainHtml = html;
+  _modalCurrentPlayer = p.name;
+  document.getElementById('mcontent').innerHTML = html;
   document.getElementById('mwrap').classList.add('on');
 }
+
 
 // ── Price performance ─────────────────────────────────────────────────────────
 function buildPricePerformance(playerList) {
@@ -418,6 +418,77 @@ function buildPricePerformance(playerList) {
     ${all.length>preview.length?`<button onclick="document.getElementById('pp-preview').style.display='none';document.getElementById('pp-full').style.display='';this.style.display='none'" style="width:100%;padding:6px;background:none;border:.5px solid var(--bdr2);border-radius:7px;color:var(--tx2);font-size:12px;cursor:pointer;margin-top:6px;font-family:inherit">Show all ${all.length}</button>`:''}
   </div>`;
 }
+function modalHsHistory(hist) {
+  if(!hist.length) return '';
+  const rows = hist.map(h=>{
+    return `<div class="hs-entry${h.repeat?' repeat':''}">
+      <div class="hs-hdr">
+        <span class="hs-wk">${fmtDateLabel(h.date)||'Wk '+h.week}</span>
+        <span class="hs-lvl">${h.level}</span>
+        ${h.category?`<span class="hs-cat">${h.category}</span>`:''}
+        ${h.auto?`<span style="margin-left:auto;font-size:12px;font-weight:500">${h.auto}</span>`:''}
+      </div>
+      <div class="hs-stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div><div class="hs-sl">14-Day</div><div class="hs-sv">${fmt(h.day14)}</div></div>
+        <div><div class="hs-sl">Hobby</div><div class="hs-sv">${fmt(h.hobby)}</div></div>
+        <div><div class="hs-sl">Buy Score</div><div class="hs-sv">${fmt(h.buyScore)}</div></div>
+      </div>
+      ${h.notes?`<div class="hs-notes">${h.notes}</div>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="section-hdr">Hot Sheet History</div>${rows}`;
+}
+
+function showHsSubview() {
+  const name = _modalCurrentPlayer;
+  const nm = normName(name);
+  const hist = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
+  const content = modalHsHistory(hist);
+  document.getElementById('mcontent').innerHTML=`
+    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
+      ← Back
+    </button>
+    <div class="section-hdr">Hot Sheet History — ${name}</div>
+    ${content||'<div class="empty-msg">No hot sheet entries found</div>'}`;
+}
+
+function showSourceRanksSubview() {
+  const name = _modalCurrentPlayer;
+  const nm = normName(name);
+  const master = players.find(b=>normName(b.name)===nm);
+  if(!master) return;
+  document.getElementById('mcontent').innerHTML=`
+    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
+      ← Back
+    </button>
+    <div class="section-hdr">Source Ranks — ${name}</div>
+    <div class="srow"><div class="s3">
+      <div><div class="sc-l">MLB</div><div class="sc-v">${fmt(master.mlb)}</div></div>
+      <div><div class="sc-l">DD</div><div class="sc-v">${fmt(master.dd)}</div></div>
+      <div><div class="sc-l">Roto</div><div class="sc-v">${fmt(master.roto)}</div></div>
+      <div><div class="sc-l">StS</div><div class="sc-v">${fmt(master.sts)}</div></div>
+      <div><div class="sc-l">BA</div><div class="sc-v">${fmt(master.ba)}</div></div>
+      <div><div class="sc-l">Hobby</div><div class="sc-v">${fmt(master.hobby)}</div></div>
+    </div></div>`;
+}
+
+function showBuyNotesSubview() {
+  const name = _modalCurrentPlayer;
+  const nm = normName(name);
+  const master = players.find(b=>normName(b.name)===nm);
+  if(!master||!master.notes) return;
+  document.getElementById('mcontent').innerHTML=`
+    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
+      ← Back
+    </button>
+    <div class="section-hdr">Buy Sheet Notes — ${name}</div>
+    <div class="srow"><p style="font-size:13px;line-height:1.65;color:var(--tx)">${master.notes}</p></div>`;
+}
+
+
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 function renderPortfolio() {

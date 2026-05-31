@@ -59,16 +59,6 @@ document.getElementById('sortchips').addEventListener('click', e => {
   const c = e.target.closest('.schip'); if (!c) return;
   sortBy = c.dataset.s; render();
 });
-document.getElementById('chips').addEventListener('click', e => {
-  const c = e.target.closest('.chip'); if (!c) return;
-  document.querySelectorAll('#chips .chip').forEach(x => x.classList.remove('on'));
-  c.classList.add('on'); brf = c.dataset.f; render();
-});
-document.getElementById('chips2').addEventListener('click', e => {
-  const c = e.target.closest('.chip'); if (!c) return;
-  document.querySelectorAll('#chips2 .chip').forEach(x => x.classList.remove('on'));
-  c.classList.add('on'); posf = c.dataset.p; render();
-});
 document.getElementById('search').addEventListener('input', e => {
   q = e.target.value.trim();
   document.getElementById('clear').classList.toggle('on', q.length > 0);
