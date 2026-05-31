@@ -22,6 +22,6 @@ const TEAM_NAMES = {
 
 // ── Sort options per tab ───────────────────────────────────────────────────────
 const SORT_OPTS = {
-  all:  [{k:'default',l:'BS'},{k:'rank',l:'Rank'},{k:'name',l:'Name'},{k:'price',l:'Price'},{k:'owned',l:'$ Owned'}],
+  all:  [{k:'default',l:'BS'},{k:'rank',l:'Rank'},{k:'price',l:'Price'},{k:'owned',l:'$ Owned'}],
   hs:   [{k:'default',l:'Recent'},{k:'name',l:'Name'},{k:'owned',l:'$ Owned'}],
 };
