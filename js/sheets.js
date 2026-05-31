@@ -111,7 +111,15 @@ function buildCache() {
       const bsBest = bsMatches.length
         ? bsMatches.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a)
         : null;
-      entry.buy = bsBest ? cl(bsBest.score) : (buyEntry ? cl(buyEntry.buy) : null);
+      const hsScoreMatches = hotsheet.filter(h=>normName(h.name)===nm && h.buyScore);
+      const hsBest = hsScoreMatches.length
+        ? hsScoreMatches.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a)
+        : null;
+      const bsDate = bsBest ? parseDate(bsBest.date) : 0;
+      const hsDate = hsBest ? parseDate(hsBest.date) : 0;
+      entry.buy = bsDate>=hsDate && bsBest ? cl(bsBest.score)
+        : hsBest ? cl(hsBest.buyScore)
+        : (buyEntry ? cl(buyEntry.buy) : null);
 
       let hsLabel = null;
       if(hsEntries.length) {
@@ -216,8 +224,8 @@ async function loadAll() {
       b2:cl(r[15]),b3:cl(r[16]),hr:cl(r[17]),rbi:cl(r[18]),
       bbh:cl(r[19]),soh:cl(r[20]),sb:cl(r[21]),
       ba:cl(r[22]),obp:cl(r[23]),ops:cl(r[24]),
-      auto:cl(r[25]),day14:cl(r[26]),hobby:cl(r[27]),
-      repeat:cl(r[28])==='Yes',category:cl(r[29]),notes:cl(r[30])
+      auto:cl(r[25]),day14:cl(r[26]),hobby:cl(r[27]),buyScore:cl(r[28]),
+      repeat:cl(r[29])==='Yes',category:cl(r[30]),notes:cl(r[31])
     }));
 
     cards = cR.filter(r=>r[7]).map(r=>({
