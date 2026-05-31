@@ -345,9 +345,9 @@ function showDetail(p, tp) {
       <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
-      ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
-      ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-      ${master&&master.notes?`<button onclick="showBuyNotesSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${hist.length?`<button data-action="hs" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
+      ${master?`<button data-action="ranks" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${master&&master.notes?`<button data-action="notes" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
     </div>
     ${modalCards(p.name)}
     ${noteHtml}
@@ -357,59 +357,17 @@ function showDetail(p, tp) {
   _modalCurrentPlayer = p.name;
   document.getElementById('mcontent').innerHTML = html;
   document.getElementById('mwrap').classList.add('on');
-  document.getElementById('mcontent').addEventListener('click', e=>{
-    const btn = e.target.closest('[data-action]'); if(!btn) return;
-    const action = btn.dataset.action;
-    if(action==='hs') showHsSubview(_modalCurrentPlayer);
-    if(action==='ranks') showSourceRanksSubview(_modalCurrentPlayer);
-    if(action==='notes') showBuyNotesSubview(_modalCurrentPlayer);
-  });
-}
-
-function showHsSubview(name) {
-  const nm = normName(name);
-  const hist = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
-  const content = modalHsHistory(hist);
-  document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">Hot Sheet History — ${name}</div>
-    ${content||'<div class="empty-msg">No hot sheet entries found</div>'}`;
-}
-
-function showSourceRanksSubview(name) {
-  const nm = normName(name);
-  const master = players.find(b=>normName(b.name)===nm);
-  if(!master) return;
-  document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">Source Ranks — ${name}</div>
-    <div class="srow"><div class="s3">
-      <div><div class="sc-l">MLB</div><div class="sc-v">${fmt(master.mlb)}</div></div>
-      <div><div class="sc-l">DD</div><div class="sc-v">${fmt(master.dd)}</div></div>
-      <div><div class="sc-l">Roto</div><div class="sc-v">${fmt(master.roto)}</div></div>
-      <div><div class="sc-l">StS</div><div class="sc-v">${fmt(master.sts)}</div></div>
-      <div><div class="sc-l">BA</div><div class="sc-v">${fmt(master.ba)}</div></div>
-      <div><div class="sc-l">Hobby</div><div class="sc-v">${fmt(master.hobby)}</div></div>
-    </div></div>`;
-}
-
-function showBuyNotesSubview(name) {
-  const nm = normName(name);
-  const master = players.find(b=>normName(b.name)===nm);
-  if(!master||!master.notes) return;
-  document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">Buy Sheet Notes — ${name}</div>
-    <div class="srow"><p style="font-size:13px;line-height:1.65;color:var(--tx)">${master.notes}</p></div>`;
+  setTimeout(()=>{
+    document.querySelectorAll('#mcontent [data-action]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        if(action==='hs') showHsSubview();
+        if(action==='ranks') showSourceRanksSubview();
+        if(action==='notes') showBuyNotesSubview();
+      });
+    });
+  }, 50);
 }
 
 // ── Price performance ─────────────────────────────────────────────────────────
