@@ -291,11 +291,13 @@ function showCardsSubview(type, name) {
   }).join('');
 
   document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml;attachModalEvents()" 
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">${type==='owned'?'Owned':'Sold'} Cards — ${name}</div>
+    <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
+      <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+        style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0">
+        ← Back
+      </button>
+    </div>
+    <div class="section-hdr">Hot Sheet History — ${name}</div>
     ${rows}`;
 }
 // ── Detail modal ──────────────────────────────────────────────────────────────
