@@ -19,7 +19,8 @@ function setSection(s) {
 
  const isWatch = s === 'watchlist';
   document.getElementById('prospects-section').style.display = '';
-  document.getElementById('tabs').style.display = isWatch ? 'none' : '';
+  const tabsEl = document.getElementById('tabs');
+  if(tabsEl) tabsEl.style.display = isWatch ? 'none' : '';
   document.getElementById('hdr').style.display = '';
   document.getElementById('chips').style.display = 'none';
   document.getElementById('chips2').style.display = 'none';
