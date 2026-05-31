@@ -18,13 +18,7 @@ function setSection(s) {
   document.querySelector(`.top-tab[data-s="${s}"]`).classList.add('on');
 
  const isWatch = s === 'watchlist';
-  document.getElementById('prospects-section').style.display = '';
-  const tabsEl = document.getElementById('tabs');
-  if(tabsEl) tabsEl.style.display = isWatch ? 'none' : '';
-  const hdrEl = document.getElementById('hdr');
-  if(hdrEl) hdrEl.style.display = '';
-  document.getElementById('chips').style.display = 'none';
-  document.getElementById('chips2').style.display = 'none';
+  document.getElementById('prospects-section').style.display = isWatch ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
