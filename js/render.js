@@ -114,8 +114,6 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
 function render() {
   const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
   const showChips=!isHS&&!isPort&&!isWatch;
-  document.getElementById('chips').style.display=showChips?'flex':'none';
-  document.getElementById('chips2').style.display=showChips?'flex':'none';
   renderSortChips();
   if(isPort){ renderPortfolio(); return; }
   if(isWatch){ renderWatchlist(); return; }
