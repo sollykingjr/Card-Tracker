@@ -216,16 +216,11 @@ async function loadAll() {
       date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',price:cl(r[6])
     }));
 
-    hotsheet = hsR.filter(r=>r[4]).map(r=>({
+      hotsheet = hsR.filter(r=>r[4]).map(r=>({
       date:cl(r[0]),week:cl(r[1]),pos:cl(r[2]),level:cl(r[3]),
       name:cl(r[4])||'',age:cl(r[5]),aff:cl(r[6]),
-      ip:cl(r[7]),hp:cl(r[8]),er:cl(r[9]),bbp:cl(r[10]),sop:cl(r[11]),
-      era:cl(r[12]),whip:cl(r[13]),k9:cl(r[14]),
-      b2:cl(r[15]),b3:cl(r[16]),hr:cl(r[17]),rbi:cl(r[18]),
-      bbh:cl(r[19]),soh:cl(r[20]),sb:cl(r[21]),
-      ba:cl(r[22]),obp:cl(r[23]),ops:cl(r[24]),
-      auto:cl(r[25]),day14:cl(r[26]),hobby:cl(r[27]),buyScore:cl(r[28]),
-      repeat:cl(r[29])==='Yes',category:cl(r[30]),notes:cl(r[31])
+      auto:cl(r[7]),day14:cl(r[8]),hobby:cl(r[9]),buyScore:cl(r[10]),
+      repeat:cl(r[11])==='Yes',category:cl(r[12]),notes:cl(r[13])
     }));
 
     cards = cR.filter(r=>r[7]).map(r=>({
