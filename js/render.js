@@ -54,7 +54,7 @@ function getPool() {
   if(posf==='hit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('hitter'));
   else if(posf==='pit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('pitcher'));
   pool=pool.filter(p=>matchQ(p.name,p.team));
-  if(!q && brf==='all') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4);
+  if(!q && brf==='all') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4 && buyScores.some(b=>normName(b.name)===normName(p.name)));
   return applySort(pool,p=>p.slice().sort((a,b)=>{
     const ab=parseFloat(getResolved(a.name).buy||0),bb=parseFloat(getResolved(b.name).buy||0);
     if(ab!==bb) return bb-ab;
@@ -98,7 +98,8 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
   const borderClass = hi.onLatest?' recent-hs':'';
 
   const bs = parseFloat(d.buy||0);
-  const bsBadgeHtml = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}</span>` : '';
+  const hasBs = buyScores.some(b=>normName(b.name)===normName(name));
+  const bsBadgeHtml = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}${!hasBs?'*':''}</span>` : '';
 
   return `<div class="card${borderClass}" data-i="${i}" data-tp="${tp}">
     ${rankHtml}
