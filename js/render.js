@@ -133,8 +133,7 @@ function renderHotSheet() {
   const thisWeekH = hitters.filter(r => parseDate(r.date) === hLatest);
   const thisWeekP = pitchers.filter(r => parseDate(r.date) === pLatest);
 
-  const active = hsFilter === 'hitter' ? thisWeekH : thisWeekP;
-  active.sort((a,b) => (parseFloat(b.buyScore)||0) - (parseFloat(a.buyScore)||0));
+  const active = (hsFilter === 'hitter' ? thisWeekH : thisWeekP).slice().sort((a,b) => (parseFloat(b.buyScore)||0) - (parseFloat(a.buyScore)||0));
 
   cnt.textContent = `${active.length} player${active.length===1?'':'s'}`;
 
