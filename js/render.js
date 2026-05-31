@@ -347,7 +347,7 @@ function showDetail(p, tp) {
     ${modalCards(p.name)}
     ${noteHtml}
     ${buildHistoryCharts(p.name)}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;position:relative;z-index:10">
       ${hist.length?`<button data-action="hs" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
       ${master?`<button data-action="ranks" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
       ${master&&master.notes?`<button data-action="notes" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
