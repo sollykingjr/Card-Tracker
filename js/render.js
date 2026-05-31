@@ -97,16 +97,22 @@ function buildCard(name, team, pos, i, tp, overrides={}) {
 
   const borderClass = hi.onLatest?' recent-hs':'';
 
+  const bs = parseFloat(d.buy||0);
+  const bsBadgeHtml = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}</span>` : '';
+
   return `<div class="card${borderClass}" data-i="${i}" data-tp="${tp}">
     ${rankHtml}
     <div class="cbody">
       <div class="r1"><span class="pname">${name}</span></div>
       <div class="r2">
         <span>${team||''}</span><span>${pos||''}</span>
-      ${d.buy?badge(d.buy):''}${cs.owned.length>0?`<span class="inv-badge ${invTier(cs.totalInvested)}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`:''}
+        ${cs.owned.length>0?`<span class="inv-badge ${invTier(cs.totalInvested)}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`:''}
       </div>
     </div>
-    ${priceHtml}
+    <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
+      ${bsBadgeHtml}
+      ${priceHtml}
+    </div>
   </div>`;
 }
 
