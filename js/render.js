@@ -416,6 +416,27 @@ function buildPricePerformance(playerList) {
     ${all.length>preview.length?`<button onclick="document.getElementById('pp-preview').style.display='none';document.getElementById('pp-full').style.display='';this.style.display='none'" style="width:100%;padding:6px;background:none;border:.5px solid var(--bdr2);border-radius:7px;color:var(--tx2);font-size:12px;cursor:pointer;margin-top:6px;font-family:inherit">Show all ${all.length}</button>`:''}
   </div>`;
 }
+function modalHsHistory(hist) {
+  if(!hist.length) return '';
+  const rows = hist.map(h=>{
+    return `<div class="hs-entry${h.repeat?' repeat':''}">
+      <div class="hs-hdr">
+        <span class="hs-wk">${fmtDateLabel(h.date)||'Wk '+h.week}</span>
+        <span class="hs-lvl">${h.level}</span>
+        ${h.category?`<span class="hs-cat">${h.category}</span>`:''}
+        ${h.auto?`<span style="margin-left:auto;font-size:12px;font-weight:500">${h.auto}</span>`:''}
+      </div>
+      <div class="hs-stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div><div class="hs-sl">14-Day</div><div class="hs-sv">${fmt(h.day14)}</div></div>
+        <div><div class="hs-sl">Hobby</div><div class="hs-sv">${fmt(h.hobby)}</div></div>
+        <div><div class="hs-sl">Buy Score</div><div class="hs-sv">${fmt(h.buyScore)}</div></div>
+      </div>
+      ${h.notes?`<div class="hs-notes">${h.notes}</div>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="section-hdr">Hot Sheet History</div>${rows}`;
+}
+
 function showHsSubview() {
   const name = _modalCurrentPlayer;
   const nm = normName(name);
