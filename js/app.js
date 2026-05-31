@@ -37,6 +37,7 @@ function setSection(s) {
   } else {
     render();
   }
+}
 
 // ── Top tab events ────────────────────────────────────────────────────────────
 document.getElementById('toptabs').addEventListener('click', e => {
