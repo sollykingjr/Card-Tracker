@@ -17,8 +17,9 @@ function setSection(s) {
   document.querySelectorAll('.top-tab').forEach(x => x.classList.remove('on'));
   document.querySelector(`.top-tab[data-s="${s}"]`).classList.add('on');
 
-  const isWatch = s === 'watchlist';
-  document.getElementById('prospects-section').style.display = isWatch ? 'none' : '';
+ const isWatch = s === 'watchlist';
+  document.getElementById('prospects-section').style.display = '';
+  document.getElementById('tabs').style.display = isWatch ? 'none' : '';
   document.getElementById('hdr').style.display = '';
   document.getElementById('chips').style.display = 'none';
   document.getElementById('chips2').style.display = 'none';
