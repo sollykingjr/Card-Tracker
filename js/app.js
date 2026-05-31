@@ -30,7 +30,11 @@ function setSection(s) {
   if (isWatch) {
     tab = 'watch';
     document.getElementById('cntlbl').textContent = '';
-    loadWatchlist();
+    if (!watchlistLoaded) {
+      loadWatchlist();
+    } else {
+      renderWatchlist();
+    }
   } else {
     tab = 'all';
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
