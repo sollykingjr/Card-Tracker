@@ -344,30 +344,18 @@ function showDetail(p, tp) {
       <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
       <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
-      ${hist.length?`<button data-action="hs" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
-      ${master?`<button data-action="ranks" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-      ${master&&master.notes?`<button data-action="notes" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-    </div>
-    ${modalCards(p.name)}
+${modalCards(p.name)}
     ${noteHtml}
-    ${buildHistoryCharts(p.name)}`;
-
+    ${buildHistoryCharts(p.name)}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
+      ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
+      ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+      ${master&&master.notes?`<button onclick="showBuyNotesSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
+    </div>`;
   _modalMainHtml = html;
   _modalCurrentPlayer = p.name;
   document.getElementById('mcontent').innerHTML = html;
   document.getElementById('mwrap').classList.add('on');
-  setTimeout(()=>{
-    document.querySelectorAll('#mcontent [data-action]').forEach(btn=>{
-      btn.addEventListener('click', e=>{
-        e.stopPropagation();
-        const action = btn.dataset.action;
-        if(action==='hs') showHsSubview();
-        if(action==='ranks') showSourceRanksSubview();
-        if(action==='notes') showBuyNotesSubview();
-      });
-    });
-  }, 50);
 }
 
 // ── Price performance ─────────────────────────────────────────────────────────
