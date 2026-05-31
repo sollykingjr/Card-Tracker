@@ -358,65 +358,6 @@ ${modalCards(p.name)}
   document.getElementById('mwrap').classList.add('on');
 }
 
-// ── Detail modal ──────────────────────────────────────────────────────────────
-let _modalMainHtml = '';
-let _modalCurrentPlayer = '';
-
-function attachModalEvents() {
-  document.getElementById('closebtn').onclick = () => document.getElementById('mwrap').classList.remove('on');
-}
-
-function showDetail(p, tp) {
-  const nm     = normName(p.name);
-  const master = players.find(b=>normName(b.name)===nm);
-  const d      = getResolved(p.name);
-  const hist   = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
-
-  const currentPrice = d.price?(String(d.price).startsWith('$')?d.price:'$'+d.price):'—';
-  const currentRank  = d.rank?'#'+d.rank:'—';
-
-  // Buy Score asterisk if no Buy Score sheet entry
-  const hasBsEntry = buyScores.some(b=>normName(b.name)===nm);
-  const bsDisplay  = d.buy ? `${d.buy}${!hasBsEntry?'*':''}` : '—';
-
-  // Most recent note across all sources
-  let recentNote = null;
-  const noteCandidates = [];
-  buyScores.filter(b=>normName(b.name)===nm&&b.notes).forEach(b=>noteCandidates.push({ts:parseDate(b.date),note:b.notes}));
-  [...top200,...top100].filter(e=>normName(e.name)===nm&&e.notes).forEach(e=>noteCandidates.push({ts:parseDate(e.date),note:e.notes}));
-  hotsheet.filter(h=>normName(h.name)===nm&&h.notes).forEach(h=>noteCandidates.push({ts:parseDate(h.date),note:h.notes}));
-  if(master&&master.notes) noteCandidates.push({ts:parseDate(master.date)||0,note:master.notes});
-  if(noteCandidates.length) recentNote = noteCandidates.reduce((a,b)=>b.ts>a.ts?b:a).note;
-
-  const noteHtml = recentNote ? `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
-    <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
-      <span class="lbl">Most Recent Note</span><span class="arr">▼</span>
-    </button>
-    <div class="notes-body" style="display:none"><p>${recentNote}</p></div>
-  </div>` : '';
-
- const html=`
-    <div class="mname">${p.name}</div>
-    <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}</div>
-    <div class="sgrid" style="margin-bottom:9px">
-      <div class="scard"><div class="slbl">Rank</div><div class="sval">${currentRank}</div></div>
-      <div class="scard"><div class="slbl">Price</div><div class="sval">${currentPrice}</div></div>
-      <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
-      <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
-    </div>
-${modalCards(p.name)}
-    ${noteHtml}
-    ${buildHistoryCharts(p.name)}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
-      ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
-      ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-      ${master&&master.notes?`<button onclick="showBuyNotesSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-    </div>`;
-  _modalMainHtml = html;
-  _modalCurrentPlayer = p.name;
-  document.getElementById('mcontent').innerHTML = html;
-  document.getElementById('mwrap').classList.add('on');
-}
 
 // ── Price performance ─────────────────────────────────────────────────────────
 function buildPricePerformance(playerList) {
