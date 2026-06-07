@@ -93,6 +93,7 @@ const SB_COMC_KW_EXCL = new Set();
 
 const SB_SPORT_OPTIONS = ['Baseball','Basketball','Football','Hockey','Soccer','Golf','MMA','Wrestling'];
 const SB_TEAM_OPTIONS  = [
+  // MLB
   'Arizona Diamondbacks','Atlanta Braves','Baltimore Orioles','Boston Red Sox',
   'Chicago Cubs','Chicago White Sox','Cincinnati Reds','Cleveland Guardians',
   'Colorado Rockies','Detroit Tigers','Houston Astros','Kansas City Royals',
@@ -102,10 +103,33 @@ const SB_TEAM_OPTIONS  = [
   'Seattle Mariners','St. Louis Cardinals','Tampa Bay Rays','Texas Rangers',
   'Toronto Blue Jays','Washington Nationals',
   // NFL
-  'Buffalo Bills','Dallas Cowboys','Green Bay Packers','Kansas City Chiefs',
-  'New England Patriots','San Francisco 49ers',
+  'Arizona Cardinals','Atlanta Falcons','Baltimore Ravens','Buffalo Bills',
+  'Carolina Panthers','Chicago Bears','Cincinnati Bengals','Cleveland Browns',
+  'Dallas Cowboys','Denver Broncos','Detroit Lions','Green Bay Packers',
+  'Houston Texans','Indianapolis Colts','Jacksonville Jaguars','Kansas City Chiefs',
+  'Las Vegas Raiders','Los Angeles Chargers','Los Angeles Rams','Miami Dolphins',
+  'Minnesota Vikings','New England Patriots','New Orleans Saints','New York Giants',
+  'New York Jets','Philadelphia Eagles','Pittsburgh Steelers','San Francisco 49ers',
+  'Seattle Seahawks','Tampa Bay Buccaneers','Tennessee Titans','Washington Commanders',
   // NBA
-  'Boston Celtics','Golden State Warriors','Los Angeles Lakers','Miami Heat',
+  'Atlanta Hawks','Boston Celtics','Brooklyn Nets','Charlotte Hornets',
+  'Chicago Bulls','Cleveland Cavaliers','Dallas Mavericks','Denver Nuggets',
+  'Detroit Pistons','Golden State Warriors','Houston Rockets','Indiana Pacers',
+  'Los Angeles Clippers','Los Angeles Lakers','Memphis Grizzlies','Miami Heat',
+  'Milwaukee Bucks','Minnesota Timberwolves','New Orleans Pelicans','New York Knicks',
+  'Oklahoma City Thunder','Orlando Magic','Philadelphia 76ers','Phoenix Suns',
+  'Portland Trail Blazers','Sacramento Kings','San Antonio Spurs','Toronto Raptors',
+  'Utah Jazz','Washington Wizards',
+  // NHL
+  'Anaheim Ducks','Arizona Coyotes','Boston Bruins','Buffalo Sabres',
+  'Calgary Flames','Carolina Hurricanes','Chicago Blackhawks','Colorado Avalanche',
+  'Columbus Blue Jackets','Dallas Stars','Detroit Red Wings','Edmonton Oilers',
+  'Florida Panthers','Los Angeles Kings','Minnesota Wild','Montreal Canadiens',
+  'Nashville Predators','New Jersey Devils','New York Islanders','New York Rangers',
+  'Ottawa Senators','Philadelphia Flyers','Pittsburgh Penguins','San Jose Sharks',
+  'Seattle Kraken','St. Louis Blues','Tampa Bay Lightning','Toronto Maple Leafs',
+  'Utah Hockey Club','Vancouver Canucks','Vegas Golden Knights','Washington Capitals',
+  'Winnipeg Jets',
 ];
 
 const SB_DECADES = [
@@ -126,9 +150,15 @@ function sbGetProspectNames() {
 }
 
 function sbGetPortfolioNames() {
-  // Pull from window._portfolioPlayers if available
-  const port = window._portfolioPlayers || [];
-  return port.map(n => ({ name: n, source: 'portfolio' }));
+  const seen = new Set();
+  return cards
+    .filter(c => c.player)
+    .map(c => {
+      const matched = players.find(p => normName(p.name) === normName(c.player));
+      return matched ? matched.name : c.player;
+    })
+    .filter(n => { if (seen.has(n)) return false; seen.add(n); return true; })
+    .map(n => ({ name: n, source: 'portfolio' }));
 }
 
 function sbGetAllPlayerNames() {
