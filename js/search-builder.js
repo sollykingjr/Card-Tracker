@@ -121,9 +121,7 @@ const SB_DECADES = [
 // =============================================================================
 
 function sbGetProspectNames() {
-  // Pull from window._cache if available (same source as modal buy scores)
-  const cache = window._cache || [];
-  return cache.map(p => ({ name: p.name || p.Name || '', source: 'prospect' }))
+  return (players || []).map(p => ({ name: p.name || '', source: 'prospect' }))
                .filter(p => p.name);
 }
 
@@ -144,16 +142,22 @@ function sbGetAllPlayerNames() {
 }
 
 function sbGetBuyScorePlayers(minScore) {
-  const cache = window._cache || [];
-  return cache
-    .filter(p => {
-      const bs = parseFloat(p.buyScore);
-      return !isNaN(bs) && bs >= minScore && p.buyScore !== null && p.buyScore !== undefined;
-    })
-    .map(p => ({ name: p.name || p.Name || '', source: 'prospect' }))
-    .filter(p => p.name);
+  if (!CACHE) return [];
+  const results = [];
+  const seen = new Set();
+  CACHE.forEach((entry, normNameKey) => {
+    const bs = parseFloat(entry.buy);
+    if (!isNaN(bs) && bs >= minScore) {
+      const player = players.find(p => normName(p.name) === normNameKey);
+      const name = player ? player.name : normNameKey;
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        results.push({ name, source: 'prospect' });
+      }
+    }
+  });
+  return results;
 }
-
 // =============================================================================
 // SECTION 4: URL / STRING BUILDERS (lines ~168-280)
 // =============================================================================
