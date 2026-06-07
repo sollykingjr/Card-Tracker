@@ -324,10 +324,11 @@ function sbBuildComcURL() {
   const encoded = sbEncodeComc(query);
 
   let url = 'https://www.comc.com/Cards,sr,';
-  if (SB.comcListingType === 'all')     url += `i100,=${encoded}`;
-  if (SB.comcListingType === 'bin')     url += `=${encoded},fb,i100`;
-  if (SB.comcListingType === 'auction') url += `=${encoded},fa,i100`;
-  if (SB.comcListingType === 'soldout') url += `=${encoded},ot,i100`;
+  if (SB.comcListingType === 'all')     url += `+(${encoded}),i100`;
+  if (SB.comcListingType === 'bin')     url += `+(${encoded}),fb,i100`;
+  if (SB.comcListingType === 'auction') url += `+(${encoded}),fa,i100`;
+  if (SB.comcListingType === 'soldout') url += `+(${encoded}),ot,i100`;
+  if (SB.comcListingType === 'auctionsoldout') url += `+(${encoded}),ot,fa,i100`;
 
   return url;
 }
@@ -397,6 +398,7 @@ function sbEncodeComc(query) {
     .replace(/"/g,  '~22')
     .replace(/\|/g, '~7c')
     .replace(/\*/g, '{42}')
+    .replace(/\./g, '%7B46%7D')
     .replace(/ /g,  '+');
 }
 
@@ -596,7 +598,8 @@ function sbRender() {
             <option value="all" ${SB.comcListingType==='all'?'selected':''}>All Listings</option>
             <option value="auction" ${SB.comcListingType==='auction'?'selected':''}>Auction</option>
             <option value="bin" ${SB.comcListingType==='bin'?'selected':''}>Buy It Now</option>
-            <option value="soldout" ${SB.comcListingType==='soldout'?'selected':''}>Include Sold Out</option>
+            <option value="soldout" ${SB.comcListingType==='soldout'?'selected':''}>All + Sold Out</option>
+            <option value="auctionsoldout" ${SB.comcListingType==='auctionsoldout'?'selected':''}>Auction + Sold Out</option>
           </select>
         </div>
         <div class="sb-toggle-row" style="margin-top:8px">
