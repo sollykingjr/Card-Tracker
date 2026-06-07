@@ -1,5 +1,5 @@
 // ── App state ─────────────────────────────────────────────────────────────────
-let section = 'prospects';
+let section = 'searchbuilder';
 let tab = 'all', brf = 'all', posf = 'all', q = '', sortBy = 'default';
 
 // ── Search helper ─────────────────────────────────────────────────────────────
