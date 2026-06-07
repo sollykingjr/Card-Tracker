@@ -187,6 +187,7 @@ function renderHotSheet() {
   });
 
   list.innerHTML = filterHtml + rowsHtml;
+  list.classList.toggle('grid-2', window.innerWidth >= 768);
 
   list.querySelectorAll('.hs-row').forEach(row => {
     row.addEventListener('click', () => {
