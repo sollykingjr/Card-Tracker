@@ -324,10 +324,10 @@ function sbBuildComcURL() {
   const encoded = sbEncodeComc(query);
 
   let url = 'https://www.comc.com/Cards,sr,';
-  if (SB.comcListingType === 'all')     url += `i100,=(${encoded})`;
-  if (SB.comcListingType === 'bin')     url += `=(${encoded}),fb,i100`;
-  if (SB.comcListingType === 'auction') url += `=(${encoded}),fa,i100`;
-  if (SB.comcListingType === 'soldout') url += `=(${encoded}),ot,i100`;
+  if (SB.comcListingType === 'all')     url += `i100,=${encoded}`;
+  if (SB.comcListingType === 'bin')     url += `=${encoded},fb,i100`;
+  if (SB.comcListingType === 'auction') url += `=${encoded},fa,i100`;
+  if (SB.comcListingType === 'soldout') url += `=${encoded},ot,i100`;
 
   return url;
 }
@@ -606,6 +606,8 @@ function sbRender() {
       </div>
 
       <!-- Output -->
+      <button class="sb-preset-btn" style="width:100%;margin-bottom:12px;background:#FCEBEB;color:var(--dn);border-color:var(--dn)" onclick="sbReset()">Reset All</button>
+
       <div class="sb-output">
         <div class="sb-output-platform">eBay</div>
         <div class="sb-output-string" id="sb-out-ebay-str">—</div>
@@ -961,6 +963,37 @@ function sbInit() {
 
 // Hook into the app's section switcher
 // Called from app.js setSection() when switching to searchbuilder
+function sbReset() {
+  SB.players = [];
+  SB.kwInclude = new Set();
+  SB.kwExclude = new Set();
+  SB.kwLogic = 'OR';
+  SB.decadesInclude = new Set();
+  SB.decadesExclude = new Set();
+  SB.yearsInclude = new Set();
+  SB.yearsExclude = new Set();
+  SB.yearRangeInclude = { from: '', to: '' };
+  SB.yearRangeExclude = { from: '', to: '' };
+  SB.teamsInclude = [];
+  SB.teamsExclude = [];
+  SB.sportsInclude = [];
+  SB.sportsExclude = [];
+  SB.ebayListingType = 'all';
+  SB.ebayUSOnly = false;
+  SB.ebaySort = 'newest';
+  SB.ebayPriceMin = '';
+  SB.ebayPriceMax = '';
+  SB.ebaySellers = [];
+  SB.comcListingType = 'all';
+  SB.comcExcludeQuality = false;
+  SB_EBAY_FEATURES_INCL.clear();
+  SB_EBAY_FEATURES_EXCL.clear();
+  SB_COMC_KW_INCL.clear();
+  SB_COMC_KW_EXCL.clear();
+  _sbAllPlayers = null;
+  sbRender();
+}
+
 function sbShow() {
   sbInit();
   const root = document.getElementById('sb-root');
