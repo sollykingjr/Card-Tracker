@@ -63,7 +63,7 @@ const SB = {
 const SB_KEYWORDS = [
   { id: 'auto',   label: 'Auto',   ebay: 'kw',      comc: 'kw', ebayParam: null },
   { id: 'hof',    label: 'HOF',    ebay: 'kw',      comc: 'kw', ebayParam: null },
-  { id: 'rc',     label: 'RC',     ebay: 'feature', comc: 'kw', ebayParam: 'Features=Rookie' },
+  { id: 'rc',     label: 'RC',     ebay: 'kw',      comc: 'kw', ebayParam: null },
   { id: 'serial', label: 'Serial', ebay: 'feature', comc: 'kw', ebayParam: 'Features=Serial%2520Numbered' },
   { id: 'graded', label: 'Graded', ebay: 'feature', comc: 'kw', ebayParam: 'Graded=Yes' },
 ];
