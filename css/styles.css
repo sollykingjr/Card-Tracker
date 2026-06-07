@@ -492,8 +492,8 @@ html, body {
   }
   .sb-wrap .sb-section:nth-child(1),
   .sb-wrap .sb-section:nth-child(2),
-  .sb-wrap .sb-section:nth-child(3),
-  .sb-wrap .sb-section:nth-child(4) { grid-column: 1; }
+  .sb-wrap .sb-section:nth-child(3) { grid-column: 1; }
+  .sb-wrap .sb-section:nth-child(4),
   .sb-wrap .sb-section:nth-child(5),
   .sb-wrap .sb-section:nth-child(6),
   .sb-wrap .sb-section:nth-child(7) { grid-column: 2; }
