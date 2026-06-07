@@ -153,15 +153,19 @@ function sbGetAllPlayerNames() {
 function sbGetBuyScorePlayers(minScore) {
   if (!CACHE) return [];
 
-  // Find the most recent buy score date
-  const allBSDates = buyScores.map(b => parseDate(b.date)).filter(d => d > 0);
-  if (!allBSDates.length) return [];
-  const maxBSDate = Math.max(...allBSDates);
+  // Find most recent date separately for hitters and pitchers
+  const hitDates = buyScores.filter(b => !(b.pos||'').toLowerCase().includes('pitcher')).map(b => parseDate(b.date)).filter(d => d > 0);
+  const pitDates = buyScores.filter(b => (b.pos||'').toLowerCase().includes('pitcher')).map(b => parseDate(b.date)).filter(d => d > 0);
+  const maxHitDate = hitDates.length ? Math.max(...hitDates) : 0;
+  const maxPitDate = pitDates.length ? Math.max(...pitDates) : 0;
 
-  // Only players with a buy score entry on the most recent date
+  // Only players with a buy score entry on their position's most recent date
   const recentNames = new Set(
     buyScores
-      .filter(b => parseDate(b.date) === maxBSDate)
+      .filter(b => {
+        const isPit = (b.pos||'').toLowerCase().includes('pitcher');
+        return isPit ? parseDate(b.date) === maxPitDate : parseDate(b.date) === maxHitDate;
+      })
       .map(b => normName(b.name))
   );
 
