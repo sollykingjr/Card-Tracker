@@ -568,14 +568,22 @@ function showBuyNotesSubview() {
   const name = _modalCurrentPlayer;
   const nm = normName(name);
   const master = players.find(b=>normName(b.name)===nm);
-  if(!master||!master.notes) return;
+  const noteCandidates = [];
+  buyScores.filter(b=>normName(b.name)===nm&&b.notes).forEach(b=>noteCandidates.push({ts:parseDate(b.date),note:b.notes,src:fmtShortDate(b.date)}));
+  [...top200,...top100].filter(e=>normName(e.name)===nm&&e.notes).forEach(e=>noteCandidates.push({ts:parseDate(e.date),note:e.notes,src:fmtShortDate(e.date)}));
+  hotsheet.filter(h=>normName(h.name)===nm&&h.notes).forEach(h=>noteCandidates.push({ts:parseDate(h.date),note:h.notes,src:fmtShortDate(h.date)}));
+  if(master&&master.notes) noteCandidates.push({ts:parseDate(master.date)||0,note:master.notes,src:fmtShortDate(master.date)});
+  if(!noteCandidates.length) return;
+  noteCandidates.sort((a,b)=>b.ts-a.ts);
+  const best = noteCandidates[0];
   document.getElementById('mcontent').innerHTML=`
     <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
       style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
       ← Back
     </button>
-    <div class="section-hdr">Buy Sheet Notes — ${name}</div>
-    <div class="srow"><p style="font-size:13px;line-height:1.65;color:var(--tx)">${master.notes}</p></div>`;
+    <div class="section-hdr">Most Recent Note — ${name}</div>
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:8px">${best.src}</div>
+    <div class="srow"><p style="font-size:13px;line-height:1.65;color:var(--tx)">${best.note}</p></div>`;
 }
 
 
