@@ -466,9 +466,9 @@ function sbRender() {
       <div class="sb-section">
         <div class="sb-section-title">Presets & Saved Searches</div>
         <div class="sb-presets">
-          <button class="sb-preset-btn" onclick="sbApplyPreset(5.0)">BS ≥ 5.0</button>
-          <button class="sb-preset-btn" onclick="sbApplyPreset(4.5)">BS ≥ 4.5</button>
-          <button class="sb-preset-btn" onclick="sbApplyPreset(4.0)">BS ≥ 4.0</button>
+          <button class="sb-preset-btn" onclick="sbApplyPresetRange(5.0, 5.0)">BS 5.0</button>
+          <button class="sb-preset-btn" onclick="sbApplyPresetRange(4.5, 4.99)">BS 4.5–4.99</button>
+          <button class="sb-preset-btn" onclick="sbApplyPresetRange(4.0, 4.49)">BS 4.0–4.49</button>
         </div>
         ${SB.savedSearches.length ? `
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
@@ -836,6 +836,40 @@ function sbUpdatePool() {
 
 function sbApplyPreset(minScore) {
   SB.players = sbGetBuyScorePlayers(minScore);
+  sbUpdatePool();
+  sbUpdateOutput();
+}
+
+function sbApplyPresetRange(min, max) {
+  if (!CACHE) return;
+
+  const hitDates = buyScores.filter(b => !(b.pos||'').toLowerCase().includes('pitcher')).map(b => parseDate(b.date)).filter(d => d > 0);
+  const pitDates = buyScores.filter(b => (b.pos||'').toLowerCase().includes('pitcher')).map(b => parseDate(b.date)).filter(d => d > 0);
+  const maxHitDate = hitDates.length ? Math.max(...hitDates) : 0;
+  const maxPitDate = pitDates.length ? Math.max(...pitDates) : 0;
+
+  const recentNames = new Set(
+    buyScores
+      .filter(b => {
+        const isPit = (b.pos||'').toLowerCase().includes('pitcher');
+        return isPit ? parseDate(b.date) === maxPitDate : parseDate(b.date) === maxHitDate;
+      })
+      .map(b => normName(b.name))
+  );
+
+  const results = [];
+  const seen = new Set();
+  CACHE.forEach((entry, normNameKey) => {
+    if (!recentNames.has(normNameKey)) return;
+    const bs = parseFloat(entry.buy);
+    if (!isNaN(bs) && bs >= min && bs <= max) {
+      const player = players.find(p => normName(p.name) === normNameKey);
+      const name = player ? player.name : normNameKey;
+      if (name && !seen.has(name)) { seen.add(name); results.push({ name, source: 'prospect' }); }
+    }
+  });
+
+  SB.players = results;
   sbUpdatePool();
   sbUpdateOutput();
 }
