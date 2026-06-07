@@ -14,6 +14,11 @@ const SB = {
   kwCustomInclude: [],
   kwCustomExclude: [],
 
+  // Sets
+  setSelected: {},      // { 'Topps': 'include', 'Prizm': 'exclude' }
+  setCustomInclude: [],
+  setCustomExclude: [],
+
   // Decade/year — single include/exclude mode toggle
   decadeMode: 'include',
   decadesInclude: new Set(),
@@ -240,7 +245,9 @@ function sbBuildEbayString() {
   const playerStr = pNames.length === 1 ? pNames[0] : '(' + pNames.join(', ') + ')';
   const kwIncl = sbKwsForMode('include').filter(k => k.ebay === 'kw').map(k => k.label);
   const kwExcl = sbKwsForMode('exclude').filter(k => k.ebay === 'kw').map(k => '-' + k.label);
-  return [playerStr, ...kwIncl, ...SB.kwCustomInclude, ...kwExcl, ...SB.kwCustomExclude.map(k=>'-'+k)].filter(Boolean).join(' ');
+  const setIncl = Object.entries(SB.setSelected).filter(([,v])=>v==='include').map(([k])=>k);
+  const setExcl = Object.entries(SB.setSelected).filter(([,v])=>v==='exclude').map(([k])=>'-'+k);
+  return [playerStr, ...kwIncl, ...SB.kwCustomInclude, ...setIncl, ...SB.setCustomInclude, ...kwExcl, ...SB.kwCustomExclude.map(k=>'-'+k), ...setExcl, ...SB.setCustomExclude.map(s=>'-'+s)].filter(Boolean).join(' ');
 }
 
 function sbBuildComcQuery() {
@@ -273,8 +280,19 @@ function sbBuildComcQuery() {
   if (dyParts.length === 1) parts.push(dyParts[0]);
   else if (dyParts.length > 1) parts.push('(' + dyParts.join('|') + ')');
 
+ // Sets
+  const setIncl = Object.entries(SB.setSelected).filter(([,v])=>v==='include').map(([k])=>k);
+  const setExcl = Object.entries(SB.setSelected).filter(([,v])=>v==='exclude').map(([k])=>k);
+  if (setIncl.length) {
+    if (SB.kwLogic === 'OR' && setIncl.length > 1) parts.push('(' + setIncl.join('|') + ')');
+    else setIncl.forEach(s => parts.push(s));
+  }
+  [...SB.setCustomInclude].forEach(s => parts.push(s));
+
   // Exclusions
   [...kwExcl, ...SB.kwCustomExclude].forEach(k => parts.push('-' + k));
+  setExcl.forEach(s => parts.push('-' + s));
+  [...SB.setCustomExclude].forEach(s => parts.push('-' + s));
   SB.sports.filter(s => s.mode === 'exclude').forEach(s => parts.push('-' + s.name.toLowerCase()));
   SB.teams.filter(t => t.mode === 'exclude').forEach(t => parts.push('-' + (t.name.includes(' ') ? `"${t.name}"` : t.name)));
   SB.decadesExclude.forEach(d => parts.push('-' + d + '*'));
@@ -348,6 +366,9 @@ function sbSerializeState() {
     yearRangeInclude: SB.yearRangeInclude,
     teams: SB.teams,
     sports: SB.sports,
+    setSelected: SB.setSelected,
+    setCustomInclude: SB.setCustomInclude,
+    setCustomExclude: SB.setCustomExclude,
     ebayListingType: SB.ebayListingType,
     ebayUSOnly: SB.ebayUSOnly,
     ebaySort: SB.ebaySort,
@@ -372,6 +393,9 @@ function sbRestoreState(s) {
   SB.yearRangeInclude = s.yearRangeInclude || { from:'', to:'' };
   SB.teams            = s.teams || [];
   SB.sports           = s.sports || [];
+  SB.setSelected      = s.setSelected || {};
+  SB.setCustomInclude = s.setCustomInclude || [];
+  SB.setCustomExclude = s.setCustomExclude || [];
   SB.ebayListingType  = s.ebayListingType || 'all';
   SB.ebayUSOnly       = s.ebayUSOnly || false;
   SB.ebaySort         = s.ebaySort || 'newest';
@@ -481,7 +505,6 @@ function sbRender() {
             return `<button class="sb-kw-btn ${cls}" onclick="sbToggleKw('${k.id}')">${k.label}${note}</button>`;
           }).join('')}
         </div>
-        <div style="font-size:10px;color:var(--tx3);margin-top:6px;margin-bottom:10px">ⓔ = eBay only · ⓒ = COMC only</div>
         <div class="sb-row">
           <input class="sb-input" id="sb-kw-custom" placeholder="Custom keyword…" autocorrect="off" autocapitalize="off">
           <button class="sb-preset-btn" onclick="sbAddCustomKw(SB.kwMode)">Add</button>
@@ -490,6 +513,32 @@ function sbRender() {
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
             ${SB.kwCustomInclude.map((k,i) => `<span class="sb-chip">${k}<button class="sb-chip-x" onclick="sbRemoveCustomKw('include',${i})">×</button></span>`).join('')}
             ${SB.kwCustomExclude.map((k,i) => `<span class="sb-chip" style="background:#FCEBEB;color:var(--dn)">-${k}<button class="sb-chip-x" style="color:var(--dn)" onclick="sbRemoveCustomKw('exclude',${i})">×</button></span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Set -->
+      <div class="sb-section">
+        <div class="sb-section-title">Set</div>
+        <div class="sb-and-or" style="margin-bottom:10px">
+          <button class="${SB.kwMode==='include'?'on':''}" onclick="SB.kwMode='include';sbRender()">Include</button>
+          <button class="${SB.kwMode==='exclude'?'on':''}" onclick="SB.kwMode='exclude';sbRender()">Exclude</button>
+        </div>
+        <div class="sb-kw-grid">
+          ${['Topps','Bowman','Chrome','Sapphire','Prizm','Optic','Mosaic','Select','Finest','Heritage','Stadium Club','Phoenix'].map(s => {
+            const st = SB.setSelected[s];
+            const cls = st === 'include' ? 'on' : st === 'exclude' ? 'excl' : '';
+            return `<button class="sb-kw-btn ${cls}" onclick="sbToggleSet('${s}')">${s}</button>`;
+          }).join('')}
+        </div>
+        <div class="sb-row" style="margin-top:8px">
+          <input class="sb-input" id="sb-set-custom" placeholder="Custom set…" autocorrect="off" autocapitalize="words">
+          <button class="sb-preset-btn" onclick="sbAddCustomSet()">Add</button>
+        </div>
+        ${SB.setCustomInclude.length || SB.setCustomExclude.length ? `
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+            ${SB.setCustomInclude.map((s,i) => `<span class="sb-chip">${s}<button class="sb-chip-x" onclick="sbRemoveCustomSet('include',${i})">×</button></span>`).join('')}
+            ${SB.setCustomExclude.map((s,i) => `<span class="sb-chip" style="background:#FCEBEB;color:var(--dn)">-${s}<button class="sb-chip-x" style="color:var(--dn)" onclick="sbRemoveCustomSet('exclude',${i})">×</button></span>`).join('')}
           </div>
         ` : ''}
       </div>
@@ -789,6 +838,28 @@ function sbRemoveCustomKw(mode, i) {
   sbRender();
 }
 
+function sbToggleSet(name) {
+  if (SB.setSelected[name] === SB.kwMode) delete SB.setSelected[name];
+  else SB.setSelected[name] = SB.kwMode;
+  sbRender();
+}
+
+function sbAddCustomSet() {
+  const inp = document.getElementById('sb-set-custom');
+  if (!inp || !inp.value.trim()) return;
+  const val = inp.value.trim();
+  if (SB.kwMode === 'include' && !SB.setCustomInclude.includes(val)) SB.setCustomInclude.push(val);
+  if (SB.kwMode === 'exclude' && !SB.setCustomExclude.includes(val)) SB.setCustomExclude.push(val);
+  inp.value = '';
+  sbRender();
+}
+
+function sbRemoveCustomSet(mode, i) {
+  if (mode === 'include') SB.setCustomInclude.splice(i, 1);
+  else SB.setCustomExclude.splice(i, 1);
+  sbRender();
+}
+
 // =============================================================================
 // SECTION 11: SPORT / TEAM TAG HANDLERS (~723-755)
 // =============================================================================
@@ -933,6 +1004,9 @@ function sbReset() {
   SB.yearRangeInclude = { from:'', to:'' };
   SB.teams            = [];
   SB.sports           = [];
+  SB.setSelected      = {};
+  SB.setCustomInclude = [];
+  SB.setCustomExclude = [];
   SB.ebayListingType  = 'all';
   SB.ebayUSOnly       = false;
   SB.ebaySort         = 'newest';
