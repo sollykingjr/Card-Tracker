@@ -262,11 +262,29 @@ function sbBuildEbayString() {
   const pNames = SB.players.map(p => p.name);
   if (!pNames.length) return '';
   const playerStr = pNames.length === 1 ? pNames[0] : '(' + pNames.join(', ') + ')';
+
   const kwIncl = sbKwsForMode('include').filter(k => k.ebay === 'kw').map(k => k.label);
-  const kwExcl = sbKwsForMode('exclude').filter(k => k.ebay === 'kw').map(k => '-' + k.label);
+  const allKwIncl = [...kwIncl, ...SB.kwCustomInclude];
+  let kwStr = '';
+  if (allKwIncl.length) {
+    kwStr = SB.kwLogic === 'OR' && allKwIncl.length > 1
+      ? '(' + allKwIncl.join(',') + ')'
+      : allKwIncl.join(' ');
+  }
+
   const setIncl = Object.entries(SB.setSelected).filter(([,v])=>v==='include').map(([k])=>k);
+  const allSetIncl = [...setIncl, ...SB.setCustomInclude];
+  let setStr = '';
+  if (allSetIncl.length) {
+    setStr = SB.setLogic === 'OR' && allSetIncl.length > 1
+      ? '(' + allSetIncl.join(',') + ')'
+      : allSetIncl.join(' ');
+  }
+
+  const kwExcl = sbKwsForMode('exclude').filter(k => k.ebay === 'kw').map(k => '-' + k.label);
   const setExcl = Object.entries(SB.setSelected).filter(([,v])=>v==='exclude').map(([k])=>'-'+k);
-  return [playerStr, ...kwIncl, ...SB.kwCustomInclude, ...setIncl, ...SB.setCustomInclude, ...kwExcl, ...SB.kwCustomExclude.map(k=>'-'+k), ...setExcl, ...SB.setCustomExclude.map(s=>'-'+s)].filter(Boolean).join(' ');
+
+  return [playerStr, kwStr, setStr, ...kwExcl, ...SB.kwCustomExclude.map(k=>'-'+k), ...setExcl, ...SB.setCustomExclude.map(s=>'-'+s)].filter(Boolean).join(' ');
 }
 
 function sbBuildComcQuery() {
