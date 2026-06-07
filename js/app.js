@@ -21,6 +21,7 @@ const isWatch = s === 'watchlist';
   const isSB    = s === 'searchbuilder';
   document.getElementById('prospects-section').style.display = (isWatch || isSB) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? '' : 'none';
+  document.querySelector('.meta').style.display = isSB ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
