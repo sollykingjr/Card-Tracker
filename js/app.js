@@ -1,5 +1,5 @@
 // ── App state ─────────────────────────────────────────────────────────────────
-let section = 'searchbuilder';
+let section = 'prospects';
 let tab = 'all', brf = 'all', posf = 'all', q = '', sortBy = 'default';
 
 // ── Search helper ─────────────────────────────────────────────────────────────
@@ -86,4 +86,5 @@ document.getElementById('rfab').addEventListener('click', () => {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+setSection('searchbuilder');
 loadAll();
