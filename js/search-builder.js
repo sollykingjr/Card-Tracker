@@ -411,6 +411,9 @@ function sbRender() {
   if (!el) return;
 
   el.innerHTML = `
+    <div class="sb-sticky-reset">
+      <button onclick="sbReset()">Reset All</button>
+    </div>
     <div class="sb-wrap">
 
       <!-- Player Pool -->
@@ -609,7 +612,7 @@ function sbRender() {
       </div>
 
       <!-- Output -->
-      <button class="sb-preset-btn" style="width:100%;margin-bottom:12px;background:#FCEBEB;color:var(--dn);border-color:var(--dn)" onclick="sbReset()">Reset All</button>
+      
 
       <div class="sb-output">
         <div class="sb-output-platform">eBay</div>
