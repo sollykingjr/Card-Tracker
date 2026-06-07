@@ -726,11 +726,12 @@ function sbHideDD() {
 function sbAddFromInput() {
   const inp = document.getElementById('sb-search');
   if (!inp || !inp.value.trim()) return;
-  // Check if it matches a known player
   if (!_sbAllPlayers) _sbAllPlayers = sbGetAllPlayerNames();
-  const q = inp.value.trim().toLowerCase();
-  const match = _sbAllPlayers.find(p => p.name.toLowerCase() === q);
-  sbAddPlayer(match ? match.name : inp.value.trim(), match ? match.source : 'manual');
+  const names = inp.value.split(',').map(n => n.trim()).filter(Boolean);
+  names.forEach(name => {
+    const match = _sbAllPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
+    sbAddPlayer(match ? match.name : name, match ? match.source : 'manual');
+  });
   inp.value = '';
   const dd = document.getElementById('sb-dd');
   if (dd) dd.style.display = 'none';
