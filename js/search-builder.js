@@ -15,7 +15,8 @@ const SB = {
   kwCustomExclude: [],
 
   // Sets
-  setSelected: {},      // { 'Topps': 'include', 'Prizm': 'exclude' }
+  setSelected: {},
+  setLogic: 'OR',
   setCustomInclude: [],
   setCustomExclude: [],
 
@@ -284,7 +285,7 @@ function sbBuildComcQuery() {
   const setIncl = Object.entries(SB.setSelected).filter(([,v])=>v==='include').map(([k])=>k);
   const setExcl = Object.entries(SB.setSelected).filter(([,v])=>v==='exclude').map(([k])=>k);
   if (setIncl.length) {
-    if (SB.kwLogic === 'OR' && setIncl.length > 1) parts.push('(' + setIncl.join('|') + ')');
+    if (SB.setLogic === 'OR' && setIncl.length > 1) parts.push('(' + setIncl.join('|') + ')');
     else setIncl.forEach(s => parts.push(s));
   }
   [...SB.setCustomInclude].forEach(s => parts.push(s));
@@ -367,6 +368,7 @@ function sbSerializeState() {
     teams: SB.teams,
     sports: SB.sports,
     setSelected: SB.setSelected,
+    setLogic: SB.setLogic,
     setCustomInclude: SB.setCustomInclude,
     setCustomExclude: SB.setCustomExclude,
     ebayListingType: SB.ebayListingType,
@@ -394,6 +396,7 @@ function sbRestoreState(s) {
   SB.teams            = s.teams || [];
   SB.sports           = s.sports || [];
   SB.setSelected      = s.setSelected || {};
+  SB.setLogic         = s.setLogic || 'OR';
   SB.setCustomInclude = s.setCustomInclude || [];
   SB.setCustomExclude = s.setCustomExclude || [];
   SB.ebayListingType  = s.ebayListingType || 'all';
@@ -520,9 +523,18 @@ function sbRender() {
       <!-- Set -->
       <div class="sb-section">
         <div class="sb-section-title">Set</div>
-        <div class="sb-and-or" style="margin-bottom:10px">
-          <button class="${SB.kwMode==='include'?'on':''}" onclick="SB.kwMode='include';sbRender()">Include</button>
-          <button class="${SB.kwMode==='exclude'?'on':''}" onclick="SB.kwMode='exclude';sbRender()">Exclude</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div class="sb-and-or">
+            <button class="${SB.kwMode==='include'?'on':''}" onclick="SB.kwMode='include';sbRender()">Include</button>
+            <button class="${SB.kwMode==='exclude'?'on':''}" onclick="SB.kwMode='exclude';sbRender()">Exclude</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span class="sb-label">Logic:</span>
+          <div class="sb-and-or">
+            <button class="${SB.setLogic==='OR'?'on':''}" onclick="SB.setLogic='OR';sbRender()">OR</button>
+            <button class="${SB.setLogic==='AND'?'on':''}" onclick="SB.setLogic='AND';sbRender()">AND</button>
+          </div>
         </div>
         <div class="sb-kw-grid">
           ${['Topps','Bowman','Chrome','Sapphire','Prizm','Optic','Mosaic','Select','Finest','Heritage','Stadium Club','Phoenix'].map(s => {
@@ -1005,6 +1017,7 @@ function sbReset() {
   SB.teams            = [];
   SB.sports           = [];
   SB.setSelected      = {};
+  SB.setLogic         = 'OR';
   SB.setCustomInclude = [];
   SB.setCustomExclude = [];
   SB.ebayListingType  = 'all';
