@@ -152,9 +152,23 @@ function sbGetAllPlayerNames() {
 
 function sbGetBuyScorePlayers(minScore) {
   if (!CACHE) return [];
+
+  // Find the most recent buy score date
+  const allBSDates = buyScores.map(b => parseDate(b.date)).filter(d => d > 0);
+  if (!allBSDates.length) return [];
+  const maxBSDate = Math.max(...allBSDates);
+
+  // Only players with a buy score entry on the most recent date
+  const recentNames = new Set(
+    buyScores
+      .filter(b => parseDate(b.date) === maxBSDate)
+      .map(b => normName(b.name))
+  );
+
   const results = [];
   const seen = new Set();
   CACHE.forEach((entry, normNameKey) => {
+    if (!recentNames.has(normNameKey)) return;
     const bs = parseFloat(entry.buy);
     if (!isNaN(bs) && bs >= minScore) {
       const player = players.find(p => normName(p.name) === normNameKey);
