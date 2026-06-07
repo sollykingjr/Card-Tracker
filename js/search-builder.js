@@ -502,7 +502,6 @@ function sbRender() {
         </button>
         <div style="${SB.teamOpen?'margin-top:10px':'display:none'}">
         <div class="sb-and-or" style="margin-bottom:10px">
-        <div class="sb-and-or" style="margin-bottom:10px">
           <button class="${SB.tagMode==='include'?'on':''}" onclick="SB.tagMode='include';sbRender()">Include</button>
           <button class="${SB.tagMode==='exclude'?'on':''}" onclick="SB.tagMode='exclude';sbRender()">Exclude</button>
         </div>
