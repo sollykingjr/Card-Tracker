@@ -1,98 +1,74 @@
 // =============================================================================
-// SECTION 1: STATE (lines ~1-60)
+// SECTION 1: STATE (~1-65)
 // =============================================================================
 
 const SB = {
-  players: [],        // { name, source } — current player pool
-  presets: [
-    { label: 'Buy Score ≥ 5.0', minScore: 5.0 },
-    { label: 'Buy Score ≥ 4.5', minScore: 4.5 },
-    { label: 'Buy Score ≥ 4.0', minScore: 4.0 },
-  ],
+  players: [],
 
-  // Keywords — shared
-  kwInclude: new Set(),   // e.g. 'auto', 'serial', 'rc'
-  kwExclude: new Set(),
+  // Keywords — each kw has state: null | 'include' | 'exclude'
+  kwState: {},        // e.g. { auto: 'include', graded: 'exclude' }
+  kwLogic: 'OR',
 
-  kwLogic: 'OR',          // 'AND' | 'OR' for include keywords
+  // Custom keywords
+  kwCustomInclude: [],
+  kwCustomExclude: [],
 
-  // Decade/year
-  decadesInclude: new Set(),   // e.g. '198', '199', '200', '201', '202'
+  // Decade/year — single include/exclude mode toggle
+  decadeMode: 'include',
+  decadesInclude: new Set(),
   decadesExclude: new Set(),
-  yearsInclude: new Set(),     // e.g. '2021', '2022'
+  yearsInclude: new Set(),
   yearsExclude: new Set(),
   yearRangeInclude: { from: '', to: '' },
-  yearRangeExclude: { from: '', to: '' },
 
-  // Team / Sport (COMC keyword, eBay filter)
-  teamsInclude: [],
-  teamsExclude: [],
-  sportsInclude: [],
-  sportsExclude: [],
+  // Team / Sport — unified include/exclude per item
+  teams: [],    // { name, mode: 'include'|'exclude' }
+  sports: [],   // { name, mode: 'include'|'exclude' }
 
-  // eBay-only filters
-  ebayListingType: 'all',     // 'all' | 'auction' | 'bin'
-  ebaySoldOnly: false,
+  // eBay filters
+  ebayListingType: 'all',
   ebayUSOnly: false,
-  ebaySort: 'newest',         // 'newest' | 'ending'
+  ebaySort: 'newest',
   ebayPriceMin: '',
   ebayPriceMax: '',
-  ebaySellers: [],            // { name, exclude: bool }
+  ebaySellers: [],   // { name, exclude: bool }
   ebayFavSellers: ['dcsports87', 'comc_consignment'],
 
-  // COMC-only filters
-  comcListingType: 'all',     // 'all' | 'auction' | 'bin' | 'soldout'
-  comcExcludeQuality: false,  // adds -COMC keyword
+  // COMC filters
+  comcListingType: 'all',
+  comcExcludeQuality: false,
 
-  // Saved favorites sellers storage key
-  FAV_KEY: 'sb_fav_sellers',
+  // Saved searches & filter panel state
+  savedSearches: [],
+  ebayOpen: false,
+  comcOpen: false,
 };
 
 // =============================================================================
-// SECTION 2: KEYWORD DEFINITIONS (lines ~63-110)
+// SECTION 2: KEYWORD & OPTION DEFINITIONS (~68-130)
 // =============================================================================
 
 const SB_KEYWORDS = [
-  // Shared keywords (work on both platforms as text)
-  { id: 'auto',            label: 'Auto',            both: true },
-  { id: 'aftermarketauto', label: 'Aftermarket Auto', comcOnly: true },
-  { id: 'hof',             label: 'HOF',             both: true },
-  { id: 'mem',             label: 'Mem',             comcOnly: true },
-  { id: 'pre',             label: 'Pre-Rookie',      comcOnly: true },
-  { id: 'rc',              label: 'RC',              both: true },
-  { id: 'rookie-related',  label: 'Rookie Related',  comcOnly: true },
-  { id: 'rookie-year',     label: 'Rookie Year',     comcOnly: true },
-  { id: 'ungraded',        label: 'Ungraded',        comcOnly: true },
-  // eBay URL filters (rendered as toggles, not keyword chips)
-  // serial => Features=Serial%2520Numbered (ebay filter)
-  // graded => Graded=Yes (ebay filter)
-  // autographed => Autographed=Yes (ebay filter)
-  // rc => Features=Rookie (ebay filter)
+  // Both platforms (text keyword)
+  { id: 'auto',           label: 'Auto',           ebay: 'kw',      comc: 'kw' },
+  { id: 'hof',            label: 'HOF',            ebay: 'kw',      comc: 'kw' },
+  { id: 'rc',             label: 'RC',             ebay: 'feature', comc: 'kw', ebayParam: 'Features=Rookie' },
+  // eBay URL filter only (shown greyed label on COMC output)
+  { id: 'serial',         label: 'Serial #\'d',   ebay: 'feature', comc: 'kw', ebayParam: 'Features=Serial%2520Numbered' },
+  { id: 'graded',         label: 'Graded',         ebay: 'feature', comc: 'kw', ebayParam: 'Graded=Yes' },
+  { id: 'autographed',    label: 'Autographed',    ebay: 'feature', comc: null, ebayParam: 'Autographed=Yes' },
+  // COMC only
+  { id: 'aftermarketauto',label: 'Aftermarket Auto', ebay: null,   comc: 'kw' },
+  { id: 'mem',            label: 'Mem',            ebay: null,      comc: 'kw' },
+  { id: 'pre',            label: 'Pre-Rookie',     ebay: null,      comc: 'kw' },
+  { id: 'rookie-related', label: 'Rookie Related', ebay: null,      comc: 'kw' },
+  { id: 'rookie-year',    label: 'Rookie Year',    ebay: null,      comc: 'kw' },
+  { id: 'ungraded',       label: 'Ungraded',       ebay: null,      comc: 'kw' },
 ];
-
-// eBay-specific feature toggles (URL params, not keywords)
-const SB_EBAY_FEATURES = [
-  { id: 'serial',      label: 'Serial Numbered', param: 'Features=Serial%2520Numbered' },
-  { id: 'graded',      label: 'Graded',          param: 'Graded=Yes' },
-  { id: 'autographed', label: 'Autographed',      param: 'Autographed=Yes' },
-  { id: 'rookie',      label: 'Rookie',           param: 'Features=Rookie' },
-];
-
-// COMC-specific keyword toggles
-const SB_COMC_FEATURES = [
-  { id: 'graded',   label: 'Graded' },
-  { id: 'serial',   label: 'Serial' },
-  { id: 'rc',       label: 'RC' },
-  { id: 'ungraded', label: 'Ungraded' },
-];
-
-const SB_EBAY_FEATURES_EXCL = new Set();   // ids of excluded ebay features
-const SB_EBAY_FEATURES_INCL = new Set();   // ids of included ebay features
-const SB_COMC_KW_INCL = new Set();
-const SB_COMC_KW_EXCL = new Set();
 
 const SB_SPORT_OPTIONS = ['Baseball','Basketball','Football','Hockey','Soccer','Golf','MMA','Wrestling'];
-const SB_TEAM_OPTIONS  = [
+
+const SB_TEAM_OPTIONS = [
   // MLB
   'Arizona Diamondbacks','Atlanta Braves','Baltimore Orioles','Boston Red Sox',
   'Chicago Cubs','Chicago White Sox','Cincinnati Reds','Cleveland Guardians',
@@ -140,18 +116,19 @@ const SB_DECADES = [
   { label: '2020s', val: '202' },
 ];
 
+const SB_WORKER = 'https://card-app.maxcsolomon.workers.dev';
+
 // =============================================================================
-// SECTION 3: PLAYER DATA HELPERS (lines ~113-165)
+// SECTION 3: PLAYER DATA HELPERS (~133-185)
 // =============================================================================
 
 function sbGetProspectNames() {
-  return (players || []).map(p => ({ name: p.name || '', source: 'prospect' }))
-               .filter(p => p.name);
+  return (players || []).map(p => ({ name: p.name || '', source: 'prospect' })).filter(p => p.name);
 }
 
 function sbGetPortfolioNames() {
   const seen = new Set();
-  return cards
+  return (cards || [])
     .filter(c => c.player)
     .map(c => {
       const matched = players.find(p => normName(p.name) === normName(c.player));
@@ -180,80 +157,55 @@ function sbGetBuyScorePlayers(minScore) {
     if (!isNaN(bs) && bs >= minScore) {
       const player = players.find(p => normName(p.name) === normNameKey);
       const name = player ? player.name : normNameKey;
-      if (name && !seen.has(name)) {
-        seen.add(name);
-        results.push({ name, source: 'prospect' });
-      }
+      if (name && !seen.has(name)) { seen.add(name); results.push({ name, source: 'prospect' }); }
     }
   });
   return results;
 }
+
 // =============================================================================
-// SECTION 4: URL / STRING BUILDERS (lines ~168-280)
+// SECTION 4: URL / STRING BUILDERS (~188-310)
 // =============================================================================
+
+function sbKwsForMode(mode) {
+  return SB_KEYWORDS.filter(k => SB.kwState[k.id] === mode);
+}
 
 function sbBuildEbayURL() {
-  const players = SB.players.map(p => p.name);
-  if (!players.length) return '';
+  const pNames = SB.players.map(p => p.name);
+  if (!pNames.length) return '';
 
-  // Keywords
-  const kwParts = [];
+  const playerStr = pNames.length === 1 ? pNames[0] : '(' + pNames.join(',') + ')';
 
-  // Player group
-  const playerStr = players.length === 1
-    ? players[0]
-    : '(' + players.join(',') + ')';
-
-  // Shared text keywords (auto, hof, mem — things that go in _nkw as text)
-  const sharedKwIncl = [...SB.kwInclude].filter(k => {
-    const def = SB_KEYWORDS.find(d => d.id === k);
-    return def && (def.both || !def.comcOnly);
-  });
+  const kwIncl = sbKwsForMode('include').filter(k => k.ebay === 'kw').map(k => k.id);
+  const kwExcl = sbKwsForMode('exclude').filter(k => k.ebay === 'kw').map(k => k.id);
+  const customIncl = SB.kwCustomInclude;
+  const customExcl = SB.kwCustomExclude;
 
   let kwStr = '';
-  if (sharedKwIncl.length) {
-    if (SB.kwLogic === 'OR') {
-      kwStr = sharedKwIncl.length === 1 ? sharedKwIncl[0] : '(' + sharedKwIncl.join(',') + ')';
-    } else {
-      kwStr = sharedKwIncl.join(' ');
-    }
+  const allIncl = [...kwIncl, ...customIncl];
+  if (allIncl.length) {
+    kwStr = SB.kwLogic === 'OR' && allIncl.length > 1
+      ? '(' + allIncl.join(',') + ')'
+      : allIncl.join(' ');
   }
-
-  // Exclusion keywords in _nkw
-  const sharedKwExcl = [...SB.kwExclude].filter(k => {
-    const def = SB_KEYWORDS.find(d => d.id === k);
-    return def && (def.both || !def.comcOnly);
-  });
-  const exclStr = sharedKwExcl.map(k => '-' + k).join(' ');
-
-  // Teams/sports as keywords in _nkw for eBay? No — eBay uses URL params for team/sport
-  // Year/decade as Season param handled separately
+  const exclStr = [...kwExcl, ...customExcl].map(k => '-' + k).join(' ');
 
   const nkwParts = [playerStr, kwStr, exclStr].filter(Boolean);
-  const nkw = nkwParts.join(' ').replace(/ +/g, '+').replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/,/g, '+');
-
   const params = new URLSearchParams();
   params.set('_nkw', nkwParts.join(' '));
   params.set('_from', 'R40');
   params.set('_fss', '1');
   params.set('_dcat', '261328');
 
-  // Listing type
   if (SB.ebayListingType === 'auction') params.set('LH_Auction', '1');
-  if (SB.ebayListingType === 'bin') params.set('LH_BIN', '1');
+  if (SB.ebayListingType === 'bin')     params.set('LH_BIN', '1');
+  if (SB.ebayUSOnly)                    params.set('LH_PrefLoc', '1');
+  if (SB.ebaySort === 'newest')         params.set('_sop', '10');
+  if (SB.ebaySort === 'ending')         params.set('_sop', '1');
+  if (SB.ebayPriceMin)                  params.set('_udlo', SB.ebayPriceMin);
+  if (SB.ebayPriceMax)                  params.set('_udhi', SB.ebayPriceMax);
 
-  // US Only
-  if (SB.ebayUSOnly) params.set('LH_PrefLoc', '1');
-
-  // Sort
-  if (SB.ebaySort === 'newest') params.set('_sop', '10');
-  if (SB.ebaySort === 'ending') params.set('_sop', '1');
-
-  // Price
-  if (SB.ebayPriceMin) params.set('_udlo', SB.ebayPriceMin);
-  if (SB.ebayPriceMax) params.set('_udhi', SB.ebayPriceMax);
-
-  // Seller
   const inclSellers = SB.ebaySellers.filter(s => !s.exclude);
   const exclSellers = SB.ebaySellers.filter(s => s.exclude);
   if (inclSellers.length) {
@@ -268,129 +220,85 @@ function sbBuildEbayURL() {
 
   // eBay feature filters
   const featureVals = [];
-  SB_EBAY_FEATURES_INCL.forEach(id => {
-    const f = SB_EBAY_FEATURES.find(x => x.id === id);
-    if (!f) return;
-    if (f.param.startsWith('Features=')) featureVals.push(f.param.replace('Features=', ''));
-    else {
-      const [k, v] = f.param.split('=');
-      params.set(k, v);
-    }
+  sbKwsForMode('include').filter(k => k.ebay === 'feature').forEach(k => {
+    if (k.ebayParam.startsWith('Features=')) featureVals.push(k.ebayParam.replace('Features=', ''));
+    else { const [pk, pv] = k.ebayParam.split('='); params.set(pk, pv); }
   });
-  if (featureVals.length) params.set('Features', featureVals.join('%7C'));
-  if (SB_EBAY_FEATURES_INCL.has('serial') || SB_EBAY_FEATURES_INCL.has('rookie')) params.set('_oaa', '1');
+  if (featureVals.length) { params.set('Features', featureVals.join('%7C')); params.set('_oaa', '1'); }
 
-  // Sport
-  if (SB.sportsInclude.length) params.set('Sport', SB.sportsInclude.join('%7C'));
+  // Sport / Team
+  const sportsIncl = SB.sports.filter(s => s.mode === 'include').map(s => s.name);
+  const teamsIncl  = SB.teams.filter(t => t.mode === 'include').map(t => t.name);
+  if (sportsIncl.length) params.set('Sport', sportsIncl.join('%7C'));
+  if (teamsIncl.length)  params.set('Team', teamsIncl.join('%7C').replace(/ /g, '%2520'));
 
-  // Team
-  if (SB.teamsInclude.length) params.set('Team', SB.teamsInclude.join('%7C').replace(/ /g, '%2520'));
-
-  // Season/Year
-  const allYears = [
-    ...SB.decadesInclude,  // not used directly for eBay season
-    ...SB.yearsInclude,
-  ];
-  // For eBay, use individual years joined with %7C
-  if (SB.yearsInclude.size) {
-    params.set('Season', [...SB.yearsInclude].join('%7C'));
-    params.set('_oaa', '1');
-  }
+  // Years
+  if (SB.yearsInclude.size) { params.set('Season', [...SB.yearsInclude].join('%7C')); params.set('_oaa', '1'); }
 
   return 'https://www.ebay.com/sch/261328/i.html?' + params.toString();
 }
 
 function sbBuildEbayString() {
-  // Plain text version of the search keywords only
-  const players = SB.players.map(p => p.name);
-  if (!players.length) return '';
-  const playerStr = players.length === 1 ? players[0] : '(' + players.join(', ') + ')';
-  const kws = [...SB.kwInclude].map(k => {
-    const def = SB_KEYWORDS.find(d => d.id === k);
-    return def ? def.label : k;
-  });
-  const excl = [...SB.kwExclude].map(k => {
-    const def = SB_KEYWORDS.find(d => d.id === k);
-    return '-' + (def ? def.label : k);
-  });
-  return [playerStr, ...kws, ...excl].filter(Boolean).join(' ');
-}
-
-function sbBuildComcURL() {
-  const players = SB.players.map(p => p.name);
-  if (!players.length) return '';
-
-  const query = sbBuildComcQuery();
-  const encoded = sbEncodeComc(query);
-
-  let url = 'https://www.comc.com/Cards,sr,';
-  if (SB.comcListingType === 'all')     url += `+(${encoded}),i100`;
-  if (SB.comcListingType === 'bin')     url += `+(${encoded}),fb,i100`;
-  if (SB.comcListingType === 'auction') url += `+(${encoded}),fa,i100`;
-  if (SB.comcListingType === 'soldout') url += `+(${encoded}),ot,i100`;
-  if (SB.comcListingType === 'auctionsoldout') url += `+(${encoded}),ot,fa,i100`;
-
-  return url;
+  const pNames = SB.players.map(p => p.name);
+  if (!pNames.length) return '';
+  const playerStr = pNames.length === 1 ? pNames[0] : '(' + pNames.join(', ') + ')';
+  const kwIncl = sbKwsForMode('include').filter(k => k.ebay === 'kw').map(k => k.label);
+  const kwExcl = sbKwsForMode('exclude').filter(k => k.ebay === 'kw').map(k => '-' + k.label);
+  return [playerStr, ...kwIncl, ...SB.kwCustomInclude, ...kwExcl, ...SB.kwCustomExclude.map(k=>'-'+k)].filter(Boolean).join(' ');
 }
 
 function sbBuildComcQuery() {
-  const players = SB.players.map(p => p.name);
-  if (!players.length) return '';
+  const pNames = SB.players.map(p => p.name);
+  if (!pNames.length) return '';
 
-  // Player group — multi-word names need quotes
-  const playerParts = players.map(n => n.includes(' ') ? `"${n}"` : n);
-  const playerStr = playerParts.length === 1
-    ? playerParts[0]
-    : '(' + playerParts.join(' | ') + ')';
-
+  const playerParts = pNames.map(n => n.includes(' ') ? `"${n}"` : n);
+  const playerStr = playerParts.length === 1 ? playerParts[0] : '(' + playerParts.join(' | ') + ')';
   const parts = [playerStr];
 
-  // Include keywords
-  const inclKws = [...SB.kwInclude, ...SB_COMC_KW_INCL];
-  if (inclKws.length) {
-    if (SB.kwLogic === 'OR' && inclKws.length > 1) {
-      parts.push('(' + inclKws.join('|') + ')');
-    } else {
-      inclKws.forEach(k => parts.push(k));
-    }
+  const kwIncl = sbKwsForMode('include').filter(k => k.comc === 'kw').map(k => k.id);
+  const kwExcl = sbKwsForMode('exclude').filter(k => k.comc === 'kw').map(k => k.id);
+  const allIncl = [...kwIncl, ...SB.kwCustomInclude];
+
+  if (allIncl.length) {
+    if (SB.kwLogic === 'OR' && allIncl.length > 1) parts.push('(' + allIncl.join('|') + ')');
+    else allIncl.forEach(k => parts.push(k));
   }
 
-  // Include teams
-  SB.teamsInclude.forEach(t => {
-    parts.push(t.includes(' ') ? `"${t}"` : t);
-  });
+  SB.sports.filter(s => s.mode === 'include').forEach(s => parts.push(s.name.toLowerCase()));
+  SB.teams.filter(t => t.mode === 'include').forEach(t => parts.push(t.name.includes(' ') ? `"${t.name}"` : t.name));
 
-  // Include sports
-  SB.sportsInclude.forEach(s => parts.push(s.toLowerCase()));
-
-  // Decade/year include
-  const decadeYearParts = [];
-  SB.decadesInclude.forEach(d => decadeYearParts.push(d + '*'));
-  SB.yearsInclude.forEach(y => decadeYearParts.push(y));
+  // Decades / years include
+  const dyParts = [];
+  SB.decadesInclude.forEach(d => dyParts.push(d + '*'));
+  SB.yearsInclude.forEach(y => dyParts.push(y));
   if (SB.yearRangeInclude.from && SB.yearRangeInclude.to) {
-    // Build individual years from range
-    const from = parseInt(SB.yearRangeInclude.from);
-    const to   = parseInt(SB.yearRangeInclude.to);
-    for (let y = from; y <= to; y++) decadeYearParts.push(String(y));
+    for (let y = parseInt(SB.yearRangeInclude.from); y <= parseInt(SB.yearRangeInclude.to); y++) dyParts.push(String(y));
   }
-  if (decadeYearParts.length === 1) parts.push(decadeYearParts[0]);
-  else if (decadeYearParts.length > 1) parts.push('(' + decadeYearParts.join('|') + ')');
+  if (dyParts.length === 1) parts.push(dyParts[0]);
+  else if (dyParts.length > 1) parts.push('(' + dyParts.join('|') + ')');
 
   // Exclusions
-  [...SB.kwExclude, ...SB_COMC_KW_EXCL].forEach(k => parts.push('-' + k));
-  SB.teamsExclude.forEach(t => parts.push('-' + (t.includes(' ') ? `"${t}"` : t)));
-  SB.sportsExclude.forEach(s => parts.push('-' + s.toLowerCase()));
-
-  // Decade/year exclude
-  const decYrExcl = [];
-  SB.decadesExclude.forEach(d => decYrExcl.push(d + '*'));
-  SB.yearsExclude.forEach(y => decYrExcl.push(y));
-  decYrExcl.forEach(v => parts.push('-' + v));
-
-  // COMC quality exclusion
+  [...kwExcl, ...SB.kwCustomExclude].forEach(k => parts.push('-' + k));
+  SB.sports.filter(s => s.mode === 'exclude').forEach(s => parts.push('-' + s.name.toLowerCase()));
+  SB.teams.filter(t => t.mode === 'exclude').forEach(t => parts.push('-' + (t.name.includes(' ') ? `"${t.name}"` : t.name)));
+  SB.decadesExclude.forEach(d => parts.push('-' + d + '*'));
+  SB.yearsExclude.forEach(y => parts.push('-' + y));
   if (SB.comcExcludeQuality) parts.push('-COMC');
 
   return parts.join(' ');
+}
+
+function sbBuildComcURL() {
+  const query = sbBuildComcQuery();
+  if (!query) return '';
+  const encoded = sbEncodeComc(query);
+  let url = 'https://www.comc.com/Cards,sr,';
+  if (SB.comcListingType === 'all')          url += `+(${encoded}),i100`;
+  if (SB.comcListingType === 'bin')          url += `+(${encoded}),fb,i100`;
+  if (SB.comcListingType === 'auction')      url += `+(${encoded}),fa,i100`;
+  if (SB.comcListingType === 'soldout')      url += `+(${encoded}),ot,i100`;
+  if (SB.comcListingType === 'auctionsoldout') url += `+(${encoded}),ot,fa,i100`;
+  return url;
 }
 
 function sbEncodeComc(query) {
@@ -403,12 +311,109 @@ function sbEncodeComc(query) {
 }
 
 // =============================================================================
-// SECTION 5: RENDER (lines ~283-460)
+// SECTION 5: CLOUDFLARE KV SYNC (~313-365)
+// =============================================================================
+
+async function sbLoadFromKV() {
+  try {
+    const res = await fetch(`${SB_WORKER}/sb-data`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.savedSearches) SB.savedSearches = data.savedSearches;
+    if (data.favSellers)    SB.ebayFavSellers = data.favSellers;
+  } catch(e) {}
+}
+
+async function sbSaveToKV() {
+  try {
+    await fetch(`${SB_WORKER}/sb-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ savedSearches: SB.savedSearches, favSellers: SB.ebayFavSellers })
+    });
+  } catch(e) {}
+}
+
+// =============================================================================
+// SECTION 6: SAVED SEARCHES (~368-420)
+// =============================================================================
+
+function sbSerializeState() {
+  return {
+    players: SB.players,
+    kwState: SB.kwState,
+    kwLogic: SB.kwLogic,
+    kwCustomInclude: SB.kwCustomInclude,
+    kwCustomExclude: SB.kwCustomExclude,
+    decadesInclude: [...SB.decadesInclude],
+    decadesExclude: [...SB.decadesExclude],
+    yearsInclude: [...SB.yearsInclude],
+    yearsExclude: [...SB.yearsExclude],
+    yearRangeInclude: SB.yearRangeInclude,
+    teams: SB.teams,
+    sports: SB.sports,
+    ebayListingType: SB.ebayListingType,
+    ebayUSOnly: SB.ebayUSOnly,
+    ebaySort: SB.ebaySort,
+    ebayPriceMin: SB.ebayPriceMin,
+    ebayPriceMax: SB.ebayPriceMax,
+    ebaySellers: SB.ebaySellers,
+    comcListingType: SB.comcListingType,
+    comcExcludeQuality: SB.comcExcludeQuality,
+  };
+}
+
+function sbRestoreState(s) {
+  SB.players          = s.players || [];
+  SB.kwState          = s.kwState || {};
+  SB.kwLogic          = s.kwLogic || 'OR';
+  SB.kwCustomInclude  = s.kwCustomInclude || [];
+  SB.kwCustomExclude  = s.kwCustomExclude || [];
+  SB.decadesInclude   = new Set(s.decadesInclude || []);
+  SB.decadesExclude   = new Set(s.decadesExclude || []);
+  SB.yearsInclude     = new Set(s.yearsInclude || []);
+  SB.yearsExclude     = new Set(s.yearsExclude || []);
+  SB.yearRangeInclude = s.yearRangeInclude || { from:'', to:'' };
+  SB.teams            = s.teams || [];
+  SB.sports           = s.sports || [];
+  SB.ebayListingType  = s.ebayListingType || 'all';
+  SB.ebayUSOnly       = s.ebayUSOnly || false;
+  SB.ebaySort         = s.ebaySort || 'newest';
+  SB.ebayPriceMin     = s.ebayPriceMin || '';
+  SB.ebayPriceMax     = s.ebayPriceMax || '';
+  SB.ebaySellers      = s.ebaySellers || [];
+  SB.comcListingType  = s.comcListingType || 'all';
+  SB.comcExcludeQuality = s.comcExcludeQuality || false;
+}
+
+function sbSaveSearch() {
+  const name = prompt('Name this search:');
+  if (!name || !name.trim()) return;
+  SB.savedSearches.push({ name: name.trim(), state: sbSerializeState(), ts: Date.now() });
+  sbSaveToKV();
+  sbRender();
+}
+
+function sbLoadSearch(i) {
+  sbRestoreState(SB.savedSearches[i].state);
+  sbRender();
+}
+
+function sbDeleteSearch(i) {
+  SB.savedSearches.splice(i, 1);
+  sbSaveToKV();
+  sbRender();
+}
+
+// =============================================================================
+// SECTION 7: RENDER (~423-600)
 // =============================================================================
 
 function sbRender() {
   const el = document.getElementById('sb-root');
   if (!el) return;
+
+  const decMode = SB.decadeMode;
 
   el.innerHTML = `
     <div class="sb-sticky-reset">
@@ -416,204 +421,206 @@ function sbRender() {
     </div>
     <div class="sb-wrap">
 
+      <!-- Presets & Saved Searches -->
+      <div class="sb-section">
+        <div class="sb-section-title">Presets & Saved Searches</div>
+        <div class="sb-presets">
+          <button class="sb-preset-btn" onclick="sbApplyPreset(5.0)">BS ≥ 5.0</button>
+          <button class="sb-preset-btn" onclick="sbApplyPreset(4.5)">BS ≥ 4.5</button>
+          <button class="sb-preset-btn" onclick="sbApplyPreset(4.0)">BS ≥ 4.0</button>
+        </div>
+        ${SB.savedSearches.length ? `
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+            ${SB.savedSearches.map((s,i) => `
+              <div style="display:flex;align-items:center;gap:4px;background:var(--acc-bg);border-radius:20px;padding:4px 10px">
+                <button style="background:none;border:none;color:var(--acc);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;padding:0" onclick="sbLoadSearch(${i})">${s.name}</button>
+                <button style="background:none;border:none;color:var(--tx3);font-size:13px;cursor:pointer;padding:0;line-height:1" onclick="sbDeleteSearch(${i})">×</button>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+
       <!-- Player Pool -->
       <div class="sb-section">
         <div class="sb-section-title">Player Pool</div>
-        <div class="sb-presets">
-          ${SB.presets.map(p => `<button class="sb-preset-btn" onclick="sbApplyPreset(${p.minScore})">${p.label}</button>`).join('')}
-        </div>
         <div class="sb-typeahead">
-          <input id="sb-search" placeholder="Search prospects & portfolio…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="sbOnSearch(this.value)" onblur="sbHideDD()">
+          <input id="sb-search" placeholder="Search or type player name, press Enter to add…"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            oninput="sbOnSearch(this.value)"
+            onkeydown="if(event.key==='Enter'){sbAddFromInput();}"
+            onblur="sbHideDD()">
           <div class="sb-dropdown" id="sb-dd" style="display:none"></div>
         </div>
-        <div class="sb-row" style="margin-bottom:10px">
-          <input class="sb-input" id="sb-manual" placeholder="Add player manually…" style="flex:1" autocorrect="off" autocapitalize="words" spellcheck="false">
-          <button class="sb-preset-btn" style="flex-shrink:0" onclick="sbAddManual()">Add</button>
-        </div>
         <div class="sb-pool" id="sb-pool">
-          <span class="sb-empty">No players added yet</span>
+          ${SB.players.length
+            ? SB.players.map((p,i) => `<span class="sb-chip">${p.name}<button class="sb-chip-x" onclick="sbRemovePlayer(${i})">×</button></span>`).join('')
+            : '<span class="sb-empty">No players added yet</span>'
+          }
         </div>
       </div>
 
-      <!-- Keywords: Include -->
+      <!-- Keywords -->
       <div class="sb-section">
-        <div class="sb-section-title">Keywords — Include</div>
-        <div class="sb-and-or">
-          <button class="${SB.kwLogic==='OR'?'on':''}" onclick="sbSetLogic('OR')">OR</button>
-          <button class="${SB.kwLogic==='AND'?'on':''}" onclick="sbSetLogic('AND')">AND</button>
+        <div class="sb-section-title">Keywords</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span class="sb-label">Logic:</span>
+          <div class="sb-and-or">
+            <button class="${SB.kwLogic==='OR'?'on':''}" onclick="sbSetLogic('OR')">OR</button>
+            <button class="${SB.kwLogic==='AND'?'on':''}" onclick="sbSetLogic('AND')">AND</button>
+          </div>
         </div>
-        <div class="sb-section-title" style="margin-top:4px;margin-bottom:6px">Shared (eBay + COMC)</div>
         <div class="sb-kw-grid">
-          ${SB_KEYWORDS.filter(k=>k.both).map(k=>`
-            <button class="sb-kw-btn ${SB.kwInclude.has(k.id)?'on':''}" onclick="sbToggleKw('${k.id}','include')">${k.label}</button>
-          `).join('')}
+          ${SB_KEYWORDS.map(k => {
+            const st = SB.kwState[k.id];
+            const cls = st === 'include' ? 'on' : st === 'exclude' ? 'excl' : '';
+            const note = k.ebay === 'feature' ? ' ⓔ' : k.ebay === null ? ' ⓒ' : '';
+            return `<button class="sb-kw-btn ${cls}" onclick="sbCycleKw('${k.id}')" title="${k.ebay===null?'COMC only':k.comc===null?'eBay only':'Both platforms'}">${k.label}${note}</button>`;
+          }).join('')}
         </div>
-        <div class="sb-section-title" style="margin-top:10px;margin-bottom:6px">eBay Filters</div>
-        <div class="sb-kw-grid">
-          ${SB_EBAY_FEATURES.map(f=>`
-            <button class="sb-kw-btn ${SB_EBAY_FEATURES_INCL.has(f.id)?'on':''}" onclick="sbToggleEbayFeature('${f.id}','include')">${f.label}</button>
-          `).join('')}
+        <div style="font-size:10px;color:var(--tx3);margin-top:6px;margin-bottom:10px">Tap once = Include (green) · Tap twice = Exclude (red) · Tap again = Off · ⓔ = eBay filter · ⓒ = COMC only</div>
+        <div class="sb-row">
+          <input class="sb-input" id="sb-kw-custom" placeholder="Custom keyword…" autocorrect="off" autocapitalize="off">
+          <button class="sb-preset-btn" onclick="sbAddCustomKw('include')">+ Include</button>
+          <button class="sb-preset-btn" style="background:#FCEBEB;color:var(--dn);border-color:var(--dn)" onclick="sbAddCustomKw('exclude')">− Exclude</button>
         </div>
-        <div class="sb-section-title" style="margin-top:10px;margin-bottom:6px">COMC Only</div>
-        <div class="sb-kw-grid">
-          ${SB_KEYWORDS.filter(k=>k.comcOnly).map(k=>`
-            <button class="sb-kw-btn ${SB.kwInclude.has(k.id)?'on':''}" onclick="sbToggleKw('${k.id}','include')">${k.label}</button>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- Keywords: Exclude -->
-      <div class="sb-section">
-        <div class="sb-section-title">Keywords — Exclude</div>
-        <div class="sb-section-title" style="margin-top:4px;margin-bottom:6px">Shared (eBay + COMC)</div>
-        <div class="sb-kw-grid">
-          ${SB_KEYWORDS.filter(k=>k.both).map(k=>`
-            <button class="sb-kw-btn ${SB.kwExclude.has(k.id)?'excl':''}" onclick="sbToggleKw('${k.id}','exclude')">${k.label}</button>
-          `).join('')}
-        </div>
-        <div class="sb-section-title" style="margin-top:10px;margin-bottom:6px">eBay Filters</div>
-        <div class="sb-kw-grid">
-          ${SB_EBAY_FEATURES.map(f=>`
-            <button class="sb-kw-btn ${SB_EBAY_FEATURES_EXCL.has(f.id)?'excl':''}" onclick="sbToggleEbayFeature('${f.id}','exclude')">${f.label}</button>
-          `).join('')}
-        </div>
-        <div class="sb-section-title" style="margin-top:10px;margin-bottom:6px">COMC Only</div>
-        <div class="sb-kw-grid">
-          ${SB_KEYWORDS.filter(k=>k.comcOnly).map(k=>`
-            <button class="sb-kw-btn ${SB.kwExclude.has(k.id)?'excl':''}" onclick="sbToggleKw('${k.id}','exclude')">${k.label}</button>
-          `).join('')}
-        </div>
+        ${SB.kwCustomInclude.length || SB.kwCustomExclude.length ? `
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+            ${SB.kwCustomInclude.map((k,i) => `<span class="sb-chip">${k}<button class="sb-chip-x" onclick="sbRemoveCustomKw('include',${i})">×</button></span>`).join('')}
+            ${SB.kwCustomExclude.map((k,i) => `<span class="sb-chip" style="background:#FCEBEB;color:var(--dn)">-${k}<button class="sb-chip-x" style="color:var(--dn)" onclick="sbRemoveCustomKw('exclude',${i})">×</button></span>`).join('')}
+          </div>
+        ` : ''}
       </div>
 
       <!-- Sport & Team -->
       <div class="sb-section">
         <div class="sb-section-title">Sport & Team</div>
-        ${sbRenderTagInput('sport','Sport Include',SB.sportsInclude,SB_SPORT_OPTIONS,'sbAddSport','sbRemoveSport')}
-        ${sbRenderTagInput('sport-excl','Sport Exclude',SB.sportsExclude,SB_SPORT_OPTIONS,'sbAddSportExcl','sbRemoveSportExcl')}
-        ${sbRenderTagInput('team','Team Include',SB.teamsInclude,SB_TEAM_OPTIONS,'sbAddTeam','sbRemoveTeam')}
-        ${sbRenderTagInput('team-excl','Team Exclude',SB.teamsExclude,SB_TEAM_OPTIONS,'sbAddTeamExcl','sbRemoveTeamExcl')}
+        ${sbRenderTagSection('sport', 'Sport', SB.sports, SB_SPORT_OPTIONS)}
+        ${sbRenderTagSection('team', 'Team', SB.teams, SB_TEAM_OPTIONS)}
       </div>
 
       <!-- Year / Decade -->
       <div class="sb-section">
-        <div class="sb-section-title">Year / Decade — Include</div>
+        <div class="sb-section-title">Year / Decade</div>
+        <div class="sb-and-or" style="margin-bottom:10px">
+          <button class="${decMode==='include'?'on':''}" onclick="SB.decadeMode='include';sbRender()">Include</button>
+          <button class="${decMode==='exclude'?'on':''}" onclick="SB.decadeMode='exclude';sbRender()">Exclude</button>
+        </div>
         <div class="sb-year-chips">
-          ${SB_DECADES.map(d=>`<button class="sb-year-chip ${SB.decadesInclude.has(d.val)?'on':''}" onclick="sbToggleDecade('${d.val}','include')">${d.label}</button>`).join('')}
+          ${SB_DECADES.map(d => {
+            const active = decMode === 'include' ? SB.decadesInclude.has(d.val) : SB.decadesExclude.has(d.val);
+            return `<button class="sb-year-chip ${active?'on':''}" onclick="sbToggleDecade('${d.val}')">${d.label}</button>`;
+          }).join('')}
         </div>
         <div class="sb-row" style="margin-top:8px">
-          <span class="sb-label">Years</span>
-          <input class="sb-input" id="sb-yr-incl" placeholder="e.g. 2021,2022" style="flex:1" autocorrect="off">
-          <button class="sb-preset-btn" onclick="sbAddYears('include')">Add</button>
+          <input class="sb-input" id="sb-yr-inp" placeholder="Years e.g. 2021,2022" style="flex:1" autocorrect="off">
+          <button class="sb-preset-btn" onclick="sbAddYears()">Add</button>
         </div>
-        <div class="sb-year-chips" id="sb-yr-incl-chips">
-          ${[...SB.yearsInclude].map(y=>`<button class="sb-year-chip on" onclick="sbRemoveYear('${y}','include')">${y} ×</button>`).join('')}
-        </div>
-        <div class="sb-row" style="margin-top:8px">
-          <span class="sb-label">Range</span>
-          <input class="sb-input" id="sb-yr-from" placeholder="From" style="width:70px;flex:none" autocorrect="off">
-          <span class="sb-label">–</span>
-          <input class="sb-input" id="sb-yr-to" placeholder="To" style="width:70px;flex:none" autocorrect="off">
-          <button class="sb-preset-btn" onclick="sbSetRange('include')">Set</button>
-        </div>
-        ${SB.yearRangeInclude.from ? `<div style="font-size:12px;color:var(--acc);margin-top:4px">${SB.yearRangeInclude.from}–${SB.yearRangeInclude.to} <button onclick="sbClearRange('include')" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:12px">×</button></div>` : ''}
-
-        <div class="sb-section-title" style="margin-top:12px">Year / Decade — Exclude</div>
-        <div class="sb-year-chips">
-          ${SB_DECADES.map(d=>`<button class="sb-year-chip ${SB.decadesExclude.has(d.val)?'on':''}" onclick="sbToggleDecade('${d.val}','exclude')">${d.label}</button>`).join('')}
-        </div>
-        <div class="sb-row" style="margin-top:8px">
-          <span class="sb-label">Years</span>
-          <input class="sb-input" id="sb-yr-excl" placeholder="e.g. 2019,2020" style="flex:1" autocorrect="off">
-          <button class="sb-preset-btn" onclick="sbAddYears('exclude')">Add</button>
-        </div>
-        <div class="sb-year-chips" id="sb-yr-excl-chips">
-          ${[...SB.yearsExclude].map(y=>`<button class="sb-year-chip on" onclick="sbRemoveYear('${y}','exclude')">${y} ×</button>`).join('')}
-        </div>
-      </div>
-
-      <!-- eBay Filters -->
-      <div class="sb-section">
-        <div class="sb-section-title">eBay Filters</div>
-        <div class="sb-row">
-          <span class="sb-label">Listing Type</span>
-          <select class="sb-select" onchange="SB.ebayListingType=this.value;sbUpdateOutput()">
-            <option value="all" ${SB.ebayListingType==='all'?'selected':''}>All Listings</option>
-            <option value="auction" ${SB.ebayListingType==='auction'?'selected':''}>Auction</option>
-            <option value="bin" ${SB.ebayListingType==='bin'?'selected':''}>Buy It Now</option>
-          </select>
-        </div>
-        <div class="sb-row">
-          <span class="sb-label">Sort</span>
-          <select class="sb-select" onchange="SB.ebaySort=this.value;sbUpdateOutput()">
-            <option value="newest" ${SB.ebaySort==='newest'?'selected':''}>Newly Listed</option>
-            <option value="ending" ${SB.ebaySort==='ending'?'selected':''}>Ending Soonest</option>
-          </select>
-        </div>
-        <div class="sb-toggle-row">
-          <span class="sb-toggle-label">US Only</span>
-          <label class="sb-toggle"><input type="checkbox" ${SB.ebayUSOnly?'checked':''} onchange="SB.ebayUSOnly=this.checked;sbUpdateOutput()"><span class="sb-toggle-slider"></span></label>
-        </div>
-        <div class="sb-row" style="margin-top:8px">
-          <span class="sb-label">Price</span>
-          <input class="sb-input" id="sb-price-min" placeholder="Min $" style="width:70px;flex:none" type="number" value="${SB.ebayPriceMin}" onchange="SB.ebayPriceMin=this.value;sbUpdateOutput()">
-          <span class="sb-label">–</span>
-          <input class="sb-input" id="sb-price-max" placeholder="Max $" style="width:70px;flex:none" type="number" value="${SB.ebayPriceMax}" onchange="SB.ebayPriceMax=this.value;sbUpdateOutput()">
-        </div>
-        <div class="sb-section-title" style="margin-top:10px">Sellers</div>
-        <div id="sb-seller-chips" class="sb-seller-row" style="flex-wrap:wrap;gap:6px">
-          ${SB.ebaySellers.map((s,i)=>`
-            <span class="sb-seller-chip" style="${s.exclude?'background:#FCEBEB;color:var(--dn)':''}">
-              ${s.exclude?'excl: ':''}${s.name}
-              <button class="sb-seller-x" onclick="sbRemoveSeller(${i})">×</button>
-            </span>
-          `).join('')}
+        <div class="sb-year-chips" style="margin-top:4px">
+          ${[...SB.yearsInclude].map(y=>`<span class="sb-chip" style="font-size:11px">${y}<button class="sb-chip-x" onclick="SB.yearsInclude.delete('${y}');sbRender()">×</button></span>`).join('')}
+          ${[...SB.yearsExclude].map(y=>`<span class="sb-chip" style="font-size:11px;background:#FCEBEB;color:var(--dn)">-${y}<button class="sb-chip-x" style="color:var(--dn)" onclick="SB.yearsExclude.delete('${y}');sbRender()">×</button></span>`).join('')}
         </div>
         <div class="sb-row" style="margin-top:6px">
-          <select class="sb-select" id="sb-seller-fav">
-            <option value="">Favorites…</option>
-            ${SB.ebayFavSellers.map(s=>`<option value="${s}">${s}</option>`).join('')}
-          </select>
-          <select class="sb-select" id="sb-seller-mode" style="width:90px;flex:none">
-            <option value="include">Include</option>
-            <option value="exclude">Exclude</option>
-          </select>
-          <button class="sb-preset-btn" onclick="sbAddSellerFromFav()">Add</button>
-        </div>
-        <div class="sb-row">
-          <input class="sb-input" id="sb-seller-custom" placeholder="Custom seller…" autocorrect="off" autocapitalize="off">
-          <select class="sb-select" id="sb-seller-cmode" style="width:90px;flex:none">
-            <option value="include">Include</option>
-            <option value="exclude">Exclude</option>
-          </select>
-          <button class="sb-preset-btn" onclick="sbAddSellerCustom()">Add</button>
-        </div>
-        <div class="sb-row" style="margin-top:2px">
-          <button class="sb-preset-btn" style="font-size:11px;color:var(--tx3)" onclick="sbSaveFavSeller()">⭐ Save custom as favorite</button>
+          <span class="sb-label">Range</span>
+          <input class="sb-input" id="sb-yr-from" placeholder="From" style="width:70px;flex:none" value="${SB.yearRangeInclude.from}" autocorrect="off">
+          <span class="sb-label">–</span>
+          <input class="sb-input" id="sb-yr-to" placeholder="To" style="width:70px;flex:none" value="${SB.yearRangeInclude.to}" autocorrect="off">
+          <button class="sb-preset-btn" onclick="sbSetRange()">Set</button>
+          ${SB.yearRangeInclude.from ? `<button class="sb-preset-btn" style="color:var(--tx3)" onclick="SB.yearRangeInclude={from:'',to:''};sbRender()">Clear</button>` : ''}
         </div>
       </div>
 
-      <!-- COMC Filters -->
+      <!-- eBay Filters (collapsible) -->
       <div class="sb-section">
-        <div class="sb-section-title">COMC Filters</div>
-        <div class="sb-row">
-          <span class="sb-label">Listing Type</span>
-          <select class="sb-select" onchange="SB.comcListingType=this.value;sbUpdateOutput()">
-            <option value="all" ${SB.comcListingType==='all'?'selected':''}>All Listings</option>
-            <option value="auction" ${SB.comcListingType==='auction'?'selected':''}>Auction</option>
-            <option value="bin" ${SB.comcListingType==='bin'?'selected':''}>Buy It Now</option>
-            <option value="soldout" ${SB.comcListingType==='soldout'?'selected':''}>All + Sold Out</option>
-            <option value="auctionsoldout" ${SB.comcListingType==='auctionsoldout'?'selected':''}>Auction + Sold Out</option>
-          </select>
-        </div>
-        <div class="sb-toggle-row" style="margin-top:8px">
-          <span class="sb-toggle-label">Exclude COMC Quality Listings (-COMC)</span>
-          <label class="sb-toggle"><input type="checkbox" ${SB.comcExcludeQuality?'checked':''} onchange="SB.comcExcludeQuality=this.checked;sbUpdateOutput()"><span class="sb-toggle-slider"></span></label>
-        </div>
+        <button class="sb-collapse-btn" onclick="SB.ebayOpen=!SB.ebayOpen;sbRender()">
+          <span>eBay Filters</span><span>${SB.ebayOpen?'▲':'▼'}</span>
+        </button>
+        ${SB.ebayOpen ? `
+          <div style="margin-top:10px">
+            <div class="sb-row">
+              <span class="sb-label">Listing</span>
+              <select class="sb-select" onchange="SB.ebayListingType=this.value;sbUpdateOutput()">
+                <option value="all" ${SB.ebayListingType==='all'?'selected':''}>All</option>
+                <option value="auction" ${SB.ebayListingType==='auction'?'selected':''}>Auction</option>
+                <option value="bin" ${SB.ebayListingType==='bin'?'selected':''}>Buy It Now</option>
+              </select>
+              <span class="sb-label">Sort</span>
+              <select class="sb-select" onchange="SB.ebaySort=this.value;sbUpdateOutput()">
+                <option value="newest" ${SB.ebaySort==='newest'?'selected':''}>Newest</option>
+                <option value="ending" ${SB.ebaySort==='ending'?'selected':''}>Ending</option>
+              </select>
+            </div>
+            <div class="sb-toggle-row">
+              <span class="sb-toggle-label">US Only</span>
+              <label class="sb-toggle"><input type="checkbox" ${SB.ebayUSOnly?'checked':''} onchange="SB.ebayUSOnly=this.checked;sbUpdateOutput()"><span class="sb-toggle-slider"></span></label>
+            </div>
+            <div class="sb-row" style="margin-top:8px">
+              <span class="sb-label">Price</span>
+              <input class="sb-input" placeholder="Min $" style="width:70px;flex:none" type="number" value="${SB.ebayPriceMin}" onchange="SB.ebayPriceMin=this.value;sbUpdateOutput()">
+              <span class="sb-label">–</span>
+              <input class="sb-input" placeholder="Max $" style="width:70px;flex:none" type="number" value="${SB.ebayPriceMax}" onchange="SB.ebayPriceMax=this.value;sbUpdateOutput()">
+            </div>
+            <div class="sb-section-title" style="margin-top:10px">Sellers</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+              ${SB.ebaySellers.map((s,i)=>`
+                <span class="sb-seller-chip" style="${s.exclude?'background:#FCEBEB;color:var(--dn)':''}">
+                  ${s.exclude?'excl: ':''}${s.name}
+                  <button class="sb-seller-x" onclick="sbRemoveSeller(${i})">×</button>
+                </span>
+              `).join('')}
+            </div>
+            <div class="sb-row">
+              <select class="sb-select" id="sb-seller-fav">
+                <option value="">Favorites…</option>
+                ${SB.ebayFavSellers.map(s=>`<option value="${s}">${s}</option>`).join('')}
+              </select>
+              <select class="sb-select" id="sb-seller-mode" style="width:90px;flex:none">
+                <option value="include">Include</option>
+                <option value="exclude">Exclude</option>
+              </select>
+              <button class="sb-preset-btn" onclick="sbAddSellerFromFav()">Add</button>
+            </div>
+            <div class="sb-row" style="margin-top:4px">
+              <input class="sb-input" id="sb-seller-custom" placeholder="Custom seller…" autocorrect="off" autocapitalize="off">
+              <select class="sb-select" id="sb-seller-cmode" style="width:90px;flex:none">
+                <option value="include">Include</option>
+                <option value="exclude">Exclude</option>
+              </select>
+              <button class="sb-preset-btn" onclick="sbAddSellerCustom()">Add</button>
+            </div>
+            <div class="sb-row" style="margin-top:4px">
+              <button class="sb-preset-btn" style="font-size:11px;color:var(--tx3)" onclick="sbSaveFavSeller()">⭐ Save as favorite</button>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- COMC Filters (collapsible) -->
+      <div class="sb-section">
+        <button class="sb-collapse-btn" onclick="SB.comcOpen=!SB.comcOpen;sbRender()">
+          <span>COMC Filters</span><span>${SB.comcOpen?'▲':'▼'}</span>
+        </button>
+        ${SB.comcOpen ? `
+          <div style="margin-top:10px">
+            <div class="sb-row">
+              <span class="sb-label">Listing</span>
+              <select class="sb-select" onchange="SB.comcListingType=this.value;sbUpdateOutput()">
+                <option value="all" ${SB.comcListingType==='all'?'selected':''}>All</option>
+                <option value="auction" ${SB.comcListingType==='auction'?'selected':''}>Auction</option>
+                <option value="bin" ${SB.comcListingType==='bin'?'selected':''}>Buy It Now</option>
+                <option value="soldout" ${SB.comcListingType==='soldout'?'selected':''}>All + Sold Out</option>
+                <option value="auctionsoldout" ${SB.comcListingType==='auctionsoldout'?'selected':''}>Auction + Sold Out</option>
+              </select>
+            </div>
+            <div class="sb-toggle-row" style="margin-top:8px">
+              <span class="sb-toggle-label">Exclude COMC Quality (-COMC)</span>
+              <label class="sb-toggle"><input type="checkbox" ${SB.comcExcludeQuality?'checked':''} onchange="SB.comcExcludeQuality=this.checked;sbUpdateOutput()"><span class="sb-toggle-slider"></span></label>
+            </div>
+          </div>
+        ` : ''}
       </div>
 
       <!-- Output -->
-      
-
       <div class="sb-output">
         <div class="sb-output-platform">eBay</div>
         <div class="sb-output-string" id="sb-out-ebay-str">—</div>
@@ -630,57 +637,91 @@ function sbRender() {
           <button class="sb-out-btn sb-open-comc" onclick="sbOpen('comc')">Open in COMC</button>
         </div>
       </div>
+      <button class="sb-preset-btn" style="width:100%;margin-bottom:20px;background:var(--acc-bg);color:var(--acc);border-color:var(--acc)" onclick="sbSaveSearch()">💾 Save This Search</button>
 
     </div>
   `;
 
-  sbUpdatePool();
   sbUpdateOutput();
 }
 
 // =============================================================================
-// SECTION 6: TAG INPUT HELPER (lines ~463-490)
+// SECTION 8: TAG SECTION HELPER (~603-640)
 // =============================================================================
 
-function sbRenderTagInput(id, label, arr, options, addFn, removeFn) {
+function sbRenderTagSection(id, label, arr, options) {
   return `
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:12px">
       <div class="sb-section-title" style="margin-bottom:6px">${label}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-        ${arr.map((v,i)=>`<span class="sb-seller-chip">${v}<button class="sb-seller-x" onclick="${removeFn}(${i})">×</button></span>`).join('')}
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+        ${arr.map((v,i) => `
+          <span class="sb-seller-chip" style="${v.mode==='exclude'?'background:#FCEBEB;color:var(--dn)':'background:var(--acc-bg);color:var(--acc)'}">
+            ${v.mode==='exclude'?'-':''}${v.name}
+            <button class="sb-seller-x" style="${v.mode==='exclude'?'color:var(--dn)':'color:var(--acc)'}" onclick="sbRemoveTag('${id}',${i})">×</button>
+          </span>
+        `).join('')}
       </div>
       <div class="sb-row">
         <select class="sb-select" id="sb-sel-${id}">
           <option value="">Select…</option>
           ${options.map(o=>`<option value="${o}">${o}</option>`).join('')}
         </select>
-        <button class="sb-preset-btn" onclick="${addFn}()">Add</button>
+        <select class="sb-select" id="sb-mode-${id}" style="width:90px;flex:none">
+          <option value="include">Include</option>
+          <option value="exclude">Exclude</option>
+        </select>
+        <button class="sb-preset-btn" onclick="sbAddTag('${id}')">Add</button>
       </div>
       <div class="sb-row" style="margin-top:4px">
         <input class="sb-input" id="sb-inp-${id}" placeholder="Or type manually…" autocorrect="off" autocapitalize="words">
-        <button class="sb-preset-btn" onclick="${addFn}('manual')">Add</button>
+        <button class="sb-preset-btn" onclick="sbAddTag('${id}','manual')">Add</button>
       </div>
     </div>
   `;
 }
 
 // =============================================================================
-// SECTION 7: POOL MANAGEMENT (lines ~493-540)
+// SECTION 9: PLAYER POOL HANDLERS (~643-690)
 // =============================================================================
 
-function sbUpdatePool() {
-  const el = document.getElementById('sb-pool');
-  if (!el) return;
-  if (!SB.players.length) {
-    el.innerHTML = '<span class="sb-empty">No players added yet</span>';
-    return;
-  }
-  el.innerHTML = SB.players.map((p, i) => `
-    <span class="sb-chip">
-      ${p.name}
-      <button class="sb-chip-x" onclick="sbRemovePlayer(${i})">×</button>
-    </span>
-  `).join('');
+let _sbAllPlayers = null;
+let _sbDDTimeout = null;
+
+function sbOnSearch(val) {
+  clearTimeout(_sbDDTimeout);
+  const dd = document.getElementById('sb-dd');
+  if (!dd) return;
+  if (!val || val.length < 2) { dd.style.display = 'none'; return; }
+  if (!_sbAllPlayers) _sbAllPlayers = sbGetAllPlayerNames();
+  const q = val.toLowerCase();
+  const matches = _sbAllPlayers.filter(p => p.name.toLowerCase().includes(q)).slice(0, 20);
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(p =>
+    `<div class="sb-dd-item" onmousedown="sbAddPlayer('${p.name.replace(/'/g,"\\'")}','${p.source}')">
+      ${p.name} <span class="sb-dd-badge">${p.source}</span>
+    </div>`
+  ).join('');
+  dd.style.display = 'block';
+}
+
+function sbHideDD() {
+  _sbDDTimeout = setTimeout(() => {
+    const dd = document.getElementById('sb-dd');
+    if (dd) dd.style.display = 'none';
+  }, 200);
+}
+
+function sbAddFromInput() {
+  const inp = document.getElementById('sb-search');
+  if (!inp || !inp.value.trim()) return;
+  // Check if it matches a known player
+  if (!_sbAllPlayers) _sbAllPlayers = sbGetAllPlayerNames();
+  const q = inp.value.trim().toLowerCase();
+  const match = _sbAllPlayers.find(p => p.name.toLowerCase() === q);
+  sbAddPlayer(match ? match.name : inp.value.trim(), match ? match.source : 'manual');
+  inp.value = '';
+  const dd = document.getElementById('sb-dd');
+  if (dd) dd.style.display = 'none';
 }
 
 function sbAddPlayer(name, source) {
@@ -698,187 +739,122 @@ function sbRemovePlayer(i) {
   sbUpdateOutput();
 }
 
+function sbUpdatePool() {
+  const el = document.getElementById('sb-pool');
+  if (!el) return;
+  if (!SB.players.length) { el.innerHTML = '<span class="sb-empty">No players added yet</span>'; return; }
+  el.innerHTML = SB.players.map((p,i) =>
+    `<span class="sb-chip">${p.name}<button class="sb-chip-x" onclick="sbRemovePlayer(${i})">×</button></span>`
+  ).join('');
+}
+
 function sbApplyPreset(minScore) {
   SB.players = sbGetBuyScorePlayers(minScore);
   sbUpdatePool();
   sbUpdateOutput();
 }
 
-function sbAddManual() {
-  const el = document.getElementById('sb-manual');
-  if (!el) return;
-  sbAddPlayer(el.value, 'manual');
-  el.value = '';
+// =============================================================================
+// SECTION 10: KEYWORD HANDLERS (~693-720)
+// =============================================================================
+
+function sbCycleKw(id) {
+  const cur = SB.kwState[id];
+  if (!cur)            SB.kwState[id] = 'include';
+  else if (cur === 'include') SB.kwState[id] = 'exclude';
+  else                 delete SB.kwState[id];
+  sbRender();
+}
+
+function sbSetLogic(val) { SB.kwLogic = val; sbRender(); }
+
+function sbAddCustomKw(mode) {
+  const inp = document.getElementById('sb-kw-custom');
+  if (!inp || !inp.value.trim()) return;
+  const val = inp.value.trim();
+  if (mode === 'include' && !SB.kwCustomInclude.includes(val)) SB.kwCustomInclude.push(val);
+  if (mode === 'exclude' && !SB.kwCustomExclude.includes(val)) SB.kwCustomExclude.push(val);
+  inp.value = '';
+  sbRender();
+}
+
+function sbRemoveCustomKw(mode, i) {
+  if (mode === 'include') SB.kwCustomInclude.splice(i, 1);
+  else SB.kwCustomExclude.splice(i, 1);
+  sbRender();
 }
 
 // =============================================================================
-// SECTION 8: TYPEAHEAD (lines ~543-590)
+// SECTION 11: SPORT / TEAM TAG HANDLERS (~723-755)
 // =============================================================================
 
-let _sbAllPlayers = null;
-let _sbDDTimeout = null;
-
-function sbOnSearch(val) {
-  clearTimeout(_sbDDTimeout);
-  const dd = document.getElementById('sb-dd');
-  if (!dd) return;
-  if (!val || val.length < 2) { dd.style.display = 'none'; return; }
-
-  if (!_sbAllPlayers) _sbAllPlayers = sbGetAllPlayerNames();
-
-  const q = val.toLowerCase();
-  const matches = _sbAllPlayers.filter(p => p.name.toLowerCase().includes(q)).slice(0, 20);
-
-  if (!matches.length) { dd.style.display = 'none'; return; }
-
-  dd.innerHTML = matches.map(p => `
-    <div class="sb-dd-item" onmousedown="sbAddPlayer('${p.name.replace(/'/g,"\\'")}','${p.source}')">
-      ${p.name} <span class="sb-dd-badge">${p.source}</span>
-    </div>
-  `).join('');
-  dd.style.display = 'block';
-}
-
-function sbHideDD() {
-  _sbDDTimeout = setTimeout(() => {
-    const dd = document.getElementById('sb-dd');
-    if (dd) dd.style.display = 'none';
-    const inp = document.getElementById('sb-search');
+function sbAddTag(type, manual) {
+  const arr = type === 'sport' ? SB.sports : SB.teams;
+  const options = type === 'sport' ? SB_SPORT_OPTIONS : SB_TEAM_OPTIONS;
+  const modeEl = document.getElementById(`sb-mode-${type}`);
+  const mode = modeEl ? modeEl.value : 'include';
+  let val;
+  if (manual === 'manual') {
+    const inp = document.getElementById(`sb-inp-${type}`);
+    val = inp ? inp.value.trim() : '';
     if (inp) inp.value = '';
-  }, 200);
-}
-
-// =============================================================================
-// SECTION 9: KEYWORD TOGGLES (lines ~593-635)
-// =============================================================================
-
-function sbToggleKw(id, mode) {
-  if (mode === 'include') {
-    SB.kwInclude.has(id) ? SB.kwInclude.delete(id) : SB.kwInclude.add(id);
-    SB.kwExclude.delete(id); // can't be both
   } else {
-    SB.kwExclude.has(id) ? SB.kwExclude.delete(id) : SB.kwExclude.add(id);
-    SB.kwInclude.delete(id);
+    const sel = document.getElementById(`sb-sel-${type}`);
+    val = sel ? sel.value : '';
   }
+  if (!val) return;
+  if (!arr.find(x => x.name === val)) arr.push({ name: val, mode });
   sbRender();
 }
 
-function sbToggleEbayFeature(id, mode) {
-  if (mode === 'include') {
-    SB_EBAY_FEATURES_INCL.has(id) ? SB_EBAY_FEATURES_INCL.delete(id) : SB_EBAY_FEATURES_INCL.add(id);
-    SB_EBAY_FEATURES_EXCL.delete(id);
-  } else {
-    SB_EBAY_FEATURES_EXCL.has(id) ? SB_EBAY_FEATURES_EXCL.delete(id) : SB_EBAY_FEATURES_EXCL.add(id);
-    SB_EBAY_FEATURES_INCL.delete(id);
-  }
-  sbRender();
-}
-
-function sbSetLogic(val) {
-  SB.kwLogic = val;
+function sbRemoveTag(type, i) {
+  if (type === 'sport') SB.sports.splice(i, 1);
+  else SB.teams.splice(i, 1);
   sbRender();
 }
 
 // =============================================================================
-// SECTION 10: SPORT / TEAM HANDLERS (lines ~638-690)
+// SECTION 12: YEAR / DECADE HANDLERS (~758-790)
 // =============================================================================
 
-function sbAddSport(manual) {
-  const val = manual === 'manual'
-    ? (document.getElementById('sb-inp-sport')||{}).value
-    : (document.getElementById('sb-sel-sport')||{}).value;
-  if (!val) return;
-  if (!SB.sportsInclude.includes(val)) SB.sportsInclude.push(val);
-  sbRender();
-}
-function sbRemoveSport(i) { SB.sportsInclude.splice(i,1); sbRender(); }
-
-function sbAddSportExcl(manual) {
-  const val = manual === 'manual'
-    ? (document.getElementById('sb-inp-sport-excl')||{}).value
-    : (document.getElementById('sb-sel-sport-excl')||{}).value;
-  if (!val) return;
-  if (!SB.sportsExclude.includes(val)) SB.sportsExclude.push(val);
-  sbRender();
-}
-function sbRemoveSportExcl(i) { SB.sportsExclude.splice(i,1); sbRender(); }
-
-function sbAddTeam(manual) {
-  const val = manual === 'manual'
-    ? (document.getElementById('sb-inp-team')||{}).value
-    : (document.getElementById('sb-sel-team')||{}).value;
-  if (!val) return;
-  if (!SB.teamsInclude.includes(val)) SB.teamsInclude.push(val);
-  sbRender();
-}
-function sbRemoveTeam(i) { SB.teamsInclude.splice(i,1); sbRender(); }
-
-function sbAddTeamExcl(manual) {
-  const val = manual === 'manual'
-    ? (document.getElementById('sb-inp-team-excl')||{}).value
-    : (document.getElementById('sb-sel-team-excl')||{}).value;
-  if (!val) return;
-  if (!SB.teamsExclude.includes(val)) SB.teamsExclude.push(val);
-  sbRender();
-}
-function sbRemoveTeamExcl(i) { SB.teamsExclude.splice(i,1); sbRender(); }
-
-// =============================================================================
-// SECTION 11: YEAR / DECADE HANDLERS (lines ~693-735)
-// =============================================================================
-
-function sbToggleDecade(val, mode) {
-  const set = mode === 'include' ? SB.decadesInclude : SB.decadesExclude;
+function sbToggleDecade(val) {
+  const incl = SB.decadeMode === 'include';
+  const set = incl ? SB.decadesInclude : SB.decadesExclude;
   set.has(val) ? set.delete(val) : set.add(val);
   sbRender();
 }
 
-function sbAddYears(mode) {
-  const id = mode === 'include' ? 'sb-yr-incl' : 'sb-yr-excl';
-  const el = document.getElementById(id);
-  if (!el) return;
-  const set = mode === 'include' ? SB.yearsInclude : SB.yearsExclude;
-  el.value.split(',').map(y => y.trim()).filter(Boolean).forEach(y => set.add(y));
-  el.value = '';
+function sbAddYears() {
+  const inp = document.getElementById('sb-yr-inp');
+  if (!inp) return;
+  inp.value.split(',').map(y => y.trim()).filter(Boolean).forEach(y => {
+    if (SB.decadeMode === 'include') SB.yearsInclude.add(y);
+    else SB.yearsExclude.add(y);
+  });
+  inp.value = '';
   sbRender();
 }
 
-function sbRemoveYear(val, mode) {
-  const set = mode === 'include' ? SB.yearsInclude : SB.yearsExclude;
-  set.delete(val);
-  sbRender();
-}
-
-function sbSetRange(mode) {
+function sbSetRange() {
   const from = (document.getElementById('sb-yr-from')||{}).value;
   const to   = (document.getElementById('sb-yr-to')||{}).value;
   if (!from || !to) return;
-  if (mode === 'include') SB.yearRangeInclude = { from, to };
-  sbRender();
-}
-
-function sbClearRange(mode) {
-  if (mode === 'include') SB.yearRangeInclude = { from:'', to:'' };
+  SB.yearRangeInclude = { from, to };
   sbRender();
 }
 
 // =============================================================================
-// SECTION 12: SELLER HANDLERS (lines ~738-790)
+// SECTION 13: SELLER HANDLERS (~793-840)
 // =============================================================================
 
-function sbRemoveSeller(i) {
-  SB.ebaySellers.splice(i, 1);
-  sbRender();
-}
+function sbRemoveSeller(i) { SB.ebaySellers.splice(i, 1); sbRender(); }
 
 function sbAddSellerFromFav() {
-  const sel = document.getElementById('sb-seller-fav');
+  const sel  = document.getElementById('sb-seller-fav');
   const mode = document.getElementById('sb-seller-mode');
   if (!sel || !sel.value) return;
   const exclude = mode && mode.value === 'exclude';
-  if (!SB.ebaySellers.find(s => s.name === sel.value)) {
-    SB.ebaySellers.push({ name: sel.value, exclude });
-  }
+  if (!SB.ebaySellers.find(s => s.name === sel.value)) SB.ebaySellers.push({ name: sel.value, exclude });
   sbRender();
 }
 
@@ -888,9 +864,7 @@ function sbAddSellerCustom() {
   if (!inp || !inp.value.trim()) return;
   const exclude = mode && mode.value === 'exclude';
   const name = inp.value.trim();
-  if (!SB.ebaySellers.find(s => s.name === name)) {
-    SB.ebaySellers.push({ name, exclude });
-  }
+  if (!SB.ebaySellers.find(s => s.name === name)) SB.ebaySellers.push({ name, exclude });
   inp.value = '';
   sbRender();
 }
@@ -901,37 +875,24 @@ function sbSaveFavSeller() {
   const name = inp.value.trim().toLowerCase();
   if (!SB.ebayFavSellers.includes(name)) {
     SB.ebayFavSellers.push(name);
-    try { localStorage.setItem(SB.FAV_KEY, JSON.stringify(SB.ebayFavSellers)); } catch(e){}
+    sbSaveToKV();
   }
   sbRender();
 }
 
-function sbLoadFavSellers() {
-  try {
-    const saved = localStorage.getItem(SB.FAV_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      parsed.forEach(s => { if (!SB.ebayFavSellers.includes(s)) SB.ebayFavSellers.push(s); });
-    }
-  } catch(e){}
-}
-
 // =============================================================================
-// SECTION 13: OUTPUT UPDATE & ACTIONS (lines ~793-830)
+// SECTION 14: OUTPUT UPDATE & ACTIONS (~843-890)
 // =============================================================================
 
 function sbUpdateOutput() {
-  const ebayStr  = document.getElementById('sb-out-ebay-str');
-  const comcStr  = document.getElementById('sb-out-comc-str');
-
+  const ebayStr = document.getElementById('sb-out-ebay-str');
+  const comcStr = document.getElementById('sb-out-comc-str');
   if (ebayStr) ebayStr.textContent = SB.players.length ? sbBuildEbayString() || '—' : '—';
   if (comcStr) comcStr.textContent = SB.players.length ? sbBuildComcQuery() || '—' : '—';
 }
 
 function sbCopy(platform) {
-  let text = '';
-  if (platform === 'ebay') text = sbBuildEbayString();
-  if (platform === 'comc') text = sbBuildComcQuery();
+  let text = platform === 'ebay' ? sbBuildEbayString() : sbBuildComcQuery();
   if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
     const btn = event.target;
@@ -939,69 +900,56 @@ function sbCopy(platform) {
     btn.textContent = 'Copied!';
     setTimeout(() => btn.textContent = orig, 1500);
   }).catch(() => {
-    // fallback
     const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
   });
 }
 
 function sbOpen(platform) {
-  let url = '';
-  if (platform === 'ebay') url = sbBuildEbayURL();
-  if (platform === 'comc') url = sbBuildComcURL();
-  if (!url) return;
-  window.open(url, '_blank');
+  const url = platform === 'ebay' ? sbBuildEbayURL() : sbBuildComcURL();
+  if (url) window.open(url, '_blank');
 }
 
 // =============================================================================
-// SECTION 14: INIT (lines ~833-860)
+// SECTION 15: RESET & INIT (~893-930)
 // =============================================================================
 
-function sbInit() {
-  sbLoadFavSellers();
-  // Invalidate player cache on init so it rebuilds fresh
-  _sbAllPlayers = null;
-}
-
-// Hook into the app's section switcher
-// Called from app.js setSection() when switching to searchbuilder
 function sbReset() {
-  SB.players = [];
-  SB.kwInclude = new Set();
-  SB.kwExclude = new Set();
-  SB.kwLogic = 'OR';
-  SB.decadesInclude = new Set();
-  SB.decadesExclude = new Set();
-  SB.yearsInclude = new Set();
-  SB.yearsExclude = new Set();
-  SB.yearRangeInclude = { from: '', to: '' };
-  SB.yearRangeExclude = { from: '', to: '' };
-  SB.teamsInclude = [];
-  SB.teamsExclude = [];
-  SB.sportsInclude = [];
-  SB.sportsExclude = [];
-  SB.ebayListingType = 'all';
-  SB.ebayUSOnly = false;
-  SB.ebaySort = 'newest';
-  SB.ebayPriceMin = '';
-  SB.ebayPriceMax = '';
-  SB.ebaySellers = [];
-  SB.comcListingType = 'all';
+  SB.players          = [];
+  SB.kwState          = {};
+  SB.kwLogic          = 'OR';
+  SB.kwCustomInclude  = [];
+  SB.kwCustomExclude  = [];
+  SB.decadeMode       = 'include';
+  SB.decadesInclude   = new Set();
+  SB.decadesExclude   = new Set();
+  SB.yearsInclude     = new Set();
+  SB.yearsExclude     = new Set();
+  SB.yearRangeInclude = { from:'', to:'' };
+  SB.teams            = [];
+  SB.sports           = [];
+  SB.ebayListingType  = 'all';
+  SB.ebayUSOnly       = false;
+  SB.ebaySort         = 'newest';
+  SB.ebayPriceMin     = '';
+  SB.ebayPriceMax     = '';
+  SB.ebaySellers      = [];
+  SB.comcListingType  = 'all';
   SB.comcExcludeQuality = false;
-  SB_EBAY_FEATURES_INCL.clear();
-  SB_EBAY_FEATURES_EXCL.clear();
-  SB_COMC_KW_INCL.clear();
-  SB_COMC_KW_EXCL.clear();
-  _sbAllPlayers = null;
+  SB.ebayOpen         = false;
+  SB.comcOpen         = false;
+  _sbAllPlayers       = null;
   sbRender();
 }
 
-function sbShow() {
-  sbInit();
+async function sbInit() {
+  _sbAllPlayers = null;
+  await sbLoadFromKV();
+}
+
+async function sbShow() {
+  await sbInit();
   const root = document.getElementById('sb-root');
   if (!root) return;
   sbRender();
