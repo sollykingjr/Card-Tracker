@@ -17,7 +17,7 @@ function setSection(s) {
   document.querySelectorAll('.top-tab').forEach(x => x.classList.remove('on'));
   document.querySelector(`.top-tab[data-s="${s}"]`).classList.add('on');
 
-const isWatch = s === 'watchlist';
+  const isWatch = s === 'watchlist';
   const isSB    = s === 'searchbuilder';
   document.getElementById('prospects-section').style.display = (isWatch || isSB) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? '' : 'none';
