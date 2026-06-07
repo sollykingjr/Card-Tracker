@@ -155,6 +155,9 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;bac
 .ct-serial{font-size:10px;color:var(--tx3);margin-top:4px}
 .port-player{cursor:pointer}
 /* ── Search Builder ───────────────────────────────────────────────────────── */
+.sb-sticky-reset{position:sticky;top:43px;z-index:8;background:var(--bg);padding:8px 14px;border-bottom:.5px solid var(--bdr)}
+.sb-sticky-reset button{width:100%;height:36px;border:.5px solid var(--dn);border-radius:8px;background:#FCEBEB;color:var(--dn);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+@media(prefers-color-scheme:dark){.sb-sticky-reset button{background:#3D1515;color:#FF8A8A;border-color:#FF8A8A}}
 .sb-wrap{padding:12px 14px 80px}
 .sb-section{background:var(--surf);border:.5px solid var(--bdr);border-radius:12px;padding:12px 14px;margin-bottom:12px}
 .sb-section-title{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:10px}
