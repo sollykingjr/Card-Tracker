@@ -42,6 +42,7 @@ const SB = {
 
 // Saved searches & filter panel state
   savedSearches: [],
+  outputPlatform: 'ebay',
   ebayOpen: false,
   comcOpen: false,
   yearOpen: false,
@@ -636,19 +637,14 @@ function sbRender() {
 
       <!-- Output -->
       <div class="sb-output">
-        <div class="sb-output-platform">eBay</div>
-        <div class="sb-output-string" id="sb-out-ebay-str">—</div>
-        <div class="sb-output-btns">
-          <button class="sb-out-btn sb-copy" onclick="sbCopy('ebay')">Copy String</button>
-          <button class="sb-out-btn sb-open-ebay" onclick="sbOpen('ebay')">Open in eBay</button>
+        <div class="sb-and-or" style="margin-bottom:10px">
+          <button class="${SB.outputPlatform==='ebay'?'on':''}" onclick="SB.outputPlatform='ebay';sbUpdateOutput()">eBay</button>
+          <button class="${SB.outputPlatform==='comc'?'on':''}" onclick="SB.outputPlatform='comc';sbUpdateOutput()">COMC</button>
         </div>
-      </div>
-      <div class="sb-output">
-        <div class="sb-output-platform">COMC</div>
-        <div class="sb-output-string" id="sb-out-comc-str">—</div>
+        <div class="sb-output-string" id="sb-out-str">—</div>
         <div class="sb-output-btns">
-          <button class="sb-out-btn sb-copy" onclick="sbCopy('comc')">Copy String</button>
-          <button class="sb-out-btn sb-open-comc" onclick="sbOpen('comc')">Open in COMC</button>
+          <button class="sb-out-btn sb-copy" onclick="sbCopy(SB.outputPlatform)">Copy String</button>
+          <button class="sb-out-btn ${SB.outputPlatform==='ebay'?'sb-open-ebay':'sb-open-comc'}" onclick="sbOpen(SB.outputPlatform)">Open in ${SB.outputPlatform==='ebay'?'eBay':'COMC'}</button>
         </div>
       </div>
       <button class="sb-preset-btn" style="width:100%;margin-bottom:20px;background:var(--acc-bg);color:var(--acc);border-color:var(--acc)" onclick="sbSaveSearch()">💾 Save This Search</button>
@@ -891,10 +887,12 @@ function sbSaveFavSeller() {
 // =============================================================================
 
 function sbUpdateOutput() {
-  const ebayStr = document.getElementById('sb-out-ebay-str');
-  const comcStr = document.getElementById('sb-out-comc-str');
-  if (ebayStr) ebayStr.textContent = SB.players.length ? sbBuildEbayString() || '—' : '—';
-  if (comcStr) comcStr.textContent = SB.players.length ? sbBuildComcQuery() || '—' : '—';
+  const str = document.getElementById('sb-out-str');
+  if (!str) return;
+  const text = SB.players.length
+    ? (SB.outputPlatform === 'ebay' ? sbBuildEbayString() : sbBuildComcQuery()) || '—'
+    : '—';
+  str.textContent = text;
 }
 
 function sbCopy(platform) {
