@@ -638,8 +638,8 @@ function sbRender() {
       <!-- Output -->
       <div class="sb-output">
         <div class="sb-and-or" style="margin-bottom:10px">
-          <button class="${SB.outputPlatform==='ebay'?'on':''}" onclick="SB.outputPlatform='ebay';sbUpdateOutput()">eBay</button>
-          <button class="${SB.outputPlatform==='comc'?'on':''}" onclick="SB.outputPlatform='comc';sbUpdateOutput()">COMC</button>
+          <button class="${SB.outputPlatform==='ebay'?'on':''}" onclick="SB.outputPlatform='ebay';sbRender()">eBay</button>
+          <button class="${SB.outputPlatform==='comc'?'on':''}" onclick="SB.outputPlatform='comc';sbRender()">COMC</button>
         </div>
         <div class="sb-output-string" id="sb-out-str">—</div>
         <div class="sb-output-btns">
