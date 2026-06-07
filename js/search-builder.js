@@ -446,6 +446,25 @@ function sbDeleteSearch(i) {
   sbRender();
 }
 
+function sbToggleSearchMenu(i) {
+  const menu = document.getElementById(`sb-smenu-${i}`);
+  if (!menu) return;
+  const isOpen = menu.style.display === 'block';
+  SB.savedSearches.forEach((_,j) => {
+    const m = document.getElementById(`sb-smenu-${j}`);
+    if (m) m.style.display = 'none';
+  });
+  if (!isOpen) menu.style.display = 'block';
+}
+
+function sbRenameSearch(i) {
+  const name = prompt('Rename search:', SB.savedSearches[i].name);
+  if (!name || !name.trim()) return;
+  SB.savedSearches[i].name = name.trim();
+  sbSaveToKV();
+  sbRender();
+}
+
 // =============================================================================
 // SECTION 7: RENDER (~423-600)
 // =============================================================================
@@ -473,9 +492,14 @@ function sbRender() {
         ${SB.savedSearches.length ? `
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
             ${SB.savedSearches.map((s,i) => `
-              <div style="display:flex;align-items:center;gap:4px;background:var(--acc-bg);border-radius:20px;padding:4px 10px">
+              <div style="position:relative;display:inline-flex;align-items:center;gap:4px;background:var(--acc-bg);border-radius:20px;padding:4px 10px">
                 <button style="background:none;border:none;color:var(--acc);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;padding:0" onclick="sbLoadSearch(${i})">${s.name}</button>
-                <button style="background:none;border:none;color:var(--tx3);font-size:13px;cursor:pointer;padding:0;line-height:1" onclick="sbDeleteSearch(${i})">×</button>
+                <button style="background:none;border:none;color:var(--tx3);font-size:14px;cursor:pointer;padding:0 2px;line-height:1;font-family:inherit" onclick="sbToggleSearchMenu(${i})">⋯</button>
+                <div id="sb-smenu-${i}" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:var(--surf);border:.5px solid var(--bdr);border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:20;min-width:120px;overflow:hidden">
+                  <button style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-bottom:.5px solid var(--bdr);color:var(--tx);font-size:13px;cursor:pointer;font-family:inherit" onclick="sbLoadSearch(${i});sbToggleSearchMenu(${i})">Load</button>
+                  <button style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;border-bottom:.5px solid var(--bdr);color:var(--tx);font-size:13px;cursor:pointer;font-family:inherit" onclick="sbRenameSearch(${i})">Rename</button>
+                  <button style="display:block;width:100%;text-align:left;padding:9px 14px;background:none;border:none;color:var(--dn);font-size:13px;cursor:pointer;font-family:inherit" onclick="sbDeleteSearch(${i})">Delete</button>
+                </div>
               </div>
             `).join('')}
           </div>
@@ -869,9 +893,17 @@ function sbApplyPresetRange(min, max) {
     }
   });
 
-  SB.players = results;
+  // Merge into existing pool
+  results.forEach(p => {
+    if (!SB.players.find(x => x.name.toLowerCase() === p.name.toLowerCase())) {
+      SB.players.push(p);
+    }
+  });
+  // Auto-add Bowman to set
+  SB.setSelected['Bowman'] = 'include';
   sbUpdatePool();
   sbUpdateOutput();
+  sbRender();
 }
 
 // =============================================================================
