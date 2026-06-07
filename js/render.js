@@ -213,7 +213,9 @@ function render() {
 
   let html=pool.map((p,i)=>buildCard(p.name,p.team,p.pos,i,'player')).join('');
 
-  document.getElementById('list').innerHTML=html;
+  const listEl = document.getElementById('list');
+  listEl.innerHTML=html;
+  listEl.classList.toggle('grid-2', window.innerWidth >= 768);
   document.querySelectorAll('#list .card').forEach(c=>{
     c.addEventListener('click',()=>showDetail(pool[+c.dataset.i],c.dataset.tp));
   });
