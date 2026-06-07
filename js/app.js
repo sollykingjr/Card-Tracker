@@ -17,8 +17,10 @@ function setSection(s) {
   document.querySelectorAll('.top-tab').forEach(x => x.classList.remove('on'));
   document.querySelector(`.top-tab[data-s="${s}"]`).classList.add('on');
 
- const isWatch = s === 'watchlist';
-  document.getElementById('prospects-section').style.display = isWatch ? 'none' : '';
+const isWatch = s === 'watchlist';
+  const isSB    = s === 'searchbuilder';
+  document.getElementById('prospects-section').style.display = (isWatch || isSB) ? 'none' : '';
+  document.getElementById('sb-root').style.display = isSB ? '' : 'none';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
@@ -30,6 +32,9 @@ function setSection(s) {
     } else {
       renderWatchlist();
     }
+  } else if (isSB) {
+    document.getElementById('cntlbl').textContent = '';
+    sbShow();
   } else {
     render();
   }
