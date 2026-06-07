@@ -40,10 +40,13 @@ const SB = {
   comcListingType: 'all',
   comcExcludeQuality: false,
 
-  // Saved searches & filter panel state
+// Saved searches & filter panel state
   savedSearches: [],
   ebayOpen: false,
   comcOpen: false,
+  yearOpen: false,
+  teamOpen: false,
+  platformOpen: false,
 };
 
 // =============================================================================
@@ -482,8 +485,7 @@ function sbRender() {
         <div style="font-size:10px;color:var(--tx3);margin-top:6px;margin-bottom:10px">ⓔ = eBay only · ⓒ = COMC only</div>
         <div class="sb-row">
           <input class="sb-input" id="sb-kw-custom" placeholder="Custom keyword…" autocorrect="off" autocapitalize="off">
-          <button class="sb-preset-btn" onclick="sbAddCustomKw('include')">+ Include</button>
-          <button class="sb-preset-btn" style="background:#FCEBEB;color:var(--dn);border-color:var(--dn)" onclick="sbAddCustomKw('exclude')">− Exclude</button>
+          <button class="sb-preset-btn" onclick="sbAddCustomKw(SB.kwMode)">Add</button>
         </div>
         ${SB.kwCustomInclude.length || SB.kwCustomExclude.length ? `
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
@@ -495,18 +497,26 @@ function sbRender() {
 
       <!-- Sport & Team -->
       <div class="sb-section">
-        <div class="sb-section-title">Sport & Team</div>
+        <button class="sb-collapse-btn" onclick="SB.teamOpen=!SB.teamOpen;sbRender()">
+          <span>Sport & Team</span><span>${SB.teamOpen?'▲':'▼'}</span>
+        </button>
+        <div style="${SB.teamOpen?'margin-top:10px':'display:none'}">
+        <div class="sb-and-or" style="margin-bottom:10px">
         <div class="sb-and-or" style="margin-bottom:10px">
           <button class="${SB.tagMode==='include'?'on':''}" onclick="SB.tagMode='include';sbRender()">Include</button>
           <button class="${SB.tagMode==='exclude'?'on':''}" onclick="SB.tagMode='exclude';sbRender()">Exclude</button>
         </div>
         ${sbRenderTagSection('sport', 'Sport', SB.sports, SB_SPORT_OPTIONS)}
         ${sbRenderTagSection('team', 'Team', SB.teams, SB_TEAM_OPTIONS)}
+        </div>
       </div>
 
       <!-- Year / Decade -->
       <div class="sb-section">
-        <div class="sb-section-title">Year / Decade</div>
+        <button class="sb-collapse-btn" onclick="SB.yearOpen=!SB.yearOpen;sbRender()">
+          <span>Year / Decade</span><span>${SB.yearOpen?'▲':'▼'}</span>
+        </button>
+        <div style="${SB.yearOpen?'margin-top:10px':'display:none'}">
         <div class="sb-and-or" style="margin-bottom:10px">
           <button class="${decMode==='include'?'on':''}" onclick="SB.decadeMode='include';sbRender()">Include</button>
           <button class="${decMode==='exclude'?'on':''}" onclick="SB.decadeMode='exclude';sbRender()">Exclude</button>
@@ -533,11 +543,15 @@ function sbRender() {
           <button class="sb-preset-btn" onclick="sbSetRange()">Set</button>
           ${SB.yearRangeInclude.from ? `<button class="sb-preset-btn" style="color:var(--tx3)" onclick="SB.yearRangeInclude={from:'',to:''};sbRender()">Clear</button>` : ''}
         </div>
+        </div>
       </div>
 
       <!-- Platform Filters -->
       <div class="sb-section">
-        <div class="sb-section-title">Platform Filters</div>
+        <button class="sb-collapse-btn" onclick="SB.platformOpen=!SB.platformOpen;sbRender()">
+          <span>Platform Filters</span><span>${SB.platformOpen?'▲':'▼'}</span>
+        </button>
+        <div style="${SB.platformOpen?'margin-top:10px':'display:none'}">
         <div class="sb-and-or" style="margin-bottom:12px">
           <button class="${SB.ebayOpen?'on':''}" onclick="SB.ebayOpen=!SB.ebayOpen;sbRender()">eBay Filters</button>
           <button class="${SB.comcOpen?'on':''}" onclick="SB.comcOpen=!SB.comcOpen;sbRender()">COMC Filters</button>
@@ -619,6 +633,7 @@ function sbRender() {
               <label class="sb-toggle"><input type="checkbox" ${SB.comcExcludeQuality?'checked':''} onchange="SB.comcExcludeQuality=this.checked;sbUpdateOutput()"><span class="sb-toggle-slider"></span></label>
             </div>
           </div>
+       </div>
        </div>
       </div>
 
@@ -932,6 +947,9 @@ function sbReset() {
   SB.comcExcludeQuality = false;
   SB.ebayOpen         = false;
   SB.comcOpen         = false;
+  SB.yearOpen         = false;
+  SB.teamOpen         = false;
+  SB.platformOpen     = false;
   _sbAllPlayers       = null;
   sbRender();
 }
