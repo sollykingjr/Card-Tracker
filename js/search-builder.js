@@ -5,9 +5,10 @@
 const SB = {
   players: [],
 
-  // Keywords — each kw has state: null | 'include' | 'exclude'
+// Keywords — each kw has state: null | 'include' | 'exclude'
   kwState: {},        // e.g. { auto: 'include', graded: 'exclude' }
   kwLogic: 'OR',
+  kwMode: 'include',  // current mode toggle: 'include' | 'exclude'
 
   // Custom keywords
   kwCustomInclude: [],
@@ -21,7 +22,8 @@ const SB = {
   yearsExclude: new Set(),
   yearRangeInclude: { from: '', to: '' },
 
-  // Team / Sport — unified include/exclude per item
+// Team / Sport — unified include/exclude per item
+  tagMode: 'include',
   teams: [],    // { name, mode: 'include'|'exclude' }
   sports: [],   // { name, mode: 'include'|'exclude' }
 
@@ -49,21 +51,13 @@ const SB = {
 // =============================================================================
 
 const SB_KEYWORDS = [
-  // Both platforms (text keyword)
-  { id: 'auto',           label: 'Auto',           ebay: 'kw',      comc: 'kw' },
-  { id: 'hof',            label: 'HOF',            ebay: 'kw',      comc: 'kw' },
-  { id: 'rc',             label: 'RC',             ebay: 'feature', comc: 'kw', ebayParam: 'Features=Rookie' },
-  // eBay URL filter only (shown greyed label on COMC output)
-  { id: 'serial',         label: 'Serial #\'d',   ebay: 'feature', comc: 'kw', ebayParam: 'Features=Serial%2520Numbered' },
-  { id: 'graded',         label: 'Graded',         ebay: 'feature', comc: 'kw', ebayParam: 'Graded=Yes' },
-  { id: 'autographed',    label: 'Autographed',    ebay: 'feature', comc: null, ebayParam: 'Autographed=Yes' },
-  // COMC only
-  { id: 'aftermarketauto',label: 'Aftermarket Auto', ebay: null,   comc: 'kw' },
-  { id: 'mem',            label: 'Mem',            ebay: null,      comc: 'kw' },
-  { id: 'pre',            label: 'Pre-Rookie',     ebay: null,      comc: 'kw' },
-  { id: 'rookie-related', label: 'Rookie Related', ebay: null,      comc: 'kw' },
-  { id: 'rookie-year',    label: 'Rookie Year',    ebay: null,      comc: 'kw' },
-  { id: 'ungraded',       label: 'Ungraded',       ebay: null,      comc: 'kw' },
+  { id: 'auto',        label: 'Auto',        ebay: 'kw',      comc: 'kw',  ebayParam: null },
+  { id: 'hof',         label: 'HOF',         ebay: 'kw',      comc: 'kw',  ebayParam: null },
+  { id: 'rc',          label: 'RC',          ebay: 'feature', comc: 'kw',  ebayParam: 'Features=Rookie' },
+  { id: 'serial-ebay', label: 'Serial #\'d', ebay: 'feature', comc: null,  ebayParam: 'Features=Serial%2520Numbered' },
+  { id: 'serial-comc', label: 'Serial',      ebay: null,      comc: 'kw',  ebayParam: null },
+  { id: 'graded',      label: 'Graded',      ebay: 'feature', comc: 'kw',  ebayParam: 'Graded=Yes' },
+  { id: 'autographed', label: 'Autographed', ebay: 'feature', comc: null,  ebayParam: 'Autographed=Yes' },
 ];
 
 const SB_SPORT_OPTIONS = ['Baseball','Basketball','Football','Hockey','Soccer','Golf','MMA','Wrestling'];
@@ -464,6 +458,13 @@ function sbRender() {
       <div class="sb-section">
         <div class="sb-section-title">Keywords</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div class="sb-and-or">
+            <button class="${SB.kwMode==='include'?'on':''}" onclick="SB.kwMode='include';sbRender()">Include</button>
+            <button class="${SB.kwMode==='exclude'?'on':''}" onclick="SB.kwMode='exclude';sbRender()">Exclude</button>
+          </div>
+          <span style="font-size:10px;color:var(--tx3);margin-left:4px">then tap keywords</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <span class="sb-label">Logic:</span>
           <div class="sb-and-or">
             <button class="${SB.kwLogic==='OR'?'on':''}" onclick="sbSetLogic('OR')">OR</button>
@@ -474,11 +475,11 @@ function sbRender() {
           ${SB_KEYWORDS.map(k => {
             const st = SB.kwState[k.id];
             const cls = st === 'include' ? 'on' : st === 'exclude' ? 'excl' : '';
-            const note = k.ebay === 'feature' ? ' ⓔ' : k.ebay === null ? ' ⓒ' : '';
-            return `<button class="sb-kw-btn ${cls}" onclick="sbCycleKw('${k.id}')" title="${k.ebay===null?'COMC only':k.comc===null?'eBay only':'Both platforms'}">${k.label}${note}</button>`;
+            const note = k.comc === null ? ' ⓔ' : k.ebay === null ? ' ⓒ' : '';
+            return `<button class="sb-kw-btn ${cls}" onclick="sbToggleKw('${k.id}')">${k.label}${note}</button>`;
           }).join('')}
         </div>
-        <div style="font-size:10px;color:var(--tx3);margin-top:6px;margin-bottom:10px">Tap once = Include (green) · Tap twice = Exclude (red) · Tap again = Off · ⓔ = eBay filter · ⓒ = COMC only</div>
+        <div style="font-size:10px;color:var(--tx3);margin-top:6px;margin-bottom:10px">ⓔ = eBay only · ⓒ = COMC only</div>
         <div class="sb-row">
           <input class="sb-input" id="sb-kw-custom" placeholder="Custom keyword…" autocorrect="off" autocapitalize="off">
           <button class="sb-preset-btn" onclick="sbAddCustomKw('include')">+ Include</button>
@@ -495,6 +496,10 @@ function sbRender() {
       <!-- Sport & Team -->
       <div class="sb-section">
         <div class="sb-section-title">Sport & Team</div>
+        <div class="sb-and-or" style="margin-bottom:10px">
+          <button class="${SB.tagMode==='include'?'on':''}" onclick="SB.tagMode='include';sbRender()">Include</button>
+          <button class="${SB.tagMode==='exclude'?'on':''}" onclick="SB.tagMode='exclude';sbRender()">Exclude</button>
+        </div>
         ${sbRenderTagSection('sport', 'Sport', SB.sports, SB_SPORT_OPTIONS)}
         ${sbRenderTagSection('team', 'Team', SB.teams, SB_TEAM_OPTIONS)}
       </div>
@@ -530,11 +535,14 @@ function sbRender() {
         </div>
       </div>
 
-      <!-- eBay Filters (collapsible) -->
+      <!-- Platform Filters -->
       <div class="sb-section">
-        <button class="sb-collapse-btn" onclick="SB.ebayOpen=!SB.ebayOpen;sbRender()">
-          <span>eBay Filters</span><span>${SB.ebayOpen?'▲':'▼'}</span>
-        </button>
+        <div class="sb-section-title">Platform Filters</div>
+        <div class="sb-and-or" style="margin-bottom:12px">
+          <button class="${SB.ebayOpen?'on':''}" onclick="SB.ebayOpen=!SB.ebayOpen;sbRender()">eBay Filters</button>
+          <button class="${SB.comcOpen?'on':''}" onclick="SB.comcOpen=!SB.comcOpen;sbRender()">COMC Filters</button>
+        </div>
+        <div style="${SB.ebayOpen?'':'display:none'}">
         ${SB.ebayOpen ? `
           <div style="margin-top:10px">
             <div class="sb-row">
@@ -595,13 +603,7 @@ function sbRender() {
         ` : ''}
       </div>
 
-      <!-- COMC Filters (collapsible) -->
-      <div class="sb-section">
-        <button class="sb-collapse-btn" onclick="SB.comcOpen=!SB.comcOpen;sbRender()">
-          <span>COMC Filters</span><span>${SB.comcOpen?'▲':'▼'}</span>
-        </button>
-        ${SB.comcOpen ? `
-          <div style="margin-top:10px">
+      <div style="${SB.comcOpen?'margin-top:12px':'display:none'}">
             <div class="sb-row">
               <span class="sb-label">Listing</span>
               <select class="sb-select" onchange="SB.comcListingType=this.value;sbUpdateOutput()">
@@ -617,7 +619,7 @@ function sbRender() {
               <label class="sb-toggle"><input type="checkbox" ${SB.comcExcludeQuality?'checked':''} onchange="SB.comcExcludeQuality=this.checked;sbUpdateOutput()"><span class="sb-toggle-slider"></span></label>
             </div>
           </div>
-        ` : ''}
+       </div>
       </div>
 
       <!-- Output -->
@@ -665,10 +667,6 @@ function sbRenderTagSection(id, label, arr, options) {
         <select class="sb-select" id="sb-sel-${id}">
           <option value="">Select…</option>
           ${options.map(o=>`<option value="${o}">${o}</option>`).join('')}
-        </select>
-        <select class="sb-select" id="sb-mode-${id}" style="width:90px;flex:none">
-          <option value="include">Include</option>
-          <option value="exclude">Exclude</option>
         </select>
         <button class="sb-preset-btn" onclick="sbAddTag('${id}')">Add</button>
       </div>
@@ -758,11 +756,9 @@ function sbApplyPreset(minScore) {
 // SECTION 10: KEYWORD HANDLERS (~693-720)
 // =============================================================================
 
-function sbCycleKw(id) {
-  const cur = SB.kwState[id];
-  if (!cur)            SB.kwState[id] = 'include';
-  else if (cur === 'include') SB.kwState[id] = 'exclude';
-  else                 delete SB.kwState[id];
+function sbToggleKw(id) {
+  if (SB.kwState[id] === SB.kwMode) delete SB.kwState[id];
+  else SB.kwState[id] = SB.kwMode;
   sbRender();
 }
 
@@ -790,9 +786,6 @@ function sbRemoveCustomKw(mode, i) {
 
 function sbAddTag(type, manual) {
   const arr = type === 'sport' ? SB.sports : SB.teams;
-  const options = type === 'sport' ? SB_SPORT_OPTIONS : SB_TEAM_OPTIONS;
-  const modeEl = document.getElementById(`sb-mode-${type}`);
-  const mode = modeEl ? modeEl.value : 'include';
   let val;
   if (manual === 'manual') {
     const inp = document.getElementById(`sb-inp-${type}`);
@@ -803,7 +796,7 @@ function sbAddTag(type, manual) {
     val = sel ? sel.value : '';
   }
   if (!val) return;
-  if (!arr.find(x => x.name === val)) arr.push({ name: val, mode });
+  if (!arr.find(x => x.name === val)) arr.push({ name: val, mode: SB.tagMode });
   sbRender();
 }
 
