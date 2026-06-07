@@ -199,6 +199,7 @@ function renderHotSheet() {
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function render() {
+  if(section==='searchbuilder') return;
   const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
   const showChips=!isHS&&!isPort&&!isWatch;
   renderSortChips();
