@@ -54,13 +54,11 @@ const SB = {
 // =============================================================================
 
 const SB_KEYWORDS = [
-  { id: 'auto',        label: 'Auto',        ebay: 'kw',      comc: 'kw',  ebayParam: null },
-  { id: 'hof',         label: 'HOF',         ebay: 'kw',      comc: 'kw',  ebayParam: null },
-  { id: 'rc',          label: 'RC',          ebay: 'feature', comc: 'kw',  ebayParam: 'Features=Rookie' },
-  { id: 'serial-ebay', label: 'Serial #\'d', ebay: 'feature', comc: null,  ebayParam: 'Features=Serial%2520Numbered' },
-  { id: 'serial-comc', label: 'Serial',      ebay: null,      comc: 'kw',  ebayParam: null },
-  { id: 'graded',      label: 'Graded',      ebay: 'feature', comc: 'kw',  ebayParam: 'Graded=Yes' },
-  { id: 'autographed', label: 'Autographed', ebay: 'feature', comc: null,  ebayParam: 'Autographed=Yes' },
+  { id: 'auto',   label: 'Auto',   ebay: 'kw',      comc: 'kw', ebayParam: null },
+  { id: 'hof',    label: 'HOF',    ebay: 'kw',      comc: 'kw', ebayParam: null },
+  { id: 'rc',     label: 'RC',     ebay: 'feature', comc: 'kw', ebayParam: 'Features=Rookie' },
+  { id: 'serial', label: 'Serial', ebay: 'feature', comc: 'kw', ebayParam: 'Features=Serial%2520Numbered' },
+  { id: 'graded', label: 'Graded', ebay: 'feature', comc: 'kw', ebayParam: 'Graded=Yes' },
 ];
 
 const SB_SPORT_OPTIONS = ['Baseball','Basketball','Football','Hockey','Soccer','Golf','MMA','Wrestling'];
