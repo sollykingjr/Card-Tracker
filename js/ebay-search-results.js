@@ -137,7 +137,12 @@ function renderSearches(searches) {
     <div class="sr-card">
       <div class="sr-card-header">
         <div class="sr-card-label">${s.label}</div>
-        <button class="sr-delete-btn" data-index="${i}">✕</button>
+        <div class="sr-menu-wrap">
+          <button class="sr-menu-btn" data-index="${i}">···</button>
+          <div class="sr-menu-dropdown" id="sr-menu-${i}" style="display:none">
+            <button class="sr-menu-item sr-menu-delete" data-index="${i}">Delete</button>
+          </div>
+        </div>
       </div>
       <div class="sr-card-query">🔍 ${s.query}</div>
       <div class="sr-card-keywords">⚡ ${s.priorityKeywords.join(', ')}</div>
@@ -148,16 +153,43 @@ function renderSearches(searches) {
     </div>
   `).join('');
 
-  document.querySelectorAll('.sr-delete-btn').forEach(btn => {
-    btn.onclick = async () => {
+  // Close all menus when clicking outside
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.sr-menu-wrap')) {
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+    }
+  });
+
+  document.querySelectorAll('.sr-menu-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const i = btn.dataset.index;
+      const dropdown = document.getElementById(`sr-menu-${i}`);
+      const isOpen = dropdown.style.display === 'block';
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      dropdown.style.display = isOpen ? 'none' : 'block';
+    };
+  });
+
+  document.querySelectorAll('.sr-menu-delete').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
       const i = parseInt(btn.dataset.index);
       const res = await fetch(`${WORKER}/search-alerts`);
       const data = await res.json();
-      const updated = data.searches.filter((_, idx) => idx !== i);
+      const search = data.searches[i];
+
+      // Confirm before deleting
+      if (!confirm(`Delete "${search.label}"?`)) return;
+
+      // Clean up digest and archive from KV
       await fetch(`${WORKER}/search-alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searches: updated })
+        body: JSON.stringify({ 
+          searches: data.searches.filter((_, idx) => idx !== i),
+          deleteKeys: [search.digestKey, search.digestKey + '_archive']
+        })
       });
       await loadSearches();
     };
