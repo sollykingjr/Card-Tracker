@@ -187,10 +187,10 @@ async function loadAll() {
       fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
       fetchRange("'200 Hitters Original'!A2:G2000"),
       fetchRange("'100 Pitchers Original'!A2:G2000"),
-      fetchRange("'Hot Sheet'!A2:AE2000"),
+      fetchRange("'Hot Sheet'!A2:AE10000"),
       fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W2000")}?key=${KEY}`)
         .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
-    fetchRange("'Buy Score'!A2:I2000"),
+    fetchRange("'Buy Score'!A2:I10000"),
     ]);
 
     players = pR.filter(r=>r[3]).map(r=>({
