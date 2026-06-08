@@ -498,7 +498,6 @@ function sbRender() {
       <button onclick="sbReset()">Reset All</button>
     </div>
     <div class="sb-wrap">
-      <div class="sb-col-full">
 
       <!-- Presets & Saved Searches -->
       <div class="sb-section">
@@ -525,8 +524,6 @@ function sbRender() {
         ` : ''}
       </div>
 
-      </div><!-- end sb-col-full -->
-      <div class="sb-col-full">
       <!-- Player Pool -->
       <div class="sb-section">
         <div class="sb-section-title">Player Pool</div>
@@ -546,8 +543,6 @@ function sbRender() {
         </div>
       </div>
 
-      </div><!-- end sb-col-full -->
-      <div class="sb-col-left">
       <!-- Keywords -->
       <div class="sb-section">
         <div class="sb-section-title">Keywords</div>
@@ -620,8 +615,6 @@ function sbRender() {
         ` : ''}
       </div>
 
-      </div><!-- end sb-col-left -->
-      <div class="sb-col-right">
       <!-- Sport & Team -->
       <div class="sb-section">
         <button class="sb-collapse-btn" onclick="SB.teamOpen=!SB.teamOpen;sbRender()">
@@ -763,7 +756,6 @@ function sbRender() {
        </div>
       </div>
 
-      </div><!-- end sb-col-right -->
       <!-- Output -->
       <div class="sb-output">
         <div class="sb-and-or" style="margin-bottom:10px">
