@@ -1007,3 +1007,97 @@ html, body {
   margin-bottom: 10px;
   background: var(--surf2);
 }
+/* ── Search Results Form Extensions ──────────────────────────────────────── */
+.sr-form-section {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin: 14px 0 8px;
+}
+.sr-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sr-form-label {
+  font-size: 13px;
+  color: var(--tx2);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.sr-chip-row {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.sr-chip-btn {
+  padding: 5px 11px;
+  border: 1px solid var(--bdr2);
+  border-radius: 20px;
+  background: var(--surf2);
+  color: var(--tx2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .2s;
+}
+.sr-chip-btn.on {
+  background: var(--acc-bg);
+  color: var(--acc);
+  border-color: var(--acc-bdr);
+}
+.sr-seller-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sr-input-inline {
+  margin-bottom: 0;
+}
+.sr-toggle {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.sr-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.sr-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bdr2);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: .2s;
+}
+.sr-toggle input:checked + .sr-toggle-slider {
+  background: var(--acc);
+}
+.sr-toggle-slider:before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: .2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.sr-toggle input:checked + .sr-toggle-slider:before {
+  transform: translateX(16px);
+}
+#sr-keywords-wrap {
+  margin-bottom: 8px;
+}
