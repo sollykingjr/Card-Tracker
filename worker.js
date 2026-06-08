@@ -580,7 +580,8 @@ async function checkPlayerSearches(env) {
       price: item.currentBidPrice?.value || item.price?.value || '?',
       url: item.itemWebUrl,
       type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
-      date: item.itemCreationDate
+      date: item.itemCreationDate,
+      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
     }));
 
     // Daily digest
