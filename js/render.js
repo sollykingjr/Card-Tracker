@@ -420,11 +420,12 @@ function showDetail(p, tp) {
   if(master&&master.notes) noteCandidates.push({ts:parseDate(master.date)||0,note:master.notes});
   if(noteCandidates.length) recentNote = noteCandidates.reduce((a,b)=>b.ts>a.ts?b:a).note;
 
-  const noteHtml = recentNote ? `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
+  const bestNote = noteCandidates.length ? noteCandidates.reduce((a,b)=>b.ts>a.ts?b:a) : null;
+  const noteHtml = bestNote ? `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
     <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
-      <span class="lbl">Most Recent Note</span><span class="arr">▼</span>
+      <span class="lbl">Most Recent Note</span><span style="font-size:10px;color:var(--tx3);margin-left:6px">${fmtShortDate(new Date(bestNote.ts))}</span><span class="arr">▼</span>
     </button>
-    <div class="notes-body" style="display:none"><p>${recentNote}</p></div>
+    <div class="notes-body" style="display:none"><p>${bestNote.note}</p></div>
   </div>` : '';
 
  const html=`
