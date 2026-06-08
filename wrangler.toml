@@ -4,6 +4,9 @@ compatibility_date = "2024-01-01"
 
 [vars]
 
+[triggers]
+crons = ["0 * * * *"]
+
 [[kv_namespaces]]
 binding = "CACHE"
 id = "23e104faac8545dcb39b9283bf368a9b"
