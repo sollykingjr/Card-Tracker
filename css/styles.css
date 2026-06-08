@@ -484,17 +484,9 @@ html, body {
 
 @media (min-width: 768px) {
   .sb-wrap {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0 16px;
-    align-items: start;
+    max-width: 700px;
     padding: 16px 20px 60px;
   }
-  .sb-col-full { grid-column: 1 / -1; }
-  .sb-col-left { grid-column: 1; }
-  .sb-col-right { grid-column: 2; }
-  .sb-wrap .sb-output { grid-column: 1 / -1; }
-  .sb-wrap > button:last-child { grid-column: 1 / -1; }
 }
 .sb-collapse-btn { width: 100%; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: var(--tx3); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; font-family: inherit; padding: 0; }
 .sb-section { background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
