@@ -19,10 +19,12 @@ function setSection(s) {
 
   const isWatch = s === 'watchlist';
   const isSB    = s === 'searchbuilder';
-  document.getElementById('prospects-section').style.display = (isWatch || isSB) ? 'none' : '';
+  const isSR    = s === 'searchresults';
+  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? 'block' : 'none';
-  document.getElementById('list').style.display = isSB ? 'none' : '';
-  document.querySelector('.meta').style.display = isSB ? 'none' : '';
+  document.getElementById('sr-root').style.display = isSR ? 'block' : 'none';
+  document.getElementById('list').style.display = (isSB || isSR) ? 'none' : '';
+  document.querySelector('.meta').style.display = (isSB || isSR) ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
@@ -37,6 +39,9 @@ function setSection(s) {
   } else if (isSB) {
     document.getElementById('cntlbl').textContent = '';
     sbShow();
+  } else if (isSR) {
+    document.getElementById('cntlbl').textContent = '';
+    initSearchResults();
   } else {
     render();
   }
