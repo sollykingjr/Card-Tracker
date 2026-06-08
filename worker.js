@@ -41,7 +41,6 @@ export default {
     if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
     if (path === '/player-digest-json') return handlePlayerDigestJson(request, env, cors);
     if (path === '/search-alerts' && request.method === 'GET') return handleSearchAlertsGet(env, cors);
-    if (path === '/seed-brosius') return handleSeedBrosius(env, cors);
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
@@ -747,21 +746,7 @@ async function handleSearchAlertsPost(request, env, cors) {
     });
   }
 }
-// ── [16] handleSeedBrosius ────────────────────────────────────────────────────
-async function handleSeedBrosius(env, cors) {
-  const searches = [
-    {
-      label: 'Scott Brosius',
-      query: 'scott brosius',
-      priorityKeywords: ['psa', 'sgc', 'bgs', 'rookie', 'rc', 'auto', 'refractor'],
-      digestKey: 'brosius_digest'
-    }
-  ];
-  await env.CACHE.put('player_search_alerts', JSON.stringify(searches));
-  return new Response(JSON.stringify({ ok: true, seeded: searches }), {
-    headers: { ...cors, 'Content-Type': 'application/json' }
-  });
-}
+
 // ── [19] handlePlayerDigestJson ───────────────────────────────────────────────
 async function handlePlayerDigestJson(request, env, cors) {
   try {
