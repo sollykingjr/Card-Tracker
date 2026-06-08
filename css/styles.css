@@ -998,3 +998,12 @@ html, body {
   transition: opacity .2s;
 }
 .sr-listing-link:hover { opacity: .8; }
+
+.sr-listing-img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: var(--surf2);
+}
