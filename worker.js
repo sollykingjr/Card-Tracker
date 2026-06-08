@@ -537,7 +537,7 @@ async function checkPlayerSearches(env) {
   await env.CACHE.put('player_search_last_run', String(now));
 
   for (const search of searches) {
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(search.query)}&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=50`;
+    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(search.query)}&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=200`;
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     });
@@ -684,7 +684,7 @@ async function handleTestPlayerSearch(request, env, cors) {
     }
 
     const cutoff = Date.now() - (hours * 60 * 60 * 1000);
-    const searchUrl = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=scott%20brosius&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=50`;
+    const searchUrl = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=scott%20brosius&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=200`;
     const res = await fetch(searchUrl, {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     });
