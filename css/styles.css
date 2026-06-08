@@ -490,13 +490,9 @@ html, body {
     align-items: start;
     padding: 16px 20px 60px;
   }
-  .sb-wrap .sb-section:nth-child(1),
-  .sb-wrap .sb-section:nth-child(2),
-  .sb-wrap .sb-section:nth-child(3),
-  .sb-wrap .sb-section:nth-child(4) { grid-column: 1; }
-  .sb-wrap .sb-section:nth-child(5),
-  .sb-wrap .sb-section:nth-child(6),
-  .sb-wrap .sb-section:nth-child(7) { grid-column: 2; }
+  .sb-col-full { grid-column: 1 / -1; }
+  .sb-col-left { grid-column: 1; }
+  .sb-col-right { grid-column: 2; }
   .sb-wrap .sb-output { grid-column: 1 / -1; }
   .sb-wrap > button:last-child { grid-column: 1 / -1; }
 }
