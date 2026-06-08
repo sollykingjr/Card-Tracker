@@ -665,7 +665,7 @@ ${!key.includes('_archive') ? `<a href="/player-digest?key=${key}_archive" style
     }
 
     html += `</body></html>`;
-    return new Response(html, { headers: { ...cors, 'Content-Type': 'text/html' } });
+    return new Response(html, { headers: { ...cors, 'Content-Type': 'text/html; charset=utf-8' } });
   } catch(e) {
     return new Response(`Error: ${e.message}`, { status: 500, headers: cors });
   }
