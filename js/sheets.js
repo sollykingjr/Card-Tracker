@@ -190,7 +190,7 @@ async function loadAll() {
       fetchRange("'Hot Sheet'!A2:AE2000"),
       fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W2000")}?key=${KEY}`)
         .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
-    fetchRange("'Buy Score'!A2:H2000"),
+    fetchRange("'Buy Score'!A2:I2000"),
     ]);
 
     players = pR.filter(r=>r[3]).map(r=>({
