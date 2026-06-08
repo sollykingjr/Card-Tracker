@@ -74,8 +74,8 @@ function renderSearches(searches) {
       <div class="sr-card-query">🔍 ${s.query}</div>
       <div class="sr-card-keywords">⚡ ${s.priorityKeywords.join(', ')}</div>
       <div class="sr-card-links">
-        <a href="${WORKER}/player-digest?key=${s.digestKey}" target="_blank" class="sr-link">Today's Listings →</a>
-        <a href="${WORKER}/player-digest?key=${s.digestKey}_archive" target="_blank" class="sr-link">7-Day Archive →</a>
+        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today's Listings →</button>
+        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day Archive →</button>
       </div>
     </div>
   `).join('');
@@ -120,4 +120,53 @@ async function saveSearch() {
   document.getElementById('sr-add-btn').style.display = 'block';
   clearForm();
   await loadSearches();
+}
+async function showDigest(digestKey, label, isArchive) {
+  const root = document.getElementById('sr-root');
+  const key = isArchive ? digestKey + '_archive' : digestKey;
+
+  root.innerHTML = `
+    <div class="sr-wrap">
+      <div class="sr-digest-header">
+        <button class="sr-back-btn" id="sr-back-btn">← Back</button>
+        <div class="sr-digest-title">${label} — ${isArchive ? '7-Day Archive' : "Today's Listings"}</div>
+      </div>
+      <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
+    </div>
+  `;
+
+  document.getElementById('sr-back-btn').onclick = () => initSearchResults();
+
+  try {
+    const res = await fetch(`${WORKER}/player-digest?key=${key}`);
+    const html = await res.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const items = doc.querySelectorAll('.item');
+    const list = document.getElementById('sr-digest-list');
+
+    if (items.length === 0) {
+      list.innerHTML = '<div class="sr-empty">No listings found.</div>';
+      return;
+    }
+
+    list.innerHTML = [...items].map(item => {
+      const title = item.querySelector('.title')?.textContent || '';
+      const meta = item.querySelector('.meta')?.textContent || '';
+      const price = item.querySelector('.price')?.textContent || '';
+      const url = item.querySelector('a')?.href || '';
+      return `
+        <div class="sr-listing-card">
+          <div class="sr-listing-title">${title}</div>
+          <div class="sr-listing-meta">${meta}</div>
+          <div class="sr-listing-bottom">
+            <div class="sr-listing-price">${price}</div>
+            <a href="${url}" target="_blank" class="sr-listing-link">View on eBay →</a>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    document.getElementById('sr-digest-list').innerHTML = '<div class="sr-empty">Failed to load listings.</div>';
+  }
 }
