@@ -4,25 +4,25 @@
 /* ── Design tokens ────────────────────────────────────────────────────────── */
 :root {
   /* Base palette — deep blue-black with warm undertone */
-  --bg:       #090c12;
-  --bg2:      #0e1219;
-  --surf:     #131820;
-  --surf2:    #181f2a;
-  --surf3:    #1e2735;
-  --bdr:      rgba(255,255,255,.06);
-  --bdr2:     rgba(255,255,255,.11);
-  --bdr3:     rgba(255,255,255,.18);
+  --bg:       #0f1520;
+  --bg2:      #141c2b;
+  --surf:     #1a2236;
+  --surf2:    #1f2840;
+  --surf3:    #242f4a;
+  --bdr:      rgba(79,142,247,.1);
+  --bdr2:     rgba(79,142,247,.18);
+  --bdr3:     rgba(79,142,247,.28);
 
   /* Typography */
-  --tx:       #e8edf5;
-  --tx2:      #7d8fa8;
-  --tx3:      #3d4f65;
+  --tx:       #ffffff;
+  --tx2:      #8da4c4;
+  --tx3:      #4a6080;
 
   /* Accent — vivid indigo-blue */
-  --acc:      #4f8ef7;
-  --acc-h:    #7aadff;
-  --acc-bg:   rgba(79,142,247,.12);
-  --acc-bdr:  rgba(79,142,247,.28);
+  --acc:      #5b9dff;
+  --acc-h:    #85bcff;
+  --acc-bg:   rgba(91,157,255,.15);
+  --acc-bdr:  rgba(91,157,255,.32);
 
   /* Teal secondary */
   --teal:     #2dd4bf;
@@ -37,7 +37,7 @@
   --b4-bg:#0f2d18;   --b4-tx:#86efac;
   --b35-bg:#2e1d06;  --b35-tx:#fbbf24;
   --b3-bg:#2a1200;   --b3-tx:#fb923c;
-  --b2-bg:#131820;   --b2-tx:#4d6070;
+  --b2-bg:#1a2236;   --b2-tx:#5d7a96;
 
   /* Sentiment */
   --up:#4ade80; --dn:#f87171;
@@ -58,9 +58,9 @@
   --inv4-bg:#7c3aed;              --inv4-tx:#fff;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
-  --shadow-md: 0 4px 16px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.5), 0 1px 3px rgba(0,8,32,.4);
+  --shadow-md: 0 6px 24px rgba(0,0,0,.55), 0 2px 8px rgba(0,8,32,.35);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.65), 0 4px 16px rgba(0,8,32,.45);
 }
 
 /* ── Light mode ───────────────────────────────────────────────────────────── */
@@ -761,7 +761,7 @@ html, body {
     display: block;
     font-size: 15px;
     font-weight: 700;
-    color: var(--tx);
+    color: var(--acc);
     padding: 0 20px 22px;
     letter-spacing: -.03em;
     border-bottom: 1px solid var(--bdr);
