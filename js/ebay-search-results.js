@@ -15,7 +15,66 @@ async function initSearchResults() {
           <div class="sr-form-title">New Search Alert</div>
           <input class="sr-input" id="sr-label" placeholder="Label (e.g. Scott Brosius)">
           <input class="sr-input" id="sr-query" placeholder="eBay search query (e.g. scott brosius)">
-          <input class="sr-input" id="sr-keywords" placeholder="Priority keywords, comma separated (e.g. psa,rc,auto)">
+          <div class="sr-form-section">Seller</div>
+          <div class="sr-seller-row">
+            <div class="sr-chip-row" id="sr-seller-mode-chips">
+              <button class="sr-chip-btn on" data-val="exclude">Exclude</button>
+              <button class="sr-chip-btn" data-val="include">Include</button>
+            </div>
+            <input class="sr-input sr-input-inline" id="sr-seller" placeholder="Seller username (optional)">
+          </div>
+          <div class="sr-form-section">Filters</div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Sport</div>
+            <div class="sr-chip-row" id="sr-sport-chips">
+              <button class="sr-chip-btn on" data-val="">All</button>
+              <button class="sr-chip-btn" data-val="Baseball">Baseball</button>
+              <button class="sr-chip-btn" data-val="Basketball">Basketball</button>
+              <button class="sr-chip-btn" data-val="Football">Football</button>
+              <button class="sr-chip-btn" data-val="Hockey">Hockey</button>
+            </div>
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Condition</div>
+            <div class="sr-chip-row" id="sr-condition-chips">
+              <button class="sr-chip-btn on" data-val="">Any</button>
+              <button class="sr-chip-btn" data-val="Graded">Graded</button>
+              <button class="sr-chip-btn" data-val="Ungraded">Ungraded</button>
+            </div>
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Serial Numbered</div>
+            <label class="sr-toggle">
+              <input type="checkbox" id="sr-serial">
+              <span class="sr-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="sr-form-section">Listing</div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Type</div>
+            <div class="sr-chip-row" id="sr-type-chips">
+              <button class="sr-chip-btn on" data-val="BOTH">Both</button>
+              <button class="sr-chip-btn" data-val="AUCTION">Auction</button>
+              <button class="sr-chip-btn" data-val="FIXED_PRICE">BIN</button>
+            </div>
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Schedule</div>
+            <div class="sr-chip-row" id="sr-schedule-chips">
+              <button class="sr-chip-btn on" data-val="hourly">Hourly</button>
+              <button class="sr-chip-btn" data-val="nightly">Nightly</button>
+            </div>
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Instant Notify</div>
+            <label class="sr-toggle">
+              <input type="checkbox" id="sr-notify" checked>
+              <span class="sr-toggle-slider"></span>
+            </label>
+          </div>
+          <div id="sr-keywords-wrap">
+            <input class="sr-input" id="sr-keywords" placeholder="Priority keywords, comma separated (e.g. psa,rc,auto)">
+          </div>
           <div class="sr-form-btns">
             <button class="sr-cancel-btn" id="sr-cancel-btn">Cancel</button>
             <button class="sr-save-btn" id="sr-save-btn">Save</button>
@@ -25,9 +84,10 @@ async function initSearchResults() {
     </div>
   `;
 
-  document.getElementById('sr-add-btn').onclick = () => {
+   document.getElementById('sr-add-btn').onclick = () => {
     document.getElementById('sr-form-wrap').style.display = 'block';
     document.getElementById('sr-add-btn').style.display = 'none';
+    wireForm();
   };
 
   document.getElementById('sr-cancel-btn').onclick = () => {
@@ -44,7 +104,15 @@ async function initSearchResults() {
 function clearForm() {
   document.getElementById('sr-label').value = '';
   document.getElementById('sr-query').value = '';
+  document.getElementById('sr-seller').value = '';
   document.getElementById('sr-keywords').value = '';
+  document.getElementById('sr-serial').checked = false;
+  document.getElementById('sr-notify').checked = true;
+  document.querySelectorAll('#sr-seller-mode-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.querySelectorAll('#sr-sport-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.querySelectorAll('#sr-condition-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.querySelectorAll('#sr-type-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.querySelectorAll('#sr-schedule-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
 }
 
 async function loadSearches() {
@@ -96,19 +164,60 @@ function renderSearches(searches) {
   });
 }
 
+function getChipVal(groupId) {
+  return document.querySelector(`#${groupId} .sr-chip-btn.on`)?.dataset.val || '';
+}
+
+function wireChips(groupId) {
+  document.querySelectorAll(`#${groupId} .sr-chip-btn`).forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(`#${groupId} .sr-chip-btn`).forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+    };
+  });
+}
+
+function wireForm() {
+  wireChips('sr-seller-mode-chips');
+  wireChips('sr-sport-chips');
+  wireChips('sr-condition-chips');
+  wireChips('sr-type-chips');
+  wireChips('sr-schedule-chips');
+
+  document.getElementById('sr-notify').onchange = function() {
+    document.getElementById('sr-keywords-wrap').style.display = this.checked ? 'block' : 'none';
+  };
+}
+
 async function saveSearch() {
   const label = document.getElementById('sr-label').value.trim();
   const query = document.getElementById('sr-query').value.trim();
-  const keywords = document.getElementById('sr-keywords').value.trim();
+  const seller = document.getElementById('sr-seller').value.trim();
 
-  if (!label || !query) return;
+  if (!label || (!query && !seller)) return;
 
   const digestKey = label.toLowerCase().replace(/\s+/g, '_') + '_digest';
+  const keywords = document.getElementById('sr-keywords').value.trim();
   const priorityKeywords = keywords ? keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean) : [];
+
+  const search = {
+    label,
+    query,
+    seller,
+    sellerMode: getChipVal('sr-seller-mode-chips') || 'exclude',
+    sport: getChipVal('sr-sport-chips'),
+    condition: getChipVal('sr-condition-chips'),
+    serial: document.getElementById('sr-serial').checked,
+    listingType: getChipVal('sr-type-chips') || 'BOTH',
+    schedule: getChipVal('sr-schedule-chips') || 'hourly',
+    notify: document.getElementById('sr-notify').checked,
+    priorityKeywords,
+    digestKey
+  };
 
   const res = await fetch(`${WORKER}/search-alerts`);
   const data = await res.json();
-  const updated = [...(data.searches || []), { label, query, priorityKeywords, digestKey }];
+  const updated = [...(data.searches || []), search];
 
   await fetch(`${WORKER}/search-alerts`, {
     method: 'POST',
