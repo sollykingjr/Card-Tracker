@@ -39,6 +39,7 @@ export default {
     if (path === '/test-promotions') return handleTestPromotions(env, cors);
     if (path === '/daily-stats') return handleDailyStats(env, cors);  
     if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
+    if (path === '/player-digest-json') return handlePlayerDigestJson(request, env, cors);
     if (path === '/search-alerts' && request.method === 'GET') return handleSearchAlertsGet(env, cors);
     if (path === '/seed-brosius') return handleSeedBrosius(env, cors);
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
@@ -724,4 +725,25 @@ async function handleSeedBrosius(env, cors) {
   return new Response(JSON.stringify({ ok: true, seeded: searches }), {
     headers: { ...cors, 'Content-Type': 'application/json' }
   });
+}
+// ── [19] handlePlayerDigestJson ───────────────────────────────────────────────
+async function handlePlayerDigestJson(request, env, cors) {
+  try {
+    const url = new URL(request.url);
+    const key = url.searchParams.get('key');
+    if (!key) return new Response(JSON.stringify({ error: 'missing key' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const existing = await env.CACHE.get(key);
+    const items = existing ? JSON.parse(existing) : [];
+
+    return new Response(JSON.stringify({ items, count: items.length }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
 }
