@@ -138,11 +138,9 @@ async function showDigest(digestKey, label, isArchive) {
   document.getElementById('sr-back-btn').onclick = () => initSearchResults();
 
   try {
-    const res = await fetch(`${WORKER}/player-digest?key=${key}`);
-    const html = await res.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const items = doc.querySelectorAll('.item');
+    const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
+    const data = await res.json();
+    const items = data.items || [];
     const list = document.getElementById('sr-digest-list');
 
     if (items.length === 0) {
@@ -150,18 +148,16 @@ async function showDigest(digestKey, label, isArchive) {
       return;
     }
 
-    list.innerHTML = [...items].map(item => {
-      const title = item.querySelector('.title')?.textContent || '';
-      const meta = item.querySelector('.meta')?.textContent || '';
-      const price = item.querySelector('.price')?.textContent || '';
-      const url = item.querySelector('a')?.href || '';
+    list.innerHTML = items.map(item => {
+      const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       return `
         <div class="sr-listing-card">
-          <div class="sr-listing-title">${title}</div>
-          <div class="sr-listing-meta">${meta}</div>
+          ${item.image ? `<img class="sr-listing-img" src="${item.image}" alt="${item.title}" loading="lazy">` : ''}
+          <div class="sr-listing-title">${item.title}</div>
+          <div class="sr-listing-meta">${item.type} · ${date}</div>
           <div class="sr-listing-bottom">
-            <div class="sr-listing-price">${price}</div>
-            <a href="${url}" target="_blank" class="sr-listing-link">View on eBay →</a>
+            <div class="sr-listing-price">$${item.price}</div>
+            <a href="${item.url}" target="_blank" class="sr-listing-link">View on eBay →</a>
           </div>
         </div>
       `;
