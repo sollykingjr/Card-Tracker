@@ -39,7 +39,8 @@ export default {
     if (path === '/test-promotions') return handleTestPromotions(env, cors);
     if (path === '/daily-stats') return handleDailyStats(env, cors);  
     if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
-    if (path === '/test-player-search') return handleTestPlayerSearch(request, env, cors);
+    if (path === '/search-alerts' && request.method === 'GET') return handleSearchAlertsGet(env, cors);
+    if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
@@ -514,13 +515,9 @@ async function sendDailyStatsNotification(env) {
 }
 // ── [13] checkPlayerSearches ──────────────────────────────────────────────────
 async function checkPlayerSearches(env) {
-  const searches = [
-    {
-      query: 'scott brosius',
-      priorityKeywords: ['psa', 'sgc', 'bgs', 'rookie', 'rc', 'auto', 'refractor'],
-      digestKey: 'brosius_digest'
-    }
-  ];
+  const saved = await env.CACHE.get('player_search_alerts');
+  const searches = saved ? JSON.parse(saved) : [];
+  if (searches.length === 0) return;
 
   const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
   const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
@@ -601,9 +598,9 @@ async function checkPlayerSearches(env) {
 }
 // ── [14] sendPlayerDigestNotification ────────────────────────────────────────
 async function sendPlayerDigestNotification(env) {
-  const searches = [
-    { query: 'scott brosius', digestKey: 'brosius_digest', label: 'Scott Brosius' }
-  ];
+  const saved = await env.CACHE.get('player_search_alerts');
+  const searches = saved ? JSON.parse(saved) : [];
+  if (searches.length === 0) return;
 
   for (const search of searches) {
     const existing = await env.CACHE.get(search.digestKey);
@@ -672,71 +669,42 @@ ${!key.includes('_archive') ? `<a href="/player-digest?key=${key}_archive" style
     return new Response(`Error: ${e.message}`, { status: 500, headers: cors });
   }
 }
-// ── [16] handleTestPlayerSearch ───────────────────────────────────────────────
-async function handleTestPlayerSearch(request, env, cors) {
+
+// ── [17] clearPlayerDigests ───────────────────────────────────────────────────
+async function clearPlayerDigests(env) {
+  const saved = await env.CACHE.get('player_search_alerts');
+  const searches = saved ? JSON.parse(saved) : [];
+  const digestKeys = searches.map(s => s.digestKey);
+  for (const key of digestKeys) {
+    await env.CACHE.delete(key);
+  }
+}
+// ── [18] handleSearchAlerts ───────────────────────────────────────────────────
+async function handleSearchAlertsGet(env, cors) {
   try {
-    const url = new URL(request.url);
-    const hours = parseInt(url.searchParams.get('hours') || '24');
-
-    const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
-    const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      return new Response(JSON.stringify({ error: 'token_failed' }), {
-        status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-      });
-    }
-
-    const cutoff = Date.now() - (hours * 60 * 60 * 1000);
-    const searchUrl = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=scott%20brosius&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=200`;
-    const res = await fetch(searchUrl, {
-      headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
-    });
-    const data = await res.json();
-    const items = data.itemSummaries || [];
-
-    const newItems = items.filter(item => {
-      const created = new Date(item.itemCreationDate).getTime();
-      return created > cutoff;
-    });
-
-    const priorityKeywords = ['psa', 'sgc', 'bgs', 'rookie', 'rc', 'auto', 'refractor'];
-    const results = newItems.map(item => ({
-      title: item.title,
-      price: item.currentBidPrice?.value || item.price?.value || '?',
-      type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
-      date: item.itemCreationDate,
-      priority: priorityKeywords.some(kw => item.title.toLowerCase().includes(kw)),
-      url: item.itemWebUrl
-    }));
-
+    const saved = await env.CACHE.get('player_search_alerts');
     return new Response(JSON.stringify({
-      hours,
-      total: data.total,
-      returned: items.length,
-      newSinceCutoff: newItems.length,
-      priorityCount: results.filter(r => r.priority).length,
-      items: results
-    }, null, 2), {
-      headers: { ...cors, 'Content-Type': 'application/json' }
-    });
+      searches: saved ? JSON.parse(saved) : []
+    }), { headers: { ...cors, 'Content-Type': 'application/json' } });
   } catch(e) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
   }
 }
-// ── [17] clearPlayerDigests ───────────────────────────────────────────────────
-async function clearPlayerDigests(env) {
-  const digestKeys = ['brosius_digest'];
-  for (const key of digestKeys) {
-    await env.CACHE.delete(key);
+
+async function handleSearchAlertsPost(request, env, cors) {
+  try {
+    const { searches } = await request.json();
+    if (searches !== undefined) {
+      await env.CACHE.put('player_search_alerts', JSON.stringify(searches));
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
   }
 }
