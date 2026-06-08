@@ -484,7 +484,6 @@ html, body {
 
 @media (min-width: 768px) {
   .sb-wrap {
-    max-width: 700px;
     padding: 16px 20px 60px;
   }
 }
