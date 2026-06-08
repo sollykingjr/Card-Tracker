@@ -140,6 +140,8 @@ function renderSearches(searches) {
         <div class="sr-menu-wrap">
           <button class="sr-menu-btn" data-index="${i}">···</button>
           <div class="sr-menu-dropdown" id="sr-menu-${i}" style="display:none">
+            <button class="sr-menu-item sr-menu-edit" data-index="${i}">Edit</button>
+            <button class="sr-menu-item sr-menu-rename" data-index="${i}">Rename</button>
             <button class="sr-menu-item sr-menu-delete" data-index="${i}">Delete</button>
           </div>
         </div>
@@ -168,6 +170,87 @@ function renderSearches(searches) {
       const isOpen = dropdown.style.display === 'block';
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       dropdown.style.display = isOpen ? 'none' : 'block';
+    };
+  });
+
+  document.querySelectorAll('.sr-menu-rename').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const i = parseInt(btn.dataset.index);
+      const res = await fetch(`${WORKER}/search-alerts`);
+      const data = await res.json();
+      const search = data.searches[i];
+      const newLabel = prompt('Rename search:', search.label);
+      if (!newLabel || newLabel.trim() === search.label) return;
+      data.searches[i].label = newLabel.trim();
+      await fetch(`${WORKER}/search-alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searches: data.searches })
+      });
+      await loadSearches();
+    };
+  });
+
+  document.querySelectorAll('.sr-menu-edit').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const i = parseInt(btn.dataset.index);
+      const res = await fetch(`${WORKER}/search-alerts`);
+      const data = await res.json();
+      const s = data.searches[i];
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      document.getElementById('sr-form-wrap').style.display = 'block';
+      document.getElementById('sr-add-btn').style.display = 'none';
+      wireForm();
+      // Pre-fill form
+      document.getElementById('sr-label').value = s.label || '';
+      document.getElementById('sr-query').value = s.query || '';
+      document.getElementById('sr-seller').value = s.seller || '';
+      document.getElementById('sr-keywords').value = (s.priorityKeywords || []).join(', ');
+      document.getElementById('sr-serial').checked = s.serial || false;
+      document.getElementById('sr-notify').checked = s.notify !== false;
+      document.getElementById('sr-keywords-wrap').style.display = s.notify !== false ? 'block' : 'none';
+      // Set chips
+      const setChip = (groupId, val) => {
+        document.querySelectorAll(`#${groupId} .sr-chip-btn`).forEach(b => {
+          b.classList.toggle('on', b.dataset.val === val);
+        });
+      };
+      setChip('sr-seller-mode-chips', s.sellerMode || 'exclude');
+      setChip('sr-sport-chips', s.sport || '');
+      setChip('sr-condition-chips', s.condition || '');
+      setChip('sr-type-chips', s.listingType || 'BOTH');
+      setChip('sr-schedule-chips', s.schedule || 'hourly');
+      // Override save to update instead of add
+      document.getElementById('sr-save-btn').onclick = async () => {
+        const updated = [...data.searches];
+        const keywords = document.getElementById('sr-keywords').value.trim();
+        updated[i] = {
+          ...s,
+          label: document.getElementById('sr-label').value.trim(),
+          query: document.getElementById('sr-query').value.trim(),
+          seller: document.getElementById('sr-seller').value.trim(),
+          sellerMode: getChipVal('sr-seller-mode-chips') || 'exclude',
+          sport: getChipVal('sr-sport-chips'),
+          condition: getChipVal('sr-condition-chips'),
+          serial: document.getElementById('sr-serial').checked,
+          listingType: getChipVal('sr-type-chips') || 'BOTH',
+          schedule: getChipVal('sr-schedule-chips') || 'hourly',
+          notify: document.getElementById('sr-notify').checked,
+          priorityKeywords: keywords ? keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean) : [],
+        };
+        await fetch(`${WORKER}/search-alerts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ searches: updated })
+        });
+        document.getElementById('sr-form-wrap').style.display = 'none';
+        document.getElementById('sr-add-btn').style.display = 'block';
+        document.getElementById('sr-save-btn').onclick = saveSearch;
+        clearForm();
+        await loadSearches();
+      };
     };
   });
 
