@@ -649,7 +649,8 @@ async function handlePlayerDigest(request, env, cors) {
   .empty { color: #555; font-size: 14px; padding: 16px 0; }
 </style></head><body>
 <h1>🔍 New Listings</h1>
-<div class="count">${items.length} listing${items.length !== 1 ? 's' : ''}</div>`;
+<div class="count">${items.length} listing${items.length !== 1 ? 's' : ''}</div>
+${!key.includes('_archive') ? `<a href="/player-digest?key=${key}_archive" style="display:inline-block;margin-bottom:16px;color:#60a5fa;font-size:13px;">View 7-day archive →</a>` : `<a href="/player-digest?key=${key.replace('_archive','')}" style="display:inline-block;margin-bottom:16px;color:#60a5fa;font-size:13px;">← View today only</a>`}`;
 
     if (items.length === 0) {
       html += `<div class="empty">No listings found.</div>`;
