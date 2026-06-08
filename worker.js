@@ -6,8 +6,12 @@ const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/
 export default {
   async scheduled(event, env, ctx) {
     await checkPromotions(env);
+    await checkPlayerSearches(env);
     if (event.cron === '0 13 * * *') {
       await sendDailyStatsNotification(env);
+    }
+    if (event.cron === '0 12 * * *') {
+      await sendPlayerDigestNotification(env);
     }
   },
 
@@ -31,9 +35,9 @@ export default {
     if (path === '/save-title') return handleSaveTitle(request, env, cors);
     if (path === '/test-promotions') return handleTestPromotions(env, cors);
     if (path === '/daily-stats') return handleDailyStats(env, cors);  
+    if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
-    if (path === '/test-ebay') return handleTestEbay(env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -504,36 +508,155 @@ async function sendDailyStatsNotification(env) {
     })
   });
 }
-// ── [13] handleTestEbay ───────────────────────────────────────────────────────
-async function handleTestEbay(env, cors) {
-  try {
-    const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
-    const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+// ── [13] checkPlayerSearches ──────────────────────────────────────────────────
+async function checkPlayerSearches(env) {
+  const searches = [
+    {
+      query: 'scott brosius',
+      priorityKeywords: ['psa', 'sgc', 'bgs', 'rookie', 'rc', 'auto', 'refractor'],
+      digestKey: 'brosius_digest'
+    }
+  ];
+
+  const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
+  const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) return;
+
+  const now = Date.now();
+  const lastRun = await env.CACHE.get('player_search_last_run');
+  const cutoff = lastRun ? parseInt(lastRun) : now - (60 * 60 * 1000);
+  await env.CACHE.put('player_search_last_run', String(now));
+
+  for (const search of searches) {
+    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(search.query)}&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=50`;
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      return new Response(JSON.stringify({ error: 'token_failed', detail: tokenData }), {
-        status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+    const data = await res.json();
+    const items = data.itemSummaries || [];
+
+    const newItems = items.filter(item => {
+      const created = new Date(item.itemCreationDate).getTime();
+      return created > cutoff;
+    });
+
+    if (newItems.length === 0) continue;
+
+    // Check for priority matches — alert immediately
+    for (const item of newItems) {
+      const titleLower = item.title.toLowerCase();
+      const isPriority = search.priorityKeywords.some(kw => titleLower.includes(kw));
+      if (isPriority) {
+        const price = item.currentBidPrice?.value || item.price?.value || '?';
+        const type = item.buyingOptions?.includes('AUCTION') ? '🔨' : '💰';
+        await fetch('https://api.pushover.net/1/messages.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: env.PUSHOVER_TOKEN,
+            user: env.PUSHOVER_USER,
+            title: `${type} New Listing: ${search.query}`,
+            message: `${item.title}\n$${price}`,
+            url: item.itemWebUrl,
+            url_title: 'View on eBay'
+          })
+        });
+      }
     }
 
-    const searchRes = await fetch(
-      'https://api.ebay.com/buy/browse/v1/item_summary/search?category_ids=212&filter=sellers%3A%7Bdcsports87%7D%2CbuyingOptions%3A%7BAUCTION%7D&limit=3',
-      { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } }
-    );
-    const searchData = await searchRes.json();
-    return new Response(JSON.stringify(searchData, null, 2), {
-      headers: { ...cors, 'Content-Type': 'application/json' }
+    // Store all new items for digest
+    const existing = await env.CACHE.get(search.digestKey);
+    const digestItems = existing ? JSON.parse(existing) : [];
+    const updated = [...digestItems, ...newItems.map(item => ({
+      title: item.title,
+      price: item.currentBidPrice?.value || item.price?.value || '?',
+      url: item.itemWebUrl,
+      type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+      date: item.itemCreationDate
+    }))];
+    await env.CACHE.put(search.digestKey, JSON.stringify(updated));
+  }
+}
+// ── [14] sendPlayerDigestNotification ────────────────────────────────────────
+async function sendPlayerDigestNotification(env) {
+  const searches = [
+    { query: 'scott brosius', digestKey: 'brosius_digest', label: 'Scott Brosius' }
+  ];
+
+  for (const search of searches) {
+    const existing = await env.CACHE.get(search.digestKey);
+    const items = existing ? JSON.parse(existing) : [];
+    if (items.length === 0) continue;
+
+    await fetch('https://api.pushover.net/1/messages.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: env.PUSHOVER_TOKEN,
+        user: env.PUSHOVER_USER,
+        title: `🔍 ${search.label}: ${items.length} new listing${items.length !== 1 ? 's' : ''} overnight`,
+        message: 'Tap to view all listings.',
+        url: `https://card-app.maxcsolomon.workers.dev/player-digest?key=${search.digestKey}`,
+        url_title: 'View Listings'
+      })
     });
+
+    // Clear digest after sending
+    await env.CACHE.delete(search.digestKey);
+  }
+}
+
+// ── [15] handlePlayerDigest ───────────────────────────────────────────────────
+async function handlePlayerDigest(request, env, cors) {
+  try {
+    const url = new URL(request.url);
+    const key = url.searchParams.get('key');
+    if (!key) return new Response('Missing key', { status: 400, headers: cors });
+
+    const existing = await env.CACHE.get(key);
+    const items = existing ? JSON.parse(existing) : [];
+
+    let html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>New Listings</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #0f0f0f; color: #eee; padding: 16px; max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 18px; color: #fff; margin-bottom: 4px; }
+  .count { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .item { padding: 12px 0; border-bottom: 1px solid #1a1a1a; }
+  .title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .meta { font-size: 13px; color: #888; margin-bottom: 6px; }
+  .price { font-size: 15px; color: #4ade80; font-family: monospace; }
+  a { color: #60a5fa; text-decoration: none; font-size: 13px; }
+  .empty { color: #555; font-size: 14px; padding: 16px 0; }
+</style></head><body>
+<h1>🔍 New Listings</h1>
+<div class="count">${items.length} listing${items.length !== 1 ? 's' : ''}</div>`;
+
+    if (items.length === 0) {
+      html += `<div class="empty">No listings found.</div>`;
+    } else {
+      for (const item of items) {
+        const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        html += `<div class="item">
+          <div class="title">${item.title}</div>
+          <div class="meta">${item.type} · ${date}</div>
+          <div class="price">$${item.price}</div>
+          <a href="${item.url}" target="_blank">View on eBay →</a>
+        </div>`;
+      }
+    }
+
+    html += `</body></html>`;
+    return new Response(html, { headers: { ...cors, 'Content-Type': 'text/html' } });
   } catch(e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-    });
+    return new Response(`Error: ${e.message}`, { status: 500, headers: cors });
   }
 }
