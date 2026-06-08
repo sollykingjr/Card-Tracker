@@ -698,9 +698,14 @@ async function handleSearchAlertsGet(env, cors) {
 
 async function handleSearchAlertsPost(request, env, cors) {
   try {
-    const { searches } = await request.json();
+    const { searches, deleteKeys } = await request.json();
     if (searches !== undefined) {
       await env.CACHE.put('player_search_alerts', JSON.stringify(searches));
+    }
+    if (deleteKeys && Array.isArray(deleteKeys)) {
+      for (const key of deleteKeys) {
+        await env.CACHE.delete(key);
+      }
     }
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
