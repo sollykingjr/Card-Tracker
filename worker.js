@@ -13,6 +13,9 @@ export default {
     if (event.cron === '0 12 * * *') {
       await sendPlayerDigestNotification(env);
     }
+    if (event.cron === '0 5 * * *') {
+      await clearPlayerDigests(env);
+    }
   },
 
   async fetch(request, env, ctx) {
@@ -573,17 +576,27 @@ async function checkPlayerSearches(env) {
       }
     }
 
-    // Store all new items for digest
-    const existing = await env.CACHE.get(search.digestKey);
-    const digestItems = existing ? JSON.parse(existing) : [];
-    const updated = [...digestItems, ...newItems.map(item => ({
+    // Store all new items for digest and archive
+    const newMapped = newItems.map(item => ({
       title: item.title,
       price: item.currentBidPrice?.value || item.price?.value || '?',
       url: item.itemWebUrl,
       type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
       date: item.itemCreationDate
-    }))];
-    await env.CACHE.put(search.digestKey, JSON.stringify(updated));
+    }));
+
+    // Daily digest
+    const existing = await env.CACHE.get(search.digestKey);
+    const digestItems = existing ? JSON.parse(existing) : [];
+    await env.CACHE.put(search.digestKey, JSON.stringify([...digestItems, ...newMapped]));
+
+    // 7-day archive — drop anything older than 7 days
+    const archiveKey = search.digestKey + '_archive';
+    const existingArchive = await env.CACHE.get(archiveKey);
+    const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...newMapped]));
   }
 }
 // ── [14] sendPlayerDigestNotification ────────────────────────────────────────
@@ -604,14 +617,11 @@ async function sendPlayerDigestNotification(env) {
         token: env.PUSHOVER_TOKEN,
         user: env.PUSHOVER_USER,
         title: `🔍 ${search.label}: ${items.length} new listing${items.length !== 1 ? 's' : ''} overnight`,
-        message: 'Tap to view all listings.',
+        message: 'Tap for today\'s listings. 7-day archive also available.',
         url: `https://card-app.maxcsolomon.workers.dev/player-digest?key=${search.digestKey}`,
-        url_title: 'View Listings'
+        url_title: 'View Today'
       })
     });
-
-    // Clear digest after sending
-    await env.CACHE.delete(search.digestKey);
   }
 }
 
@@ -720,5 +730,12 @@ async function handleTestPlayerSearch(request, env, cors) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
+  }
+}
+// ── [17] clearPlayerDigests ───────────────────────────────────────────────────
+async function clearPlayerDigests(env) {
+  const digestKeys = ['brosius_digest'];
+  for (const key of digestKeys) {
+    await env.CACHE.delete(key);
   }
 }
