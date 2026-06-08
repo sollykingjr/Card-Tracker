@@ -538,8 +538,34 @@ async function checkPlayerSearches(env) {
   const cutoff = lastRun ? parseInt(lastRun) : now - (60 * 60 * 1000);
   await env.CACHE.put('player_search_last_run', String(now));
 
-  for (const search of searches) {
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(search.query)}&category_ids=212&sort=newlyListed&filter=excludeSellers%3A%7Bcomc_consignment%7D&limit=200`;
+ for (const search of searches) {
+    // Skip nightly searches on hourly runs
+    if (search.schedule === 'nightly') continue;
+
+    // Build filters
+    const filters = [];
+    if (search.listingType && search.listingType !== 'BOTH') {
+      filters.push(`buyingOptions:{${search.listingType}}`);
+    }
+    if (search.seller) {
+      if (search.sellerMode === 'include') {
+        filters.push(`sellers:{${search.seller}}`);
+      } else {
+        filters.push(`excludeSellers:{${search.seller}}`);
+      }
+    }
+    if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+    if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+
+    // Build query
+    let q = search.query || '';
+    if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
+    if (search.serial) q = q ? `${q} /` : '/';
+
+    if (!q && !search.seller) continue;
+
+    const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
     });
@@ -554,24 +580,29 @@ async function checkPlayerSearches(env) {
     if (newItems.length === 0) continue;
 
     // Check for priority matches — alert immediately
-    for (const item of newItems) {
-      const titleLower = item.title.toLowerCase();
-      const isPriority = search.priorityKeywords.some(kw => titleLower.includes(kw));
-      if (isPriority) {
-        const price = item.currentBidPrice?.value || item.price?.value || '?';
-        const type = item.buyingOptions?.includes('AUCTION') ? '🔨' : '💰';
-        await fetch('https://api.pushover.net/1/messages.json', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: env.PUSHOVER_TOKEN,
-            user: env.PUSHOVER_USER,
-            title: `${type} New Listing: ${search.query}`,
-            message: `${item.title}\n$${price}`,
-            url: item.itemWebUrl,
-            url_title: 'View on eBay'
-          })
-        });
+    if (search.notify !== false) {
+      for (const item of newItems) {
+        const titleLower = item.title.toLowerCase();
+        const hasPriorityKeywords = search.priorityKeywords && search.priorityKeywords.length > 0;
+        const isPriority = hasPriorityKeywords
+          ? search.priorityKeywords.some(kw => titleLower.includes(kw))
+          : true;
+        if (isPriority) {
+          const price = item.currentBidPrice?.value || item.price?.value || '?';
+          const type = item.buyingOptions?.includes('AUCTION') ? '🔨' : '💰';
+          await fetch('https://api.pushover.net/1/messages.json', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: env.PUSHOVER_TOKEN,
+              user: env.PUSHOVER_USER,
+              title: `${type} New Listing: ${search.label}`,
+              message: `${item.title}\n$${price}`,
+              url: item.itemWebUrl,
+              url_title: 'View on eBay'
+            })
+          });
+        }
       }
     }
 
