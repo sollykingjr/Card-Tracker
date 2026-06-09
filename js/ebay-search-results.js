@@ -155,8 +155,9 @@ function renderSearches(searches) {
       <div class="sr-card-query">🔍 ${s.query}</div>
       <div class="sr-card-keywords">⚡ ${s.priorityKeywords.join(', ')}</div>
       <div class="sr-card-links">
-        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today's Listings →</button>
-        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day Archive →</button>
+        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false, '${s.digestKey}_hourly')">Last Hour →</button>
+        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
+        <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
       </div>
     </div>
   `).join('');
