@@ -302,9 +302,6 @@ function renderSearches(searches) {
           includeKeywords: document.getElementById('sr-include-keywords').value || '',
           includeLogic: getChipVal('sr-include-logic') || 'OR',
           excludeKeywords: document.getElementById('sr-exclude-keywords').value || ''
-          includeKeywords: document.getElementById('sr-include-keywords').value || '',
-          includeLogic: getChipVal('sr-include-logic') || 'OR',
-          excludeKeywords: document.getElementById('sr-exclude-keywords').value || ''
         };
         await fetch(`${WORKER}/search-alerts`, {
           method: 'POST',
@@ -396,7 +393,10 @@ async function saveSearch() {
     priorityKeywords,
     digestKey,
     minPrice: document.getElementById('sr-min-price').value || '',
-    maxPrice: document.getElementById('sr-max-price').value || ''
+    maxPrice: document.getElementById('sr-max-price').value || '',
+    includeKeywords: document.getElementById('sr-include-keywords').value || '',
+    includeLogic: getChipVal('sr-include-logic') || 'OR',
+    excludeKeywords: document.getElementById('sr-exclude-keywords').value || ''
   };
 
   const res = await fetch(`${WORKER}/search-alerts`);
