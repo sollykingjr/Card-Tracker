@@ -560,6 +560,7 @@ async function checkPlayerSearches(env) {
       const min = search.minPrice || '0';
       const max = search.maxPrice || '';
       filters.push(`price:[${min}..${max}]`);
+      filters.push('priceCurrency:USD');
     }
 
     // Build query
@@ -806,6 +807,7 @@ async function handleRunSearch(request, env, cors) {
       const min = search.minPrice || '0';
       const max = search.maxPrice || '';
       filters.push(`price:[${min}..${max}]`);
+      filters.push('priceCurrency:USD');
     }
     let q = search.query || '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
