@@ -49,6 +49,15 @@ async function initSearchResults() {
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
+          <div class="sr-form-section">Price</div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Min Price</div>
+            <input class="sr-input sr-input-inline" id="sr-min-price" placeholder="e.g. 10" type="number" min="0">
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Max Price</div>
+            <input class="sr-input sr-input-inline" id="sr-max-price" placeholder="e.g. 500" type="number" min="0">
+          </div>
           <div class="sr-form-section">Listing</div>
           <div class="sr-form-row">
             <div class="sr-form-label">Type</div>
@@ -119,6 +128,8 @@ function clearForm() {
   document.querySelectorAll('#sr-condition-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-type-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-schedule-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('sr-min-price').value = '';
+  document.getElementById('sr-max-price').value = '';
 }
 
 async function loadSearches() {
@@ -253,6 +264,8 @@ function renderSearches(searches) {
       setChip('sr-condition-chips', s.condition || '');
       setChip('sr-type-chips', s.listingType || 'BOTH');
       setChip('sr-schedule-chips', s.schedule || 'hourly');
+      document.getElementById('sr-min-price').value = s.minPrice || '';
+      document.getElementById('sr-max-price').value = s.maxPrice || '';
       // Override save to update instead of add
       document.getElementById('sr-save-btn').onclick = async () => {
         const updated = [...data.searches];
@@ -358,7 +371,9 @@ async function saveSearch() {
     schedule: getChipVal('sr-schedule-chips') || 'hourly',
     notify: document.getElementById('sr-notify').checked,
     priorityKeywords,
-    digestKey
+    digestKey,
+    minPrice: document.getElementById('sr-min-price').value || '',
+    maxPrice: document.getElementById('sr-max-price').value || ''
   };
 
   const res = await fetch(`${WORKER}/search-alerts`);
