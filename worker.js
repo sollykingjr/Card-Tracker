@@ -595,8 +595,11 @@ async function checkPlayerSearches(env) {
       image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
     }));
 
-    // Send single hourly Pushover if notify is on
-    if (search.notify !== false) {
+   // Send single hourly Pushover if notify is on and within quiet hours
+    const etHour = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
+    const hour = parseInt(etHour);
+    const withinHours = hour >= 7 && hour < 22;
+    if (search.notify !== false && withinHours) {
       const hourlyKey = search.digestKey + '_hourly';
       await env.CACHE.put(hourlyKey, JSON.stringify(newMapped), { expirationTtl: 7200 });
       await fetch('https://api.pushover.net/1/messages.json', {
