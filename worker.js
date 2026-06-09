@@ -585,8 +585,27 @@ async function checkPlayerSearches(env) {
 
     if (newItems.length === 0) continue;
 
-// Map new items
-    const newMapped = newItems.map(item => ({
+    // Apply exclude/include keyword filters
+    let filteredItems = newItems;
+    if (search.excludeKeywords) {
+      const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      filteredItems = filteredItems.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+    }
+    if (search.includeKeywords) {
+      const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      if (incl.length > 0) {
+        if (search.includeLogic === 'AND') {
+          filteredItems = filteredItems.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)));
+        } else {
+          filteredItems = filteredItems.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+        }
+      }
+    }
+
+    if (filteredItems.length === 0) continue;
+
+    // Map new items
+    const newMapped = filteredItems.map(item => ({
       title: item.title,
       price: item.currentBidPrice?.value || item.price?.value || '?',
       url: item.itemWebUrl,
@@ -599,7 +618,7 @@ async function checkPlayerSearches(env) {
     const etHour = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
     const hour = parseInt(etHour);
     const withinHours = hour >= 7 && hour < 22;
-    if (search.notify !== false && withinHours) {
+    if (search.notify !== false && withinHours && filteredItems.length > 0) {
       const hourlyKey = search.digestKey + '_hourly';
       await env.CACHE.put(hourlyKey, JSON.stringify(newMapped), { expirationTtl: 7200 });
       await fetch('https://api.pushover.net/1/messages.json', {
@@ -608,7 +627,7 @@ async function checkPlayerSearches(env) {
         body: JSON.stringify({
           token: env.PUSHOVER_TOKEN,
           user: env.PUSHOVER_USER,
-          title: `🔍 ${search.label}: ${newItems.length} new listing${newItems.length !== 1 ? 's' : ''}`,
+          title: `🔍 ${search.label}: ${filteredItems.length} new listing${filteredItems.length !== 1 ? 's' : ''}`,
           message: 'Tap to view new listings.',
           url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}_hourly`,
           url_title: 'View in App'
@@ -821,9 +840,24 @@ async function handleRunSearch(request, env, cors) {
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const data = await res.json();
     const cutoff = Date.now() - (2 * 60 * 60 * 1000);
-    const items = (data.itemSummaries || []).filter(item => 
+    let filteredSummaries = (data.itemSummaries || []).filter(item =>
       new Date(item.itemCreationDate).getTime() > cutoff
-    ).map(item => ({
+    );
+    if (search.excludeKeywords) {
+      const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      filteredSummaries = filteredSummaries.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+    }
+    if (search.includeKeywords) {
+      const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      if (incl.length > 0) {
+        if (search.includeLogic === 'AND') {
+          filteredSummaries = filteredSummaries.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)));
+        } else {
+          filteredSummaries = filteredSummaries.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+        }
+      }
+    }
+    const items = filteredSummaries.map(item => ({
       title: item.title,
       price: item.currentBidPrice?.value || item.price?.value || '?',
       url: item.itemWebUrl,
