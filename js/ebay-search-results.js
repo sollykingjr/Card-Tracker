@@ -175,7 +175,7 @@ function renderSearches(searches) {
         </div>
       </div>
       <div class="sr-card-query">🔍 ${s.query}</div>
-      <div class="sr-card-keywords">⚡ ${s.priorityKeywords.join(', ')}</div>
+      <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
       <div class="sr-card-links">
         <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
         <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false, '${s.digestKey}_hourly')">Last Hour →</button>
