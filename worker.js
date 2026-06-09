@@ -578,34 +578,7 @@ async function checkPlayerSearches(env) {
 
     if (newItems.length === 0) continue;
 
-    // Check for priority matches — alert immediately
-    if (search.notify !== false) {
-      for (const item of newItems) {
-        const titleLower = item.title.toLowerCase();
-        const hasPriorityKeywords = search.priorityKeywords && search.priorityKeywords.length > 0;
-        const isPriority = hasPriorityKeywords
-          ? search.priorityKeywords.some(kw => titleLower.includes(kw))
-          : true;
-        if (isPriority) {
-          const price = item.currentBidPrice?.value || item.price?.value || '?';
-          const type = item.buyingOptions?.includes('AUCTION') ? '🔨' : '💰';
-          await fetch('https://api.pushover.net/1/messages.json', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              token: env.PUSHOVER_TOKEN,
-              user: env.PUSHOVER_USER,
-              title: `${type} New Listing: ${search.label}`,
-              message: `${item.title}\n$${price}`,
-              url: item.itemWebUrl,
-              url_title: 'View on eBay'
-            })
-          });
-        }
-      }
-    }
-
-    // Store all new items for digest and archive
+// Map new items
     const newMapped = newItems.map(item => ({
       title: item.title,
       price: item.currentBidPrice?.value || item.price?.value || '?',
@@ -614,6 +587,24 @@ async function checkPlayerSearches(env) {
       date: item.itemCreationDate,
       image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
     }));
+
+    // Send single hourly Pushover if notify is on
+    if (search.notify !== false) {
+      const hourlyKey = search.digestKey + '_hourly';
+      await env.CACHE.put(hourlyKey, JSON.stringify(newMapped), { expirationTtl: 7200 });
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `🔍 ${search.label}: ${newItems.length} new listing${newItems.length !== 1 ? 's' : ''}`,
+          message: 'Tap to view new listings.',
+          url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}_hourly`,
+          url_title: 'View in App'
+        })
+      });
+    }
 
     // Daily digest
     const existing = await env.CACHE.get(search.digestKey);
