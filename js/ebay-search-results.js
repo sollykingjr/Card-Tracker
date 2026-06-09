@@ -451,7 +451,7 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
       return;
     }
 
-    list.innerHTML = items.map(item => {
+    list.innerHTML = [...items].reverse().map(item => {
       const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
       return `
         <div class="sr-listing-card">
