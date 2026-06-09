@@ -556,6 +556,11 @@ async function checkPlayerSearches(env) {
     }
     if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
     if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+    if (search.minPrice || search.maxPrice) {
+      const min = search.minPrice || '0';
+      const max = search.maxPrice || '';
+      filters.push(`price:[${min}..${max}]`);
+    }
 
     // Build query
     let q = search.query || '';
@@ -797,7 +802,11 @@ async function handleRunSearch(request, env, cors) {
     }
     if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
     if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
-
+    if (search.minPrice || search.maxPrice) {
+      const min = search.minPrice || '0';
+      const max = search.maxPrice || '';
+      filters.push(`price:[${min}..${max}]`);
+    }
     let q = search.query || '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
     if (search.serial) q = q ? `${q} /` : '/';
