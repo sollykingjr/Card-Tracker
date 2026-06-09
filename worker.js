@@ -806,7 +806,10 @@ async function handleRunSearch(request, env, cors) {
     const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const data = await res.json();
-    const items = (data.itemSummaries || []).map(item => ({
+    const cutoff = Date.now() - (2 * 60 * 60 * 1000);
+    const items = (data.itemSummaries || []).filter(item => 
+      new Date(item.itemCreationDate).getTime() > cutoff
+    ).map(item => ({
       title: item.title,
       price: item.currentBidPrice?.value || item.price?.value || '?',
       url: item.itemWebUrl,
