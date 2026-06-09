@@ -957,7 +957,7 @@ html, body {
   .sr-wrap { padding: 20px 22px 60px; max-width: 800px; }
 }
 /* ── Search Results Digest View ───────────────────────────────────────────── */
-.sr-digest-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.sr-digest-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; justify-content: space-between; }
 .sr-back-btn {
   background: none;
   border: 1px solid var(--bdr2);
@@ -1164,3 +1164,19 @@ html, body {
 }
 .sr-run-btn:hover { opacity: .85; }
 .sr-run-btn:disabled { opacity: .5; cursor: default; }
+
+/* ── Reset/Clear Button ───────────────────────────────────────────────────── */
+.sr-reset-btn {
+  background: none;
+  border: 1px solid rgba(248,113,113,.25);
+  border-radius: 8px;
+  color: var(--dn);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 5px 12px;
+  flex-shrink: 0;
+  transition: background .2s;
+}
+.sr-reset-btn:hover { background: rgba(248,113,113,.08); }
