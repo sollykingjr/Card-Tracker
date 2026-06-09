@@ -423,12 +423,22 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
       <div class="sr-digest-header">
         <button class="sr-back-btn" id="sr-back-btn">← Back</button>
         <div class="sr-digest-title">${label} — ${overrideKey?.includes('_hourly') ? 'Last Hour' : isArchive ? '7-Day Archive' : "Today's Listings"}</div>
+        <button class="sr-reset-btn" id="sr-reset-btn">Clear</button>
       </div>
       <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
     </div>
   `;
 
   document.getElementById('sr-back-btn').onclick = () => initSearchResults();
+  document.getElementById('sr-reset-btn').onclick = async () => {
+    if (!confirm('Clear all listings from this view?')) return;
+    await fetch(`${WORKER}/search-alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteKeys: [key] })
+    });
+    document.getElementById('sr-digest-list').innerHTML = '<div class="sr-empty">Cleared.</div>';
+  };
 
   try {
     const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
