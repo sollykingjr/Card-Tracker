@@ -82,8 +82,16 @@ async function initSearchResults() {
             </label>
           </div>
           <div id="sr-keywords-wrap">
-            <input class="sr-input" id="sr-keywords" placeholder="Priority keywords, comma separated (e.g. psa,rc,auto)">
+            <input class="sr-input" id="sr-keywords" placeholder="Notification keywords, comma separated (e.g. 2005,2006,psa)">
           </div>
+          <div class="sr-form-section">Include Keywords</div>
+          <div class="sr-and-or" id="sr-include-logic">
+            <button class="sr-chip-btn on" data-val="OR">OR</button>
+            <button class="sr-chip-btn" data-val="AND">AND</button>
+          </div>
+          <input class="sr-input" id="sr-include-keywords" placeholder="e.g. topps,bowman">
+          <div class="sr-form-section">Exclude Keywords</div>
+          <input class="sr-input" id="sr-exclude-keywords" placeholder="e.g. relic,auto,rookie">
           <div class="sr-form-btns">
             <button class="sr-cancel-btn" id="sr-cancel-btn">Cancel</button>
             <button class="sr-save-btn" id="sr-save-btn">Save</button>
@@ -130,6 +138,9 @@ function clearForm() {
   document.querySelectorAll('#sr-schedule-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.getElementById('sr-min-price').value = '';
   document.getElementById('sr-max-price').value = '';
+  document.getElementById('sr-include-keywords').value = '';
+  document.getElementById('sr-exclude-keywords').value = '';
+  document.querySelectorAll('#sr-include-logic .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
 }
 
 async function loadSearches() {
@@ -266,6 +277,9 @@ function renderSearches(searches) {
       setChip('sr-schedule-chips', s.schedule || 'hourly');
       document.getElementById('sr-min-price').value = s.minPrice || '';
       document.getElementById('sr-max-price').value = s.maxPrice || '';
+      document.getElementById('sr-include-keywords').value = s.includeKeywords || '';
+      document.getElementById('sr-exclude-keywords').value = s.excludeKeywords || '';
+      setChip('sr-include-logic', s.includeLogic || 'OR');
       // Override save to update instead of add
       document.getElementById('sr-save-btn').onclick = async () => {
         const updated = [...data.searches];
@@ -284,7 +298,13 @@ function renderSearches(searches) {
           notify: document.getElementById('sr-notify').checked,
           priorityKeywords: keywords ? keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean) : [],
           minPrice: document.getElementById('sr-min-price').value || '',
-          maxPrice: document.getElementById('sr-max-price').value || ''
+          maxPrice: document.getElementById('sr-max-price').value || '',
+          includeKeywords: document.getElementById('sr-include-keywords').value || '',
+          includeLogic: getChipVal('sr-include-logic') || 'OR',
+          excludeKeywords: document.getElementById('sr-exclude-keywords').value || ''
+          includeKeywords: document.getElementById('sr-include-keywords').value || '',
+          includeLogic: getChipVal('sr-include-logic') || 'OR',
+          excludeKeywords: document.getElementById('sr-exclude-keywords').value || ''
         };
         await fetch(`${WORKER}/search-alerts`, {
           method: 'POST',
@@ -348,6 +368,7 @@ function wireForm() {
   document.getElementById('sr-notify').onchange = function() {
     document.getElementById('sr-keywords-wrap').style.display = this.checked ? 'block' : 'none';
   };
+  wireChips('sr-include-logic');
 }
 
 async function saveSearch() {
