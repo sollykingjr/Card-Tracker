@@ -283,6 +283,8 @@ function renderSearches(searches) {
           schedule: getChipVal('sr-schedule-chips') || 'hourly',
           notify: document.getElementById('sr-notify').checked,
           priorityKeywords: keywords ? keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean) : [],
+          minPrice: document.getElementById('sr-min-price').value || '',
+          maxPrice: document.getElementById('sr-max-price').value || ''
         };
         await fetch(`${WORKER}/search-alerts`, {
           method: 'POST',
