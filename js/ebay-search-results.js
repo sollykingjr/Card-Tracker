@@ -155,6 +155,7 @@ function renderSearches(searches) {
       <div class="sr-card-query">🔍 ${s.query}</div>
       <div class="sr-card-keywords">⚡ ${s.priorityKeywords.join(', ')}</div>
       <div class="sr-card-links">
+        <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
         <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false, '${s.digestKey}_hourly')">Last Hour →</button>
         <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
         <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
@@ -167,6 +168,29 @@ function renderSearches(searches) {
     if (!e.target.closest('.sr-menu-wrap')) {
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
     }
+  });
+
+  document.querySelectorAll('.sr-run-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const digestKey = btn.dataset.digestkey;
+      const label = btn.dataset.label;
+      btn.textContent = '⏳ Running...';
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${WORKER}/run-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ digestKey })
+        });
+        const data = await res.json();
+        btn.textContent = `▶ Run`;
+        btn.disabled = false;
+        showDigest(digestKey, label, false, digestKey + '_hourly');
+      } catch(e) {
+        btn.textContent = '▶ Run';
+        btn.disabled = false;
+      }
+    };
   });
 
   document.querySelectorAll('.sr-menu-btn').forEach(btn => {
