@@ -639,8 +639,8 @@ async function sendPlayerDigestNotification(env) {
         user: env.PUSHOVER_USER,
         title: `🔍 ${search.label}: ${items.length} new listing${items.length !== 1 ? 's' : ''} overnight`,
         message: 'Tap for today\'s listings. 7-day archive also available.',
-        url: `https://card-app.maxcsolomon.workers.dev/player-digest?key=${search.digestKey}`,
-        url_title: 'View Today'
+        url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}`,
+        url_title: 'View in App'
       })
     });
   }
