@@ -1148,3 +1148,19 @@ html, body {
 .sr-menu-item:hover { background: var(--surf2); }
 .sr-menu-delete { color: var(--dn); }
 .sr-menu-delete:hover { background: rgba(248,113,113,.08); }
+
+/* ── Run Button ───────────────────────────────────────────────────────────── */
+.sr-run-btn {
+  padding: 5px 12px;
+  background: var(--acc);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .2s;
+}
+.sr-run-btn:hover { opacity: .85; }
+.sr-run-btn:disabled { opacity: .5; cursor: default; }
