@@ -360,7 +360,7 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     <div class="sr-wrap">
       <div class="sr-digest-header">
         <button class="sr-back-btn" id="sr-back-btn">← Back</button>
-        <div class="sr-digest-title">${label} — ${isArchive ? '7-Day Archive' : "Today's Listings"}</div>
+        <div class="sr-digest-title">${label} — ${overrideKey?.includes('_hourly') ? 'Last Hour' : isArchive ? '7-Day Archive' : "Today's Listings"}</div>
       </div>
       <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
     </div>
