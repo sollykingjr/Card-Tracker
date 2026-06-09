@@ -41,6 +41,7 @@ export default {
     if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
     if (path === '/player-digest-json') return handlePlayerDigestJson(request, env, cors);
     if (path === '/search-alerts' && request.method === 'GET') return handleSearchAlertsGet(env, cors);
+    if (path === '/run-search' && request.method === 'POST') return handleRunSearch(request, env, cors);
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
@@ -751,6 +752,73 @@ async function handlePlayerDigestJson(request, env, cors) {
     const items = existing ? JSON.parse(existing) : [];
 
     return new Response(JSON.stringify({ items, count: items.length }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+// ── [20] handleRunSearch ──────────────────────────────────────────────────────
+async function handleRunSearch(request, env, cors) {
+  try {
+    const { digestKey } = await request.json();
+    if (!digestKey) return new Response(JSON.stringify({ error: 'missing digestKey' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const saved = await env.CACHE.get('player_search_alerts');
+    const searches = saved ? JSON.parse(saved) : [];
+    const search = searches.find(s => s.digestKey === digestKey);
+    if (!search) return new Response(JSON.stringify({ error: 'search not found' }), {
+      status: 404, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
+    const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return new Response(JSON.stringify({ error: 'token_failed' }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const filters = [];
+    if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
+    if (search.seller) {
+      if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
+      else filters.push(`excludeSellers:{${search.seller}}`);
+    }
+    if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+    if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+
+    let q = search.query || '';
+    if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
+    if (search.serial) q = q ? `${q} /` : '/';
+
+    const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+    const data = await res.json();
+    const items = (data.itemSummaries || []).map(item => ({
+      title: item.title,
+      price: item.currentBidPrice?.value || item.price?.value || '?',
+      url: item.itemWebUrl,
+      type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+      date: item.itemCreationDate,
+      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
+    }));
+
+    const hourlyKey = digestKey + '_hourly';
+    await env.CACHE.put(hourlyKey, JSON.stringify(items), { expirationTtl: 7200 });
+
+    return new Response(JSON.stringify({ ok: true, count: items.length }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch(e) {
