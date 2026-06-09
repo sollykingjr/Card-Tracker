@@ -99,6 +99,12 @@ async function initSearchResults() {
   document.getElementById('sr-save-btn').onclick = saveSearch;
 
   await loadSearches();
+  if (window._pendingDigest) {
+    const key = window._pendingDigest;
+    const label = key.replace('_digest_hourly', '').replace(/_/g, ' ');
+    window._pendingDigest = null;
+    showDigest(key.replace('_hourly', ''), label, false, key);
+  }
 }
 
 function clearForm() {
