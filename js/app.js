@@ -94,12 +94,8 @@ document.getElementById('rfab').addEventListener('click', () => {
 const urlParams = new URLSearchParams(window.location.search);
 const digestParam = urlParams.get('digest');
 if (digestParam) {
+  window._pendingDigest = digestParam;
   setSection('searchresults');
-  // Wait for section to init then open digest
-  setTimeout(() => {
-    const label = digestParam.replace('_digest_hourly', '').replace(/_/g, ' ');
-    showDigest(digestParam.replace('_hourly', ''), label, false, digestParam);
-  }, 300);
 } else {
   setSection('searchbuilder');
 }
