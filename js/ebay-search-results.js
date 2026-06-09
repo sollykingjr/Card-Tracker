@@ -345,9 +345,9 @@ async function saveSearch() {
   clearForm();
   await loadSearches();
 }
-async function showDigest(digestKey, label, isArchive) {
+async function showDigest(digestKey, label, isArchive, overrideKey) {
   const root = document.getElementById('sr-root');
-  const key = isArchive ? digestKey + '_archive' : digestKey;
+  const key = overrideKey || (isArchive ? digestKey + '_archive' : digestKey);
 
   root.innerHTML = `
     <div class="sr-wrap">
