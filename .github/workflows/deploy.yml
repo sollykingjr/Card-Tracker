@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ui-restructure
     paths:
       - 'worker.js'
       - 'wrangler.toml'
