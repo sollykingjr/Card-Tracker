@@ -736,9 +736,10 @@ async function clearPlayerDigests(env) {
 async function handleSearchAlertsGet(env, cors) {
   try {
     const saved = await env.CACHE.get('player_search_alerts');
-    return new Response(JSON.stringify({
-      searches: saved ? JSON.parse(saved) : []
-    }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+    const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+    return new Response(JSON.stringify(data), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
   } catch(e) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
