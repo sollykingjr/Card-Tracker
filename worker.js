@@ -871,7 +871,9 @@ async function handleSearchAlertsPost(request, env, cors) {
     if (Array.isArray(current)) current = { groups: [], searches: current };
     if (groups !== undefined) current.groups = groups;
     if (searches !== undefined) current.searches = searches;
-    await env.CACHE.put('player_search_alerts', JSON.stringify(current));
+    const toSave = JSON.stringify(current);
+    await env.CACHE.put('player_search_alerts', toSave);
+    console.log('Saved to KV:', toSave.substring(0, 200));
     if (deleteKeys && Array.isArray(deleteKeys)) {
       for (const key of deleteKeys) {
         await env.CACHE.delete(key);
