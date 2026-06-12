@@ -206,7 +206,6 @@ async function refreshAccessToken(refreshToken, env) {
     },
     body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}&scope=${encodeURIComponent(SCOPES)}`
   });
-
   const tokens = await res.json();
   if (!tokens.access_token) return null;
   await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: 7200 });
@@ -518,8 +517,10 @@ async function sendDailyStatsNotification(env) {
 // ── [13] checkPlayerSearches ──────────────────────────────────────────────────
 async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
-  const searches = saved ? JSON.parse(saved) : [];
-  if (searches.length === 0) return;
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  const searches = (data.searches || []).filter(s => !s.groupId);
+  const groups = data.groups || [];
+  if (searches.length === 0 && groups.length === 0) return;
 
   const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
   const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
@@ -537,6 +538,95 @@ async function checkPlayerSearches(env) {
   const lastRun = await env.CACHE.get('player_search_last_run');
   const cutoff = lastRun ? parseInt(lastRun) : now - (60 * 60 * 1000);
   await env.CACHE.put('player_search_last_run', String(now));
+
+  for (const group of groups) {
+    if (group.schedule === 'nightly') continue;
+    const groupSearches = data.searches.filter(s => s.groupId === group.id);
+    if (groupSearches.length === 0) continue;
+
+    const groupMapped = [];
+    for (const search of groupSearches) {
+      const filters = [];
+      if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
+      if (search.seller) {
+        if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
+        else filters.push(`excludeSellers:{${search.seller}}`);
+      }
+      if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+      if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (search.minPrice || search.maxPrice) {
+        filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
+        filters.push('priceCurrency:USD');
+      }
+      let q = search.query || '';
+      if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
+      if (!q && !search.seller) continue;
+      const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      let items = (apiData.itemSummaries || []).filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+
+      if (search.excludeKeywords) {
+        const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        items = items.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+      }
+      if (search.includeKeywords) {
+        const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (incl.length > 0) {
+          items = search.includeLogic === 'AND'
+            ? items.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+            : items.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+        }
+      }
+
+      groupMapped.push(...items.map(item => ({
+        title: item.title,
+        price: item.currentBidPrice?.value || item.price?.value || '?',
+        url: item.itemWebUrl,
+        type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+        date: item.itemCreationDate,
+        endDate: item.itemEndDate || null,
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seen: false
+      })));
+    }
+
+    if (groupMapped.length === 0) continue;
+
+    // Store in group digest
+    const existing = await env.CACHE.get(group.digestKey);
+    const digestItems = existing ? JSON.parse(existing) : [];
+    await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...groupMapped]));
+
+    // 7-day archive
+    const archiveKey = group.digestKey + '_archive';
+    const existingArchive = await env.CACHE.get(archiveKey);
+    const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...groupMapped]));
+
+    // Pushover
+    const etHour = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
+    const hour = parseInt(etHour);
+    if (group.notify !== false && hour >= 7 && hour < 22) {
+      const hourlyKey = group.digestKey + '_hourly';
+      await env.CACHE.put(hourlyKey, JSON.stringify(groupMapped), { expirationTtl: 7200 });
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `🔍 ${group.label}: ${groupMapped.length} new listing${groupMapped.length !== 1 ? 's' : ''}`,
+          message: 'Tap to view new listings.',
+          url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}_hourly`,
+          url_title: 'View in App'
+        })
+      });
+    }
+  }
 
  for (const search of searches) {
     // Skip nightly searches on hourly runs
@@ -611,7 +701,9 @@ async function checkPlayerSearches(env) {
       url: item.itemWebUrl,
       type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
       date: item.itemCreationDate,
-      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
+      endDate: item.itemEndDate || null,
+      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+      seen: false
     }));
 
    // Send single hourly Pushover if notify is on and within quiet hours
@@ -652,22 +744,44 @@ async function checkPlayerSearches(env) {
 // ── [14] sendPlayerDigestNotification ────────────────────────────────────────
 async function sendPlayerDigestNotification(env) {
   const saved = await env.CACHE.get('player_search_alerts');
-  const searches = saved ? JSON.parse(saved) : [];
-  if (searches.length === 0) return;
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
 
-  for (const search of searches) {
-    const existing = await env.CACHE.get(search.digestKey);
+  // Send for groups
+  for (const group of (data.groups || [])) {
+    const existing = await env.CACHE.get(group.digestKey);
     const items = existing ? JSON.parse(existing) : [];
     if (items.length === 0) continue;
-
+    const unseen = items.filter(i => !i.seen);
+    if (unseen.length === 0) continue;
     await fetch('https://api.pushover.net/1/messages.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         token: env.PUSHOVER_TOKEN,
         user: env.PUSHOVER_USER,
-        title: `🔍 ${search.label}: ${items.length} new listing${items.length !== 1 ? 's' : ''} overnight`,
-        message: 'Tap for today\'s listings. 7-day archive also available.',
+        title: `🔍 ${group.label}: ${unseen.length} new listing${unseen.length !== 1 ? 's' : ''} overnight`,
+        message: 'Tap to view new listings.',
+        url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}`,
+        url_title: 'View in App'
+      })
+    });
+  }
+
+  // Send for standalone searches
+  for (const search of (data.searches || []).filter(s => !s.groupId)) {
+    const existing = await env.CACHE.get(search.digestKey);
+    const items = existing ? JSON.parse(existing) : [];
+    if (items.length === 0) continue;
+    const unseen = items.filter(i => !i.seen);
+    if (unseen.length === 0) continue;
+    await fetch('https://api.pushover.net/1/messages.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: env.PUSHOVER_TOKEN,
+        user: env.PUSHOVER_USER,
+        title: `🔍 ${search.label}: ${unseen.length} new listing${unseen.length !== 1 ? 's' : ''} overnight`,
+        message: 'Tap to view new listings.',
         url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}`,
         url_title: 'View in App'
       })
@@ -726,9 +840,10 @@ ${!key.includes('_archive') ? `<a href="/player-digest?key=${key}_archive" style
 // ── [17] clearPlayerDigests ───────────────────────────────────────────────────
 async function clearPlayerDigests(env) {
   const saved = await env.CACHE.get('player_search_alerts');
-  const searches = saved ? JSON.parse(saved) : [];
-  const digestKeys = searches.map(s => s.digestKey);
-  for (const key of digestKeys) {
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  const groupKeys = (data.groups || []).map(g => g.digestKey);
+  const searchKeys = (data.searches || []).filter(s => !s.groupId).map(s => s.digestKey);
+  for (const key of [...groupKeys, ...searchKeys]) {
     await env.CACHE.delete(key);
   }
 }
@@ -749,10 +864,12 @@ async function handleSearchAlertsGet(env, cors) {
 
 async function handleSearchAlertsPost(request, env, cors) {
   try {
-    const { searches, deleteKeys } = await request.json();
-    if (searches !== undefined) {
-      await env.CACHE.put('player_search_alerts', JSON.stringify(searches));
-    }
+    const { groups, searches, deleteKeys } = await request.json();
+    const saved = await env.CACHE.get('player_search_alerts');
+    const current = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+    if (groups !== undefined) current.groups = groups;
+    if (searches !== undefined) current.searches = searches;
+    await env.CACHE.put('player_search_alerts', JSON.stringify(current));
     if (deleteKeys && Array.isArray(deleteKeys)) {
       for (const key of deleteKeys) {
         await env.CACHE.delete(key);
@@ -767,7 +884,6 @@ async function handleSearchAlertsPost(request, env, cors) {
     });
   }
 }
-
 // ── [19] handlePlayerDigestJson ───────────────────────────────────────────────
 async function handlePlayerDigestJson(request, env, cors) {
   try {
@@ -798,9 +914,11 @@ async function handleRunSearch(request, env, cors) {
     });
 
     const saved = await env.CACHE.get('player_search_alerts');
-    const searches = saved ? JSON.parse(saved) : [];
-    const search = searches.find(s => s.digestKey === digestKey);
-    if (!search) return new Response(JSON.stringify({ error: 'search not found' }), {
+    const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+    // Check if it's a group or standalone search
+    const group = (data.groups || []).find(g => g.digestKey === digestKey);
+    const search = !group ? (data.searches || []).find(s => s.digestKey === digestKey) : null;
+    if (!group && !search) return new Response(JSON.stringify({ error: 'not found' }), {
       status: 404, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
@@ -818,56 +936,61 @@ async function handleRunSearch(request, env, cors) {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
-    const filters = [];
-    if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
-    if (search.seller) {
-      if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
-      else filters.push(`excludeSellers:{${search.seller}}`);
-    }
-    if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
-    if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
-    if (search.minPrice || search.maxPrice) {
-      const min = search.minPrice || '0';
-      const max = search.maxPrice || '';
-      filters.push(`price:[${min}..${max}]`);
-      filters.push('priceCurrency:USD');
-    }
-    let q = search.query || '';
-    if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
-    if (search.serial) q = q ? `${q} /` : '/';
-
-    const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    const data = await res.json();
     const cutoff = Date.now() - (2 * 60 * 60 * 1000);
-    let filteredSummaries = (data.itemSummaries || []).filter(item =>
-      new Date(item.itemCreationDate).getTime() > cutoff
-    );
-    if (search.excludeKeywords) {
-      const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-      filteredSummaries = filteredSummaries.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
-    }
-    if (search.includeKeywords) {
-      const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-      if (incl.length > 0) {
-        if (search.includeLogic === 'AND') {
-          filteredSummaries = filteredSummaries.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)));
-        } else {
-          filteredSummaries = filteredSummaries.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+    const searchList = group ? data.searches.filter(s => s.groupId === group.id) : [search];
+    const allItems = [];
+
+    for (const s of searchList) {
+      const filters = [];
+      if (s.listingType && s.listingType !== 'BOTH') filters.push(`buyingOptions:{${s.listingType}}`);
+      if (s.seller) {
+        if (s.sellerMode === 'include') filters.push(`sellers:{${s.seller}}`);
+        else filters.push(`excludeSellers:{${s.seller}}`);
+      }
+      if (s.condition === 'Graded') filters.push('conditionIds:{2750}');
+      if (s.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (s.minPrice || s.maxPrice) {
+        filters.push(`price:[${s.minPrice || '0'}..${s.maxPrice || ''}]`);
+        filters.push('priceCurrency:USD');
+      }
+      let q = s.query || '';
+      if (s.sport) q = q ? `${q} ${s.sport}` : s.sport;
+      if (!q && !s.seller) continue;
+
+      const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      let filtered = (apiData.itemSummaries || []).filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+
+      if (s.excludeKeywords) {
+        const excl = s.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        filtered = filtered.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+      }
+      if (s.includeKeywords) {
+        const incl = s.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (incl.length > 0) {
+          filtered = s.includeLogic === 'AND'
+            ? filtered.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+            : filtered.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
         }
       }
-    }
-    const items = filteredSummaries.map(item => ({
-      title: item.title,
-      price: item.currentBidPrice?.value || item.price?.value || '?',
-      url: item.itemWebUrl,
-      type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
-      date: item.itemCreationDate,
-      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
-    }));
 
-    const hourlyKey = digestKey + '_hourly';
+      allItems.push(...filtered.map(item => ({
+        title: item.title,
+        price: item.currentBidPrice?.value || item.price?.value || '?',
+        url: item.itemWebUrl,
+        type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+        date: item.itemCreationDate,
+        endDate: item.itemEndDate || null,
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seen: false
+      })));
+    }
+
+    const items = allItems;
+    const targetKey = (group || search).digestKey;
+    const hourlyKey = targetKey + '_hourly';
     await env.CACHE.put(hourlyKey, JSON.stringify(items), { expirationTtl: 7200 });
 
     return new Response(JSON.stringify({ ok: true, count: items.length }), {
