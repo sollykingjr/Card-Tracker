@@ -167,11 +167,13 @@ async function loadData() {
 }
 
 async function saveData() {
-  await fetch(`${WORKER}/search-alerts`, {
+  const res = await fetch(`${WORKER}/search-alerts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ groups: srData.groups, searches: srData.searches })
   });
+  const result = await res.json();
+  console.log('saveData result:', result, 'groups:', srData.groups.length, 'searches:', srData.searches.length);
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
