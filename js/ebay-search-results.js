@@ -360,7 +360,7 @@ function wireListEvents() {
         });
         btn.textContent = '▶ Run';
         btn.disabled = false;
-        showDigest(digestKey, label, false, digestKey + '_hourly');
+        showDigest(digestKey, label, false);
       } catch(e) {
         btn.textContent = '▶ Run';
         btn.disabled = false;
