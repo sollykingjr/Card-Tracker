@@ -124,7 +124,7 @@ async function initSearchResults() {
           <div class="sr-form-row">
             <div class="sr-form-label">Notify</div>
             <label class="sr-toggle">
-              <input type="checkbox" id="sr-group-notify" checked>
+              <input type="checkbox" id="sr-group-notify">
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
