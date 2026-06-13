@@ -683,8 +683,7 @@ function openSnipeModal(itemId) {
     <div style="background:var(--surf);border-radius:14px;padding:20px;width:100%;max-width:320px">
       <div style="font-size:15px;font-weight:600;margin-bottom:4px">Set Snipe</div>
       <div style="font-size:12px;color:var(--tx2);margin-bottom:14px">Item ID: ${itemId}</div>
-      <input id="snipe-bid" type="number" step="0.01" min="0" placeholder="Max bid (e.g. 25.00)"
-        style="width:100%;padding:10px;border-radius:8px;border:.5px solid var(--bdr2);background:var(--bg);color:var(--tx);font-size:14px;font-family:inherit;box-sizing:border-box;margin-bottom:12px">
+      <div style="font-size:13px;color:var(--tx2);margin-bottom:14px">Item ID will be copied to your clipboard and Gixen will open.</div>
       <div style="display:flex;gap:8px">
         <button onclick="document.getElementById('snipe-modal').remove()"
           style="flex:1;padding:10px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx2);font-size:14px;cursor:pointer;font-family:inherit">Cancel</button>
@@ -699,28 +698,12 @@ function openSnipeModal(itemId) {
 }
 
 async function submitSnipe(itemId, btn) {
-  const maxBid = document.getElementById('snipe-bid').value;
-  if (!maxBid || parseFloat(maxBid) <= 0) return;
-  btn.textContent = '...';
-  btn.disabled = true;
-  try {
-    const res = await fetch(`${WORKER_URL}/set-snipe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId, maxBid })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      btn.textContent = '✓ Done';
-      setTimeout(() => document.getElementById('snipe-modal')?.remove(), 1000);
-    } else {
-      btn.textContent = 'Failed';
-      btn.disabled = false;
-    }
-  } catch(e) {
-    btn.textContent = 'Error';
-    btn.disabled = false;
-  }
+  await navigator.clipboard.writeText(itemId);
+  btn.textContent = '✓ Copied!';
+  setTimeout(() => {
+    document.getElementById('snipe-modal')?.remove();
+    window.open('https://www.gixen.com/index.php', '_blank');
+  }, 800);
 }
 
 // ── Watchlist render ──────────────────────────────────────────────────────────
