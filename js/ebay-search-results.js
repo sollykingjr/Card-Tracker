@@ -628,7 +628,7 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
       <div class="sr-digest-controls">
         <input class="sr-search-input" id="sr-digest-search" placeholder="Search titles...">
         <div class="sr-chip-row" id="sr-sort-chips">
-          <button class="sr-chip-btn on" data-val="newest">Newest</button>
+          <button class="sr-chip-btn on" data-val="newest" id="sr-date-sort-btn">Listed ↓</button>
           <button class="sr-chip-btn" data-val="ending">Ending Soon</button>
         </div>
         <button class="sr-chip-btn" id="sr-show-all-btn">Show All</button>
@@ -662,9 +662,23 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
   };
   document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(btn => {
     btn.onclick = () => {
-      document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(b => b.classList.remove('on'));
-      btn.classList.add('on');
-      sortMode = btn.dataset.val;
+      if (btn.dataset.val === 'newest' || btn.dataset.val === 'oldest') {
+        document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        if (sortMode === 'newest') {
+          sortMode = 'oldest';
+          btn.dataset.val = 'oldest';
+          btn.textContent = 'Listed ↑';
+        } else {
+          sortMode = 'newest';
+          btn.dataset.val = 'newest';
+          btn.textContent = 'Listed ↓';
+        }
+      } else {
+        document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        sortMode = btn.dataset.val;
+      }
       renderDigestItems(allItems, sortMode, filterText, key, showAll);
     };
   });
@@ -704,8 +718,10 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
       if (!b.endDate) return -1;
       return new Date(a.endDate) - new Date(b.endDate);
     });
+  } else if (sortMode === 'oldest') {
+    items.sort((a, b) => new Date(a.date) - new Date(b.date));
   } else {
-    items = items.reverse();
+    items.sort((a, b) => new Date(b.date) - new Date(a.date));
   }
 
   if (items.length === 0) {
