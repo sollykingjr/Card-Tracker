@@ -702,7 +702,7 @@ async function submitSnipe(itemId, btn) {
   btn.textContent = '✓ Copied!';
   setTimeout(() => {
     document.getElementById('snipe-modal')?.remove();
-    window.open('https://www.gixen.com/index.php', '_blank');
+    window.open('https://www.gixen.com/main/home_2.php', '_blank');
   }, 800);
 }
 
