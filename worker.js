@@ -666,12 +666,11 @@ async function checkPlayerSearches(env) {
       filters.push(`price:[${min}..${max}]`);
       filters.push('priceCurrency:USD');
     }
+    if (search.serial) filters.push('itemFeatures:{SERIALIZED}');
 
     // Build query
     let q = search.query || '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
-    if (search.serial) q = q ? `${q} /` : '/';
-
     if (!q && !search.seller) continue;
 
     const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
@@ -800,9 +799,8 @@ async function checkNightlySearches(env) {
         filters.push('priceCurrency:USD');
       }
       let q = search.query || '';
+    if (search.serial) filters.push('itemFeatures:{SERIALIZED}');
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
-    if (search.serial) q = q ? `${q} /` : '/';
-
     if (!q && !search.seller) continue;
 
     const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
@@ -888,6 +886,7 @@ async function checkNightlySearches(env) {
       filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
       filters.push('priceCurrency:USD');
     }
+    if (search.serial) filters.push('itemFeatures:{SERIALIZED}');
     let q = search.query || '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
     if (!q && !search.seller) continue;
@@ -1199,6 +1198,7 @@ async function handleRunSearch(request, env, cors) {
         filters.push(`price:[${s.minPrice || '0'}..${s.maxPrice || ''}]`);
         filters.push('priceCurrency:USD');
       }
+      if (s.serial) filters.push('itemFeatures:{SERIALIZED}');
       let q = s.query || '';
       if (s.sport) q = q ? `${q} ${s.sport}` : s.sport;
       if (!q && !s.seller) continue;
