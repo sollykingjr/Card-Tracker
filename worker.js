@@ -50,6 +50,7 @@ export default {
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
     if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
+    if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1120,6 +1121,29 @@ async function handleMarkSeen(request, env, cors) {
     const items = JSON.parse(existing).map(item => ({ ...item, seen: true }));
     await env.CACHE.put(key, JSON.stringify(items));
     return new Response(JSON.stringify({ ok: true, count: items.length }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [21] handleSetSnipe ───────────────────────────────────────────────────────
+async function handleSetSnipe(request, env, cors) {
+  try {
+    const { itemId, maxBid } = await request.json();
+    if (!itemId || !maxBid) return new Response(JSON.stringify({ error: 'missing itemId or maxBid' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const url = `https://www.gixen.com/api.php?username=${encodeURIComponent(env.GIXEN_USERNAME)}&password=${encodeURIComponent(env.GIXEN_PASSWORD)}&itemid=${encodeURIComponent(itemId)}&maxbid=${encodeURIComponent(maxBid)}&main=1`;
+    const res = await fetch(url);
+    const text = await res.text();
+
+    const ok = text.includes('ERROR_CODE=0');
+    return new Response(JSON.stringify({ ok, raw: text }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch(e) {
