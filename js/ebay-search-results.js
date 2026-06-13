@@ -33,6 +33,7 @@ async function initSearchResults() {
               <button class="sr-chip-btn" data-val="include">Include</button>
             </div>
             <input class="sr-input sr-input-inline" id="sr-seller" placeholder="Seller username (optional)">
+          <div class="sr-chip-row" id="sr-fav-sellers-chips"></div>
           </div>
           <div class="sr-form-section">Filters</div>
           <div class="sr-form-row">
@@ -424,6 +425,21 @@ function openSearchForm(search, presetGroupId) {
   document.getElementById('sr-group-form-wrap').style.display = 'none';
   document.getElementById('sr-form-title').textContent = search ? 'Edit Search' : 'New Search Alert';
   wireForm();
+
+  // Load and render fav sellers
+  fetch(`${WORKER}/sb-data`).then(r => r.json()).then(data => {
+    const favs = data.favSellers || [];
+    const container = document.getElementById('sr-fav-sellers-chips');
+    if (!container) return;
+    container.innerHTML = favs.map(s => `
+      <button class="sr-chip-btn sr-fav-seller-chip" data-seller="${s}">${s}</button>
+    `).join('');
+    container.querySelectorAll('.sr-fav-seller-chip').forEach(btn => {
+      btn.onclick = () => {
+        document.getElementById('sr-seller').value = btn.dataset.seller;
+      };
+    });
+  });
 
   // Populate group dropdown
   const sel = document.getElementById('sr-group-select');
