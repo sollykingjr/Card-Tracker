@@ -41,7 +41,6 @@ export default {
     if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
     if (path === '/player-digest-json') return handlePlayerDigestJson(request, env, cors);
     if (path === '/search-alerts' && request.method === 'GET') return handleSearchAlertsGet(env, cors);
-    if (path === '/debug-kv') return new Response(await env.CACHE.get('player_search_alerts'), { headers: { ...cors, 'Content-Type': 'application/json' } });
     if (path === '/run-search' && request.method === 'POST') return handleRunSearch(request, env, cors);
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
@@ -872,9 +871,7 @@ async function handleSearchAlertsPost(request, env, cors) {
     if (Array.isArray(current)) current = { groups: [], searches: current };
     if (groups !== undefined) current.groups = groups;
     if (searches !== undefined) current.searches = searches;
-    const toSave = JSON.stringify(current);
-    await env.CACHE.put('player_search_alerts', toSave);
-    console.log('Saved to KV:', toSave.substring(0, 200));
+    await env.CACHE.put('player_search_alerts', JSON.stringify(current));
     if (deleteKeys && Array.isArray(deleteKeys)) {
       for (const key of deleteKeys) {
         await env.CACHE.delete(key);
