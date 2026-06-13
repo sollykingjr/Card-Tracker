@@ -1291,3 +1291,28 @@ html, body {
 }
 .sr-search-input:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-bg); }
 .sr-search-input::placeholder { color: var(--tx3); }
+
+/* ── Digest Header Sticky ─────────────────────────────────────────────────── */
+.sr-digest-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding: 12px 0;
+  margin-bottom: 8px;
+}
+
+.sr-mark-seen-btn {
+  padding: 5px 12px;
+  background: var(--acc);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .2s;
+  flex-shrink: 0;
+}
+.sr-mark-seen-btn:hover { opacity: .85; }
