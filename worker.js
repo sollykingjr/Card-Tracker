@@ -804,8 +804,9 @@ async function checkNightlySearches(env) {
     const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
     let newItems = [];
     let page = 1;
-    const maxPages = 5;
+    const maxPages = 15;
     let keepPaging = true;
+    let hitLimit = false;
     while (keepPaging && page <= maxPages) {
       const offset = (page - 1) * 200;
       const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
@@ -815,23 +816,36 @@ async function checkNightlySearches(env) {
       const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
       newItems.push(...newInWindow);
       if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+      if (page === maxPages && keepPaging) hitLimit = true;
       page++;
+    }
+    if (hitLimit) {
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `⚠️ ${search.label} hit 15 page limit`,
+          message: 'Some listings may be missing. Consider narrowing the search.',
+        })
+      });
     }
 
       if (search.excludeKeywords) {
         const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-        items = items.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+        newItems = newItems.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
       }
       if (search.includeKeywords) {
         const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
         if (incl.length > 0) {
-          items = search.includeLogic === 'AND'
-            ? items.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
-            : items.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+          newItems = search.includeLogic === 'AND'
+            ? newItems.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+            : newItems.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
         }
       }
 
-      groupMapped.push(...items.map(item => ({
+      groupMapped.push(...newItems.map(item => ({
         title: item.title,
         price: item.currentBidPrice?.value || item.price?.value || '?',
         url: item.itemWebUrl,
@@ -875,10 +889,35 @@ async function checkNightlySearches(env) {
     if (!q && !search.seller) continue;
 
     const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    const apiData = await res.json();
-    let items = (apiData.itemSummaries || []).filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+    let items = [];
+    let page = 1;
+    const maxPages = 15;
+    let keepPaging = true;
+    let hitLimit = false;
+    while (keepPaging && page <= maxPages) {
+      const offset = (page - 1) * 200;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      const pageItems = (apiData.itemSummaries || []);
+      const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      items.push(...newInWindow);
+      if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+      if (page === maxPages && keepPaging) hitLimit = true;
+      page++;
+    }
+    if (hitLimit) {
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `⚠️ ${search.label} hit 15 page limit`,
+          message: 'Some listings may be missing. Consider narrowing the search.',
+        })
+      });
+    }
 
     if (search.excludeKeywords) {
       const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
