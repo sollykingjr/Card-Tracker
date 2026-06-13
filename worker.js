@@ -1016,8 +1016,10 @@ async function handleRunSearch(request, env, cors) {
 
     const items = allItems;
     const targetKey = (group || search).digestKey;
-    const hourlyKey = targetKey + '_hourly';
-    await env.CACHE.put(hourlyKey, JSON.stringify(items), { expirationTtl: 7200 });
+    const existing = await env.CACHE.get(targetKey);
+    const existingItems = existing ? JSON.parse(existing) : [];
+    const merged = [...existingItems, ...items];
+    await env.CACHE.put(targetKey, JSON.stringify(merged));
 
     return new Response(JSON.stringify({ ok: true, count: items.length }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
