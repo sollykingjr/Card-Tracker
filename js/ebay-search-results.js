@@ -148,9 +148,9 @@ async function initSearchResults() {
 
   if (window._pendingDigest) {
     const key = window._pendingDigest;
-    const label = key.replace('_digest_hourly', '').replace('_digest', '').replace(/_/g, ' ').trim();
+    const label = key.replace('_digest', '').replace(/_/g, ' ').trim();
     window._pendingDigest = null;
-    showDigest(key.replace('_hourly', ''), label, false, key);
+    showDigest(key, label, false);
   }
 }
 
