@@ -436,7 +436,9 @@ function openSearchForm(search, presetGroupId) {
     `).join('');
     container.querySelectorAll('.sr-fav-seller-chip').forEach(btn => {
       btn.onclick = () => {
-        document.getElementById('sr-seller').value = btn.dataset.seller;
+        const field = document.getElementById('sr-seller');
+        const current = field.value.trim();
+        field.value = current ? `${current},${btn.dataset.seller}` : btn.dataset.seller;
       };
     });
   });
