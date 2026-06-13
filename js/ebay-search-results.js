@@ -391,7 +391,7 @@ function openGroupForm(group) {
   } else {
     document.getElementById('sr-group-label').value = '';
     setChip('sr-group-schedule-chips', 'hourly');
-    document.getElementById('sr-group-notify').checked = true;
+    document.getElementById('sr-group-notify').checked = false;
     document.getElementById('sr-group-save-btn').onclick = saveGroup;
   }
 }
@@ -528,7 +528,7 @@ function clearSearchForm() {
   document.getElementById('sr-seller').value = '';
   document.getElementById('sr-keywords').value = '';
   document.getElementById('sr-serial').checked = false;
-  document.getElementById('sr-notify').checked = true;
+  document.getElementById('sr-notify').checked = false;
   document.getElementById('sr-min-price').value = '';
   document.getElementById('sr-max-price').value = '';
   document.getElementById('sr-include-keywords').value = '';
