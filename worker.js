@@ -622,7 +622,7 @@ async function checkPlayerSearches(env) {
           user: env.PUSHOVER_USER,
           title: `🔍 ${group.label}: ${groupMapped.length} new listing${groupMapped.length !== 1 ? 's' : ''}`,
           message: 'Tap to view new listings.',
-          url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}_hourly`,
+          url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}`,
           url_title: 'View in App'
         })
       });
@@ -722,7 +722,7 @@ async function checkPlayerSearches(env) {
           user: env.PUSHOVER_USER,
           title: `🔍 ${search.label}: ${filteredItems.length} new listing${filteredItems.length !== 1 ? 's' : ''}`,
           message: 'Tap to view new listings.',
-          url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}_hourly`,
+          url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}`,
           url_title: 'View in App'
         })
       });
