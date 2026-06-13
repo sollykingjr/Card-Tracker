@@ -654,15 +654,6 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     allItems = allItems.map(item => ({ ...item, seen: true }));
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   };
-  document.getElementById('sr-reset-btn').onclick = async () => {
-    if (!confirm('Clear all listings from this view?')) return;
-    await fetch(`${WORKER}/search-alerts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deleteKeys: [key] })
-    });
-    document.getElementById('sr-digest-list').innerHTML = '<div class="sr-empty">Cleared.</div>';
-  };
 
   wireChips('sr-sort-chips');
   document.getElementById('sr-digest-search').oninput = (e) => {
