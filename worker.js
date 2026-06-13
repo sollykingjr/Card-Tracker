@@ -1143,7 +1143,7 @@ async function handleSetSnipe(request, env, cors) {
     const text = await res.text();
 
     const ok = text.includes('ERROR_CODE=0');
-    return new Response(JSON.stringify({ ok, raw: text }), {
+    return new Response(JSON.stringify({ ok: false, raw: text }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch(e) {
