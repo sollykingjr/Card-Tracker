@@ -87,9 +87,16 @@ async function initSearchResults() {
             </div>
           </div>
           <div class="sr-form-row" id="sr-notify-row">
-            <div class="sr-form-label">Instant Notify</div>
+            <div class="sr-form-label">Notify</div>
             <label class="sr-toggle">
               <input type="checkbox" id="sr-notify">
+              <span class="sr-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="sr-form-row" id="sr-daily-digest-row">
+            <div class="sr-form-label">Daily Digest</div>
+            <label class="sr-toggle">
+              <input type="checkbox" id="sr-daily-digest">
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
@@ -125,6 +132,13 @@ async function initSearchResults() {
             <div class="sr-form-label">Notify</div>
             <label class="sr-toggle">
               <input type="checkbox" id="sr-group-notify">
+              <span class="sr-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Daily Digest</div>
+            <label class="sr-toggle">
+              <input type="checkbox" id="sr-group-daily-digest">
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
@@ -380,10 +394,12 @@ function openGroupForm(group) {
     document.getElementById('sr-group-label').value = group.label || '';
     setChip('sr-group-schedule-chips', group.schedule || 'hourly');
     document.getElementById('sr-group-notify').checked = group.notify !== false;
+    document.getElementById('sr-group-daily-digest').checked = group.dailyDigest || false;
     document.getElementById('sr-group-save-btn').onclick = async () => {
       group.label = document.getElementById('sr-group-label').value.trim();
       group.schedule = getChipVal('sr-group-schedule-chips') || 'hourly';
       group.notify = document.getElementById('sr-group-notify').checked;
+      group.dailyDigest = document.getElementById('sr-group-daily-digest').checked;
       await saveData();
       closeGroupForm();
       renderList();
@@ -410,7 +426,8 @@ async function saveGroup() {
   srData.groups.push({
     id, label, digestKey,
     schedule: getChipVal('sr-group-schedule-chips') || 'hourly',
-    notify: document.getElementById('sr-group-notify').checked
+    notify: document.getElementById('sr-group-notify').checked,
+    dailyDigest: document.getElementById('sr-group-daily-digest').checked
   });
   await saveData();
   closeGroupForm();
@@ -463,6 +480,7 @@ function openSearchForm(search, presetGroupId) {
     document.getElementById('sr-max-price').value = search.maxPrice || '';
     document.getElementById('sr-include-keywords').value = search.includeKeywords || '';
     document.getElementById('sr-exclude-keywords').value = search.excludeKeywords || '';
+    document.getElementById('sr-daily-digest').checked = search.dailyDigest || false;
     sel.value = search.groupId || '';
     setChip('sr-seller-mode-chips', search.sellerMode || 'exclude');
     setChip('sr-sport-chips', search.sport || '');
@@ -492,6 +510,7 @@ function openSearchForm(search, presetGroupId) {
       search.includeKeywords = document.getElementById('sr-include-keywords').value || '';
       search.includeLogic = getChipVal('sr-include-logic') || 'OR';
       search.excludeKeywords = document.getElementById('sr-exclude-keywords').value || '';
+      search.dailyDigest = document.getElementById('sr-daily-digest').checked;
       await saveData();
       closeSearchForm();
       renderList();
@@ -533,6 +552,7 @@ function clearSearchForm() {
   document.getElementById('sr-max-price').value = '';
   document.getElementById('sr-include-keywords').value = '';
   document.getElementById('sr-exclude-keywords').value = '';
+  document.getElementById('sr-daily-digest').checked = false;
   document.getElementById('sr-group-select').value = '';
   document.querySelectorAll('#sr-seller-mode-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-sport-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
@@ -565,6 +585,7 @@ async function saveSearch() {
     listingType: getChipVal('sr-type-chips') || 'BOTH',
     schedule: groupId ? null : (getChipVal('sr-schedule-chips') || 'hourly'),
     notify: groupId ? null : document.getElementById('sr-notify').checked,
+    dailyDigest: groupId ? null : document.getElementById('sr-daily-digest').checked,
     priorityKeywords: keywords ? keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean) : [],
     minPrice: document.getElementById('sr-min-price').value || '',
     maxPrice: document.getElementById('sr-max-price').value || '',
