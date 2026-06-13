@@ -666,7 +666,7 @@ async function checkPlayerSearches(env) {
       filters.push(`price:[${min}..${max}]`);
       filters.push('priceCurrency:USD');
     }
-    if (search.serial) filters.push('itemFeatures:{SERIAL_NUMBERED}');
+    const aspectFilter = search.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
 
     // Build query
     let q = search.query || '';
@@ -680,7 +680,7 @@ async function checkPlayerSearches(env) {
     let keepPaging = true;
     while (keepPaging && page <= maxPages) {
       const offset = (page - 1) * 200;
-      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
       const apiData = await res.json();
       const pageItems = (apiData.itemSummaries || []);
@@ -799,7 +799,7 @@ async function checkNightlySearches(env) {
         filters.push('priceCurrency:USD');
       }
       let q = search.query || '';
-    if (search.serial) filters.push('itemFeatures:{SERIAL_NUMBERED}');
+    const aspectFilter = search.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
     if (!q && !search.seller) continue;
 
@@ -811,7 +811,7 @@ async function checkNightlySearches(env) {
     let hitLimit = false;
     while (keepPaging && page <= maxPages) {
       const offset = (page - 1) * 200;
-      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
       const apiData = await res.json();
       const pageItems = (apiData.itemSummaries || []);
@@ -886,7 +886,7 @@ async function checkNightlySearches(env) {
       filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
       filters.push('priceCurrency:USD');
     }
-    if (search.serial) filters.push('itemFeatures:{SERIAL_NUMBERED}');
+    const aspectFilter = search.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
     let q = search.query || '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
     if (!q && !search.seller) continue;
@@ -899,7 +899,7 @@ async function checkNightlySearches(env) {
     let hitLimit = false;
     while (keepPaging && page <= maxPages) {
       const offset = (page - 1) * 200;
-      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
       const apiData = await res.json();
       const pageItems = (apiData.itemSummaries || []);
@@ -1198,13 +1198,13 @@ async function handleRunSearch(request, env, cors) {
         filters.push(`price:[${s.minPrice || '0'}..${s.maxPrice || ''}]`);
         filters.push('priceCurrency:USD');
       }
-      if (s.serial) filters.push('itemFeatures:{SERIAL_NUMBERED}');
+      const aspectFilter = s.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
       let q = s.query || '';
       if (s.sport) q = q ? `${q} ${s.sport}` : s.sport;
       if (!q && !s.seller) continue;
 
       const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
       const apiData = await res.json();
       let filtered = (apiData.itemSummaries || []).filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
