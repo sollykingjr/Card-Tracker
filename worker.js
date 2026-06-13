@@ -901,7 +901,7 @@ async function sendPlayerDigestNotification(env) {
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
 
   // Send for groups
-  for (const group of (data.groups || [])) {
+  for (const group of (data.groups || []).filter(g => g.dailyDigest === true)) {
     const existing = await env.CACHE.get(group.digestKey);
     const items = existing ? JSON.parse(existing) : [];
     if (items.length === 0) continue;
@@ -922,7 +922,7 @@ async function sendPlayerDigestNotification(env) {
   }
 
   // Send for standalone searches
-  for (const search of (data.searches || []).filter(s => !s.groupId)) {
+  for (const search of (data.searches || []).filter(s => !s.groupId && s.dailyDigest === true)) {
     const existing = await env.CACHE.get(search.digestKey);
     const items = existing ? JSON.parse(existing) : [];
     if (items.length === 0) continue;
