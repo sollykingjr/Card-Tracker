@@ -45,6 +45,7 @@ export default {
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
+    if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -886,6 +887,29 @@ async function handleSearchAlertsPost(request, env, cors) {
     });
   }
 }
+// ── [19] handleMarkSeen ───────────────────────────────────────────────────────
+async function handleMarkSeen(request, env, cors) {
+  try {
+    const { key } = await request.json();
+    if (!key) return new Response(JSON.stringify({ error: 'missing key' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+    const existing = await env.CACHE.get(key);
+    if (!existing) return new Response(JSON.stringify({ ok: true, count: 0 }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+    const items = JSON.parse(existing).map(item => ({ ...item, seen: true }));
+    await env.CACHE.put(key, JSON.stringify(items));
+    return new Response(JSON.stringify({ ok: true, count: items.length }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 // ── [19] handlePlayerDigestJson ───────────────────────────────────────────────
 async function handlePlayerDigestJson(request, env, cors) {
   try {
