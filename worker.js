@@ -675,17 +675,21 @@ async function checkPlayerSearches(env) {
     if (!q && !search.seller) continue;
 
     const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
-    });
-    const data = await res.json();
-    const items = data.itemSummaries || [];
-
-    const newItems = items.filter(item => {
-      const created = new Date(item.itemCreationDate).getTime();
-      return created > cutoff;
-    });
+    let newItems = [];
+    let page = 1;
+    const maxPages = 5;
+    let keepPaging = true;
+    while (keepPaging && page <= maxPages) {
+      const offset = (page - 1) * 200;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      const pageItems = (apiData.itemSummaries || []);
+      const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      newItems.push(...newInWindow);
+      if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+      page++;
+    }
 
     if (newItems.length === 0) continue;
 
