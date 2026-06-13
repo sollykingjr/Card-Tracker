@@ -218,7 +218,6 @@ function renderList() {
         </div>
         <div class="sr-card-links">
           <button class="sr-run-btn" data-digestkey="${group.digestKey}" data-label="${group.label}">▶ Run</button>
-          <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false, '${group.digestKey}_hourly')">Last Hour →</button>
           <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false)">Today →</button>
           <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', true)">7-Day →</button>
         </div>
@@ -245,7 +244,6 @@ function renderList() {
         <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
         <div class="sr-card-links">
           <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
-          <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false, '${s.digestKey}_hourly')">Last Hour →</button>
           <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
           <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
         </div>
@@ -624,9 +622,8 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     <div class="sr-wrap">
       <div class="sr-digest-header">
         <button class="sr-back-btn" id="sr-back-btn">← Back</button>
-        <div class="sr-digest-title">${label} — ${overrideKey?.includes('_hourly') ? 'Last Hour' : isArchive ? '7-Day Archive' : "Today's Listings"}</div>
+        <div class="sr-digest-title">${label} — ${isArchive ? '7-Day Archive' : "Today's Listings"}</div>
         <button class="sr-mark-seen-btn" id="sr-mark-seen-btn">Mark Seen</button>
-        <button class="sr-reset-btn" id="sr-reset-btn">Clear</button>
       </div>
       <div class="sr-digest-controls">
         <input class="sr-search-input" id="sr-digest-search" placeholder="Search titles...">
