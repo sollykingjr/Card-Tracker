@@ -618,12 +618,14 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
   const key = overrideKey || (isArchive ? digestKey + '_archive' : digestKey);
   let sortMode = 'newest';
   let filterText = '';
+  let showAll = false;
 
   root.innerHTML = `
     <div class="sr-wrap">
       <div class="sr-digest-header">
         <button class="sr-back-btn" id="sr-back-btn">← Back</button>
         <div class="sr-digest-title">${label} — ${overrideKey?.includes('_hourly') ? 'Last Hour' : isArchive ? '7-Day Archive' : "Today's Listings"}</div>
+        <button class="sr-mark-seen-btn" id="sr-mark-seen-btn">Mark Seen</button>
         <button class="sr-reset-btn" id="sr-reset-btn">Clear</button>
       </div>
       <div class="sr-digest-controls">
@@ -632,12 +634,29 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
           <button class="sr-chip-btn on" data-val="newest">Newest</button>
           <button class="sr-chip-btn" data-val="ending">Ending Soon</button>
         </div>
+        <button class="sr-chip-btn" id="sr-show-all-btn">Show All</button>
       </div>
       <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
     </div>
   `;
 
   document.getElementById('sr-back-btn').onclick = () => initSearchResults();
+  document.getElementById('sr-show-all-btn').onclick = () => {
+    showAll = !showAll;
+    document.getElementById('sr-show-all-btn').classList.toggle('on', showAll);
+    document.getElementById('sr-show-all-btn').textContent = showAll ? 'Unseen Only' : 'Show All';
+    renderDigestItems(allItems, sortMode, filterText, key, showAll);
+  };
+
+  document.getElementById('sr-mark-seen-btn').onclick = async () => {
+    await fetch(`${WORKER}/mark-seen`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    allItems = allItems.map(item => ({ ...item, seen: true }));
+    renderDigestItems(allItems, sortMode, filterText, key, showAll);
+  };
   document.getElementById('sr-reset-btn').onclick = async () => {
     if (!confirm('Clear all listings from this view?')) return;
     await fetch(`${WORKER}/search-alerts`, {
@@ -651,14 +670,14 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
   wireChips('sr-sort-chips');
   document.getElementById('sr-digest-search').oninput = (e) => {
     filterText = e.target.value.toLowerCase();
-    renderDigestItems(allItems, sortMode, filterText, key);
+    renderDigestItems(allItems, sortMode, filterText, key, showAll);
   };
   document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(b => b.classList.remove('on'));
       btn.classList.add('on');
       sortMode = btn.dataset.val;
-      renderDigestItems(allItems, sortMode, filterText, key);
+      renderDigestItems(allItems, sortMode, filterText, key, showAll);
     };
   });
 
@@ -667,17 +686,22 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
     const data = await res.json();
     allItems = data.items || [];
-    renderDigestItems(allItems, sortMode, filterText, key);
+    renderDigestItems(allItems, sortMode, filterText, key, showAll);
   } catch(e) {
     document.getElementById('sr-digest-list').innerHTML = '<div class="sr-empty">Failed to load listings.</div>';
   }
 }
 
-function renderDigestItems(allItems, sortMode, filterText, key) {
+function renderDigestItems(allItems, sortMode, filterText, key, showAll = false) {
   const list = document.getElementById('sr-digest-list');
   if (!list) return;
 
   let items = [...allItems];
+
+  // Filter to unseen only unless showAll
+  if (!showAll) {
+    items = items.filter(item => !item.seen);
+  }
 
   // Filter by search text
   if (filterText) {
