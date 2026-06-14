@@ -282,17 +282,23 @@ async function renderList() {
 
   await Promise.all(allKeys.map(async ({ id, key, type }) => {
     try {
-      const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
-      const data = await res.json();
-      const items = data.items || [];
-      const unseen = items.filter(i => !i.seen).length;
+      const [todayRes, archiveRes] = await Promise.all([
+        fetch(`${WORKER}/player-digest-json?key=${key}`),
+        fetch(`${WORKER}/player-digest-json?key=${key}_archive`)
+      ]);
+      const todayData = await todayRes.json();
+      const archiveData = await archiveRes.json();
+      const todayItems = todayData.items || [];
+      const archiveItems = archiveData.items || [];
+      const todayUnseen = todayItems.filter(i => !i.seen).length;
+      const archiveUnseen = archiveItems.filter(i => !i.seen).length;
       const badge = document.getElementById(`sr-badge-${type}-${id}`);
       if (!badge) return;
-      if (unseen > 0) {
-        badge.textContent = `${unseen} unseen`;
+      if (todayUnseen > 0 || archiveUnseen > 0) {
+        badge.textContent = `${todayUnseen} today · ${archiveUnseen} in 7-day`;
         badge.className = 'sr-unseen-badge';
       } else {
-        badge.textContent = `${items.length} total`;
+        badge.textContent = `${todayItems.length} today · ${archiveItems.length} in 7-day`;
         badge.className = 'sr-unseen-badge seen';
       }
     } catch(e) {}
