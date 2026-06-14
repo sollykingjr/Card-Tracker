@@ -1328,7 +1328,7 @@ html, body {
 /* ── Digest Header Sticky ─────────────────────────────────────────────────── */
 .sr-digest-header {
   position: sticky;
-  top: 43px;
+  top: 49px;
   z-index: 10;
   background: var(--bg);
   padding: 12px 0 12px;
