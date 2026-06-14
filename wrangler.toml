@@ -5,7 +5,7 @@ compatibility_date = "2024-01-01"
 [vars]
 
 [triggers]
-crons = ["0 * * * *", "0 5 * * *", "0 10 * * *", "30 15 * * *", "0 12 * * *"]
+crons = ["0 * * * *", "0 5 * * *", "0 10 * * *", "20 15 * * *", "0 12 * * *"]
 
 [observability]
 enabled = true
