@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - Major_Update
     paths:
       - 'worker.js'
       - 'wrangler.toml'

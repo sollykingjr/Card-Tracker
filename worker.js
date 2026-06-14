@@ -6,7 +6,11 @@ const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/
 export default {
   async scheduled(event, env, ctx) {
     await checkPromotions(env);
-    await checkPlayerSearches(env);
+    if (event.cron === '0 10 * * *') {
+      await checkNightlySearches(env);
+    } else {
+      await checkPlayerSearches(env);
+    }
     if (event.cron === '0 13 * * *') {
       await sendDailyStatsNotification(env);
     }
@@ -45,6 +49,8 @@ export default {
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
+    if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
+    if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -206,7 +212,6 @@ async function refreshAccessToken(refreshToken, env) {
     },
     body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}&scope=${encodeURIComponent(SCOPES)}`
   });
-
   const tokens = await res.json();
   if (!tokens.access_token) return null;
   await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: 7200 });
@@ -518,8 +523,10 @@ async function sendDailyStatsNotification(env) {
 // ── [13] checkPlayerSearches ──────────────────────────────────────────────────
 async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
-  const searches = saved ? JSON.parse(saved) : [];
-  if (searches.length === 0) return;
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  const searches = (data.searches || []).filter(s => !s.groupId);
+  const groups = data.groups || [];
+  if (searches.length === 0 && groups.length === 0) return;
 
   const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
   const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
@@ -537,6 +544,104 @@ async function checkPlayerSearches(env) {
   const lastRun = await env.CACHE.get('player_search_last_run');
   const cutoff = lastRun ? parseInt(lastRun) : now - (60 * 60 * 1000);
   await env.CACHE.put('player_search_last_run', String(now));
+
+  for (const group of groups) {
+    if (group.schedule === 'nightly') continue;
+    const groupSearches = data.searches.filter(s => s.groupId === group.id);
+    if (groupSearches.length === 0) continue;
+
+    const groupMapped = [];
+    for (const search of groupSearches) {
+      const filters = [];
+      if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
+      if (search.seller) {
+        if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
+        else filters.push(`excludeSellers:{${search.seller}}`);
+      }
+      if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+      if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (search.minPrice || search.maxPrice) {
+        filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
+        filters.push('priceCurrency:USD');
+      }
+      let q = search.query || '';
+      if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
+      if (!q && !search.seller) continue;
+      const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+      let items = [];
+      let page = 1;
+      const maxPages = 5;
+      let keepPaging = true;
+      while (keepPaging && page <= maxPages) {
+        const offset = (page - 1) * 200;
+        const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200&offset=${offset}`;
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+        const apiData = await res.json();
+        const pageItems = (apiData.itemSummaries || []);
+        const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+        items.push(...newInWindow);
+        if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+        page++;
+      }
+
+      if (search.excludeKeywords) {
+        const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        items = items.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+      }
+      if (search.includeKeywords) {
+        const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (incl.length > 0) {
+          items = search.includeLogic === 'AND'
+            ? items.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+            : items.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+        }
+      }
+
+      groupMapped.push(...items.map(item => ({
+        title: item.title,
+        price: item.currentBidPrice?.value || item.price?.value || '?',
+        url: item.itemWebUrl,
+        type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+        date: item.itemCreationDate,
+        endDate: item.itemEndDate || null,
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seen: false
+      })));
+    }
+
+    if (groupMapped.length === 0) continue;
+
+    // Store in group digest
+    const existing = await env.CACHE.get(group.digestKey);
+    const digestItems = existing ? JSON.parse(existing) : [];
+    await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...groupMapped]));
+
+    // 7-day archive
+    const archiveKey = group.digestKey + '_archive';
+    const existingArchive = await env.CACHE.get(archiveKey);
+    const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...groupMapped]));
+
+    // Pushover
+    const etHour = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
+    const hour = parseInt(etHour);
+    if (group.notify !== false && hour >= 7 && hour < 22) {
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `🔍 ${group.label}: ${groupMapped.length} new listing${groupMapped.length !== 1 ? 's' : ''}`,
+          message: 'Tap to view new listings.',
+          url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}`,
+          url_title: 'View in App'
+        })
+      });
+    }
+  }
 
  for (const search of searches) {
     // Skip nightly searches on hourly runs
@@ -562,26 +667,29 @@ async function checkPlayerSearches(env) {
       filters.push(`price:[${min}..${max}]`);
       filters.push('priceCurrency:USD');
     }
+    const aspectFilter = search.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
 
     // Build query
     let q = search.query || '';
     if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
-    if (search.serial) q = q ? `${q} /` : '/';
-
     if (!q && !search.seller) continue;
 
     const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
-    });
-    const data = await res.json();
-    const items = data.itemSummaries || [];
-
-    const newItems = items.filter(item => {
-      const created = new Date(item.itemCreationDate).getTime();
-      return created > cutoff;
-    });
+    let newItems = [];
+    let page = 1;
+    const maxPages = 5;
+    let keepPaging = true;
+    while (keepPaging && page <= maxPages) {
+      const offset = (page - 1) * 200;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      const pageItems = (apiData.itemSummaries || []);
+      const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      newItems.push(...newInWindow);
+      if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+      page++;
+    }
 
     if (newItems.length === 0) continue;
 
@@ -611,7 +719,9 @@ async function checkPlayerSearches(env) {
       url: item.itemWebUrl,
       type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
       date: item.itemCreationDate,
-      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
+      endDate: item.itemEndDate || null,
+      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+      seen: false
     }));
 
    // Send single hourly Pushover if notify is on and within quiet hours
@@ -619,8 +729,6 @@ async function checkPlayerSearches(env) {
     const hour = parseInt(etHour);
     const withinHours = hour >= 7 && hour < 22;
     if (search.notify !== false && withinHours && filteredItems.length > 0) {
-      const hourlyKey = search.digestKey + '_hourly';
-      await env.CACHE.put(hourlyKey, JSON.stringify(newMapped), { expirationTtl: 7200 });
       await fetch('https://api.pushover.net/1/messages.json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -629,7 +737,7 @@ async function checkPlayerSearches(env) {
           user: env.PUSHOVER_USER,
           title: `🔍 ${search.label}: ${filteredItems.length} new listing${filteredItems.length !== 1 ? 's' : ''}`,
           message: 'Tap to view new listings.',
-          url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}_hourly`,
+          url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}`,
           url_title: 'View in App'
         })
       });
@@ -649,25 +757,252 @@ async function checkPlayerSearches(env) {
     await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...newMapped]));
   }
 }
+
+// ── [13b] checkNightlySearches ────────────────────────────────────────────────
+async function checkNightlySearches(env) {
+  const saved = await env.CACHE.get('player_search_alerts');
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  const groups = (data.groups || []).filter(g => g.schedule === 'nightly');
+  const searches = (data.searches || []).filter(s => !s.groupId && s.schedule === 'nightly');
+  if (groups.length === 0 && searches.length === 0) return;
+
+  const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
+  const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) return;
+
+  const now = Date.now();
+  const cutoff = now - (24 * 60 * 60 * 1000);
+
+  for (const group of groups) {
+    const groupSearches = data.searches.filter(s => s.groupId === group.id);
+    if (groupSearches.length === 0) continue;
+
+    const groupMapped = [];
+    for (const search of groupSearches) {
+      const filters = [];
+      if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
+      if (search.seller) {
+        if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
+        else filters.push(`excludeSellers:{${search.seller}}`);
+      }
+      if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+      if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (search.minPrice || search.maxPrice) {
+        filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
+        filters.push('priceCurrency:USD');
+      }
+      let q = search.query || '';
+    const aspectFilter = search.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
+    if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
+    if (!q && !search.seller) continue;
+
+    const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+    let newItems = [];
+    let page = 1;
+    const maxPages = 15;
+    let keepPaging = true;
+    let hitLimit = false;
+    while (keepPaging && page <= maxPages) {
+      const offset = (page - 1) * 200;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      const pageItems = (apiData.itemSummaries || []);
+      const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      newItems.push(...newInWindow);
+      if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+      if (page === maxPages && keepPaging) hitLimit = true;
+      page++;
+    }
+    if (hitLimit) {
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `⚠️ ${search.label} hit 15 page limit`,
+          message: 'Some listings may be missing. Consider narrowing the search.',
+        })
+      });
+    }
+
+      if (search.excludeKeywords) {
+        const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        newItems = newItems.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+      }
+      if (search.includeKeywords) {
+        const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (incl.length > 0) {
+          newItems = search.includeLogic === 'AND'
+            ? newItems.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+            : newItems.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+        }
+      }
+
+      groupMapped.push(...newItems.map(item => ({
+        title: item.title,
+        price: item.currentBidPrice?.value || item.price?.value || '?',
+        url: item.itemWebUrl,
+        type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+        date: item.itemCreationDate,
+        endDate: item.itemEndDate || null,
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seen: false
+      })));
+    }
+
+    if (groupMapped.length === 0) continue;
+
+    const existing = await env.CACHE.get(group.digestKey);
+    const digestItems = existing ? JSON.parse(existing) : [];
+    await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...groupMapped]));
+
+    const archiveKey = group.digestKey + '_archive';
+    const existingArchive = await env.CACHE.get(archiveKey);
+    const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...groupMapped]));
+  }
+
+  for (const search of searches) {
+    const filters = [];
+    if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
+    if (search.seller) {
+      if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
+      else filters.push(`excludeSellers:{${search.seller}}`);
+    }
+    if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+    if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+    if (search.minPrice || search.maxPrice) {
+      filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
+      filters.push('priceCurrency:USD');
+    }
+    const aspectFilter = search.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
+    let q = search.query || '';
+    if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
+    if (!q && !search.seller) continue;
+
+    const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+    let items = [];
+    let page = 1;
+    const maxPages = 15;
+    let keepPaging = true;
+    let hitLimit = false;
+    while (keepPaging && page <= maxPages) {
+      const offset = (page - 1) * 200;
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      const pageItems = (apiData.itemSummaries || []);
+      const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      items.push(...newInWindow);
+      if (pageItems.length < 200 || newInWindow.length < pageItems.length) keepPaging = false;
+      if (page === maxPages && keepPaging) hitLimit = true;
+      page++;
+    }
+    if (hitLimit) {
+      await fetch('https://api.pushover.net/1/messages.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: env.PUSHOVER_TOKEN,
+          user: env.PUSHOVER_USER,
+          title: `⚠️ ${search.label} hit 15 page limit`,
+          message: 'Some listings may be missing. Consider narrowing the search.',
+        })
+      });
+    }
+
+    if (search.excludeKeywords) {
+      const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      items = items.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+    }
+    if (search.includeKeywords) {
+      const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+      if (incl.length > 0) {
+        items = search.includeLogic === 'AND'
+          ? items.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+          : items.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+      }
+    }
+
+    if (items.length === 0) continue;
+
+    const newMapped = items.map(item => ({
+      title: item.title,
+      price: item.currentBidPrice?.value || item.price?.value || '?',
+      url: item.itemWebUrl,
+      type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+      date: item.itemCreationDate,
+      endDate: item.itemEndDate || null,
+      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+      seen: false
+    }));
+
+    const existing = await env.CACHE.get(search.digestKey);
+    const digestItems = existing ? JSON.parse(existing) : [];
+    await env.CACHE.put(search.digestKey, JSON.stringify([...digestItems, ...newMapped]));
+
+    const archiveKey = search.digestKey + '_archive';
+    const existingArchive = await env.CACHE.get(archiveKey);
+    const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...newMapped]));
+  }
+}
+
 // ── [14] sendPlayerDigestNotification ────────────────────────────────────────
 async function sendPlayerDigestNotification(env) {
   const saved = await env.CACHE.get('player_search_alerts');
-  const searches = saved ? JSON.parse(saved) : [];
-  if (searches.length === 0) return;
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
 
-  for (const search of searches) {
-    const existing = await env.CACHE.get(search.digestKey);
+  // Send for groups
+  for (const group of (data.groups || []).filter(g => g.dailyDigest === true)) {
+    const existing = await env.CACHE.get(group.digestKey);
     const items = existing ? JSON.parse(existing) : [];
     if (items.length === 0) continue;
-
+    const unseen = items.filter(i => !i.seen);
+    if (unseen.length === 0) continue;
     await fetch('https://api.pushover.net/1/messages.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         token: env.PUSHOVER_TOKEN,
         user: env.PUSHOVER_USER,
-        title: `🔍 ${search.label}: ${items.length} new listing${items.length !== 1 ? 's' : ''} overnight`,
-        message: 'Tap for today\'s listings. 7-day archive also available.',
+        title: `🔍 ${group.label}: ${unseen.length} new listing${unseen.length !== 1 ? 's' : ''} overnight`,
+        message: 'Tap to view new listings.',
+        url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}`,
+        url_title: 'View in App'
+      })
+    });
+  }
+
+  // Send for standalone searches
+  for (const search of (data.searches || []).filter(s => !s.groupId && s.dailyDigest === true)) {
+    const existing = await env.CACHE.get(search.digestKey);
+    const items = existing ? JSON.parse(existing) : [];
+    if (items.length === 0) continue;
+    const unseen = items.filter(i => !i.seen);
+    if (unseen.length === 0) continue;
+    await fetch('https://api.pushover.net/1/messages.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: env.PUSHOVER_TOKEN,
+        user: env.PUSHOVER_USER,
+        title: `🔍 ${search.label}: ${unseen.length} new listing${unseen.length !== 1 ? 's' : ''} overnight`,
+        message: 'Tap to view new listings.',
         url: `https://sollykingjr.github.io/Card-Tracker?digest=${search.digestKey}`,
         url_title: 'View in App'
       })
@@ -726,9 +1061,10 @@ ${!key.includes('_archive') ? `<a href="/player-digest?key=${key}_archive" style
 // ── [17] clearPlayerDigests ───────────────────────────────────────────────────
 async function clearPlayerDigests(env) {
   const saved = await env.CACHE.get('player_search_alerts');
-  const searches = saved ? JSON.parse(saved) : [];
-  const digestKeys = searches.map(s => s.digestKey);
-  for (const key of digestKeys) {
+  const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  const groupKeys = (data.groups || []).map(g => g.digestKey);
+  const searchKeys = (data.searches || []).filter(s => !s.groupId).map(s => s.digestKey);
+  for (const key of [...groupKeys, ...searchKeys]) {
     await env.CACHE.delete(key);
   }
 }
@@ -736,9 +1072,11 @@ async function clearPlayerDigests(env) {
 async function handleSearchAlertsGet(env, cors) {
   try {
     const saved = await env.CACHE.get('player_search_alerts');
-    return new Response(JSON.stringify({
-      searches: saved ? JSON.parse(saved) : []
-    }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+    let data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+    if (Array.isArray(data)) data = { groups: [], searches: data };
+    return new Response(JSON.stringify(data), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
   } catch(e) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
@@ -748,16 +1086,64 @@ async function handleSearchAlertsGet(env, cors) {
 
 async function handleSearchAlertsPost(request, env, cors) {
   try {
-    const { searches, deleteKeys } = await request.json();
-    if (searches !== undefined) {
-      await env.CACHE.put('player_search_alerts', JSON.stringify(searches));
-    }
+    const { groups, searches, deleteKeys } = await request.json();
+    const saved = await env.CACHE.get('player_search_alerts');
+    let current = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+    if (Array.isArray(current)) current = { groups: [], searches: current };
+    if (groups !== undefined) current.groups = groups;
+    if (searches !== undefined) current.searches = searches;
+    await env.CACHE.put('player_search_alerts', JSON.stringify(current));
     if (deleteKeys && Array.isArray(deleteKeys)) {
       for (const key of deleteKeys) {
         await env.CACHE.delete(key);
       }
     }
     return new Response(JSON.stringify({ ok: true }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+// ── [19] handleMarkSeen ───────────────────────────────────────────────────────
+async function handleMarkSeen(request, env, cors) {
+  try {
+    const { key } = await request.json();
+    if (!key) return new Response(JSON.stringify({ error: 'missing key' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+    const existing = await env.CACHE.get(key);
+    if (!existing) return new Response(JSON.stringify({ ok: true, count: 0 }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+    const items = JSON.parse(existing).map(item => ({ ...item, seen: true }));
+    await env.CACHE.put(key, JSON.stringify(items));
+    return new Response(JSON.stringify({ ok: true, count: items.length }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [21] handleSetSnipe ───────────────────────────────────────────────────────
+async function handleSetSnipe(request, env, cors) {
+  try {
+    const { itemId, maxBid } = await request.json();
+    if (!itemId || !maxBid) return new Response(JSON.stringify({ error: 'missing itemId or maxBid' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const url = `https://www.gixen.com/api.php?username=${encodeURIComponent(env.GIXEN_USERNAME)}&password=${encodeURIComponent(env.GIXEN_PASSWORD)}&itemid=${encodeURIComponent(itemId)}&maxbid=${encodeURIComponent(maxBid)}&main=1`;
+    const res = await fetch(url);
+    const text = await res.text();
+
+    const ok = text.includes('ERROR_CODE=0');
+    return new Response(JSON.stringify({ ok: false, raw: text }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch(e) {
@@ -797,9 +1183,11 @@ async function handleRunSearch(request, env, cors) {
     });
 
     const saved = await env.CACHE.get('player_search_alerts');
-    const searches = saved ? JSON.parse(saved) : [];
-    const search = searches.find(s => s.digestKey === digestKey);
-    if (!search) return new Response(JSON.stringify({ error: 'search not found' }), {
+    const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+    // Check if it's a group or standalone search
+    const group = (data.groups || []).find(g => g.digestKey === digestKey);
+    const search = !group ? (data.searches || []).find(s => s.digestKey === digestKey) : null;
+    if (!group && !search) return new Response(JSON.stringify({ error: 'not found' }), {
       status: 404, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
@@ -817,57 +1205,65 @@ async function handleRunSearch(request, env, cors) {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
-    const filters = [];
-    if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
-    if (search.seller) {
-      if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
-      else filters.push(`excludeSellers:{${search.seller}}`);
-    }
-    if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
-    if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
-    if (search.minPrice || search.maxPrice) {
-      const min = search.minPrice || '0';
-      const max = search.maxPrice || '';
-      filters.push(`price:[${min}..${max}]`);
-      filters.push('priceCurrency:USD');
-    }
-    let q = search.query || '';
-    if (search.sport) q = q ? `${q} ${search.sport}` : search.sport;
-    if (search.serial) q = q ? `${q} /` : '/';
-
-    const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}&limit=200`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    const data = await res.json();
     const cutoff = Date.now() - (2 * 60 * 60 * 1000);
-    let filteredSummaries = (data.itemSummaries || []).filter(item =>
-      new Date(item.itemCreationDate).getTime() > cutoff
-    );
-    if (search.excludeKeywords) {
-      const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-      filteredSummaries = filteredSummaries.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
-    }
-    if (search.includeKeywords) {
-      const incl = search.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-      if (incl.length > 0) {
-        if (search.includeLogic === 'AND') {
-          filteredSummaries = filteredSummaries.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)));
-        } else {
-          filteredSummaries = filteredSummaries.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
+    const searchList = group ? data.searches.filter(s => s.groupId === group.id) : [search];
+    const allItems = [];
+
+    for (const s of searchList) {
+      const filters = [];
+      if (s.listingType && s.listingType !== 'BOTH') filters.push(`buyingOptions:{${s.listingType}}`);
+      if (s.seller) {
+        if (s.sellerMode === 'include') filters.push(`sellers:{${s.seller}}`);
+        else filters.push(`excludeSellers:{${s.seller}}`);
+      }
+      if (s.condition === 'Graded') filters.push('conditionIds:{2750}');
+      if (s.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (s.minPrice || s.maxPrice) {
+        filters.push(`price:[${s.minPrice || '0'}..${s.maxPrice || ''}]`);
+        filters.push('priceCurrency:USD');
+      }
+      const aspectFilter = s.serial ? `&aspect_filter=${encodeURIComponent('categoryId:212,Features:{Serial Numbered}')}` : '';
+      let q = s.query || '';
+      if (s.sport) q = q ? `${q} ${s.sport}` : s.sport;
+      if (!q && !s.seller) continue;
+
+      const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+      const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+      const apiData = await res.json();
+      let filtered = (apiData.itemSummaries || []).filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+
+      if (s.excludeKeywords) {
+        const excl = s.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        filtered = filtered.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
+      }
+      if (s.includeKeywords) {
+        const incl = s.includeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (incl.length > 0) {
+          filtered = s.includeLogic === 'AND'
+            ? filtered.filter(item => incl.every(kw => item.title.toLowerCase().includes(kw)))
+            : filtered.filter(item => incl.some(kw => item.title.toLowerCase().includes(kw)));
         }
       }
-    }
-    const items = filteredSummaries.map(item => ({
-      title: item.title,
-      price: item.currentBidPrice?.value || item.price?.value || '?',
-      url: item.itemWebUrl,
-      type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
-      date: item.itemCreationDate,
-      image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null
-    }));
 
-    const hourlyKey = digestKey + '_hourly';
-    await env.CACHE.put(hourlyKey, JSON.stringify(items), { expirationTtl: 7200 });
+      allItems.push(...filtered.map(item => ({
+        title: item.title,
+        price: item.currentBidPrice?.value || item.price?.value || '?',
+        url: item.itemWebUrl,
+        type: item.buyingOptions?.includes('AUCTION') ? 'Auction' : 'BIN',
+        date: item.itemCreationDate,
+        endDate: item.itemEndDate || null,
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seen: false
+      })));
+    }
+
+    const items = allItems;
+    const targetKey = (group || search).digestKey;
+    const existing = await env.CACHE.get(targetKey);
+    const existingItems = existing ? JSON.parse(existing) : [];
+    const merged = [...existingItems, ...items];
+    await env.CACHE.put(targetKey, JSON.stringify(merged));
 
     return new Response(JSON.stringify({ ok: true, count: items.length }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
