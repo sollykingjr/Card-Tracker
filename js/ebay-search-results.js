@@ -100,7 +100,7 @@ async function initSearchResults() {
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
-          <div id="sr-keywords-wrap">
+          <div id="sr-keywords-wrap" style="display:none">
             <input class="sr-input" id="sr-keywords" placeholder="Notification keywords, comma separated (e.g. 2005,2006,psa)">
           </div>
           <div class="sr-form-section">Include Keywords</div>
@@ -653,11 +653,14 @@ function wireForm() {
   wireChips('sr-sport-chips');
   wireChips('sr-condition-chips');
   wireChips('sr-type-chips');
-  wireChips('sr-schedule-chips');
   wireChips('sr-include-logic');
-  document.getElementById('sr-notify').onchange = function() {
-    document.getElementById('sr-keywords-wrap').style.display = this.checked ? 'block' : 'none';
-  };
+  wireChips('sr-schedule-chips');
+  document.querySelectorAll('#sr-schedule-chips .sr-chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isNightly = btn.dataset.val === 'nightly';
+      document.getElementById('sr-notify-row').style.display = isNightly ? 'none' : '';
+    });
+  });
 }
 
 // ── Digest View ───────────────────────────────────────────────────────────────
