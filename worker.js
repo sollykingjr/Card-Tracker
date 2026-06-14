@@ -6,7 +6,7 @@ const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/
 export default {
   async scheduled(event, env, ctx) {
     await checkPromotions(env);
-    if (event.cron === '0 10 * * *' || event.cron === '02 20 * * *') {
+    if (event.cron === '0 10 * * *' || event.cron === '09 20 * * *') {
       await checkNightlySearches(env);
     } else {
       await checkPlayerSearches(env);
