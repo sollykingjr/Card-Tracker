@@ -203,7 +203,7 @@ async function renderList() {
     html += `
       <div class="sr-group-card" id="srg-${group.id}">
         <div class="sr-card-header">
-          <div class="sr-group-label">${group.label}</div>
+          <div class="sr-group-label">${group.label} <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span></div>
           <div class="sr-header-right">
             <span class="sr-schedule-badge">${group.schedule || 'hourly'}</span>
             <div class="sr-menu-wrap">
