@@ -50,6 +50,7 @@ export default {
     if (path === '/sb-data' && request.method === 'GET') return handleSbDataGet(env, cors);
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
     if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
+    if (path === '/mark-seen-urls' && request.method === 'POST') return handleMarkSeenUrls(request, env, cors);
     if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
@@ -1107,6 +1108,30 @@ async function handleSearchAlertsPost(request, env, cors) {
     });
   }
 }
+// ── [19b] handleMarkSeenUrls ──────────────────────────────────────────────────
+async function handleMarkSeenUrls(request, env, cors) {
+  try {
+    const { key, urls } = await request.json();
+    if (!key || !urls) return new Response(JSON.stringify({ error: 'missing key or urls' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+    const existing = await env.CACHE.get(key);
+    if (!existing) return new Response(JSON.stringify({ ok: true, count: 0 }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+    const seenUrls = new Set(urls);
+    const items = JSON.parse(existing).map(item => seenUrls.has(item.url) ? { ...item, seen: true } : item);
+    await env.CACHE.put(key, JSON.stringify(items));
+    return new Response(JSON.stringify({ ok: true, count: items.filter(i => i.seen).length }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 // ── [19] handleMarkSeen ───────────────────────────────────────────────────────
 async function handleMarkSeen(request, env, cors) {
   try {
