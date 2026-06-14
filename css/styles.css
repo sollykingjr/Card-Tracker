@@ -1331,8 +1331,9 @@ html, body {
   top: 43px;
   z-index: 10;
   background: var(--bg);
-  padding: 12px 0;
+  padding: 12px 0 12px;
   margin-bottom: 8px;
+  border-top: 6px solid var(--bg);
 }
 
 @media (min-width: 768px) {
