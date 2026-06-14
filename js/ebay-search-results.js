@@ -696,6 +696,7 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     showAll = !showAll;
     document.getElementById('sr-show-all-btn').classList.toggle('on', showAll);
     document.getElementById('sr-show-all-btn').textContent = showAll ? 'Unseen Only' : 'Show All';
+    updateDigestCount(allItems, showAll);
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   };
 
@@ -705,8 +706,21 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key })
     });
+
+    // Sync seen to counterpart key by URL overlap
+    const isArchive = key.endsWith('_archive');
+    const otherKey = isArchive ? key.replace('_archive', '') : key + '_archive';
+    const seenUrls = allItems.map(i => i.url);
+    try {
+      await fetch(`${WORKER}/mark-seen-urls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: otherKey, urls: seenUrls })
+      });
+    } catch(e) {}
+
     allItems = allItems.map(item => ({ ...item, seen: true }));
-    updateDigestCount(allItems);
+    updateDigestCount(allItems, showAll);
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   };
 
@@ -743,18 +757,21 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
     const data = await res.json();
     allItems = data.items || [];
-    updateDigestCount(allItems);
+    updateDigestCount(allItems, showAll);
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   } catch(e) {
     document.getElementById('sr-digest-list').innerHTML = '<div class="sr-empty">Failed to load listings.</div>';
   }
 }
 
-function updateDigestCount(items) {
+function updateDigestCount(items, showAll = false) {
   const countEl = document.getElementById('sr-digest-count');
   if (!countEl) return;
   const unseen = items.filter(i => !i.seen).length;
-  if (unseen > 0) {
+  if (showAll) {
+    countEl.textContent = `${items.length} total`;
+    countEl.style.color = 'var(--tx3)';
+  } else if (unseen > 0) {
     countEl.textContent = `${unseen} unseen`;
     countEl.style.color = 'var(--acc)';
   } else {
