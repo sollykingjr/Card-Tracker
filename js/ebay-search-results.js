@@ -231,6 +231,7 @@ async function renderList() {
           `).join('')}
         </div>
         <div class="sr-card-links">
+          <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span>
           <button class="sr-run-btn" data-digestkey="${group.digestKey}" data-label="${group.label}">▶ Run</button>
           <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false)">Today →</button>
           <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', true)">7-Day →</button>
@@ -257,6 +258,7 @@ async function renderList() {
         <div class="sr-card-query">🔍 ${s.query || ''}</div>
         <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
         <div class="sr-card-links">
+          <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span>
           <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
           <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
           <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
@@ -271,6 +273,30 @@ async function renderList() {
 
   list.innerHTML = html;
   wireListEvents();
+
+  // Fetch unseen counts in parallel and update badges
+  const allKeys = [
+    ...srData.groups.map(g => ({ id: g.id, key: g.digestKey, type: 'group' })),
+    ...srData.searches.filter(s => !s.groupId).map(s => ({ id: s.id, key: s.digestKey, type: 'search' }))
+  ];
+
+  await Promise.all(allKeys.map(async ({ id, key, type }) => {
+    try {
+      const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
+      const data = await res.json();
+      const items = data.items || [];
+      const unseen = items.filter(i => !i.seen).length;
+      const badge = document.getElementById(`sr-badge-${type}-${id}`);
+      if (!badge) return;
+      if (unseen > 0) {
+        badge.textContent = `${unseen} unseen`;
+        badge.className = 'sr-unseen-badge';
+      } else {
+        badge.textContent = `${items.length} total`;
+        badge.className = 'sr-unseen-badge seen';
+      }
+    } catch(e) {}
+  }));
 }
 
 function wireListEvents() {
@@ -654,6 +680,7 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
         </div>
         <button class="sr-chip-btn" id="sr-show-all-btn">Show All</button>
       </div>
+      <div class="sr-digest-count" id="sr-digest-count">—</div>
       <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
     </div>
   `;
