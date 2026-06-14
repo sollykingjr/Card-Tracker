@@ -16,3 +16,6 @@ enabled = true
 [[kv_namespaces]]
 binding = "CACHE"
 id = "23e104faac8545dcb39b9283bf368a9b"
+
+[limits]
+cpu_ms = 30000
