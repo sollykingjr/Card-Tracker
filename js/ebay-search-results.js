@@ -188,7 +188,6 @@ async function saveData() {
     body: JSON.stringify({ groups: srData.groups, searches: srData.searches })
   });
   const result = await res.json();
-  console.log('saveData result:', result, 'groups:', srData.groups.length, 'searches:', srData.searches.length);
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
