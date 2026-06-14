@@ -231,7 +231,6 @@ async function renderList() {
           `).join('')}
         </div>
         <div class="sr-card-links">
-          <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span>
           <button class="sr-run-btn" data-digestkey="${group.digestKey}" data-label="${group.label}">▶ Run</button>
           <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false)">Today →</button>
           <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', true)">7-Day →</button>
@@ -246,7 +245,7 @@ async function renderList() {
     html += `
       <div class="sr-card">
         <div class="sr-card-header">
-          <div class="sr-card-label">${s.label}</div>
+          <div class="sr-card-label">${s.label} <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span></div>
           <div class="sr-menu-wrap">
             <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
             <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
@@ -258,7 +257,6 @@ async function renderList() {
         <div class="sr-card-query">🔍 ${s.query || ''}</div>
         <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
         <div class="sr-card-links">
-          <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span>
           <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
           <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
           <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
