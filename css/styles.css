@@ -1354,3 +1354,22 @@ html, body {
   flex-shrink: 0;
 }
 .sr-mark-seen-btn:hover { opacity: .85; }
+
+.sr-digest-count {
+  position: sticky;
+  top: 91px;
+  z-index: 9;
+  background: var(--bg);
+  padding: 6px 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+@media (min-width: 768px) {
+  .sr-digest-count {
+    top: 48px;
+  }
+}
