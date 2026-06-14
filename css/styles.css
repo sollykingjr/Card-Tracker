@@ -1267,6 +1267,25 @@ html, body {
   color: var(--tx3);
   padding: 6px 0;
 }
+
+.sr-unseen-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--acc);
+  color: #fff;
+  letter-spacing: .02em;
+  flex-shrink: 0;
+}
+
+.sr-unseen-badge.seen {
+  background: var(--surf2);
+  color: var(--tx3);
+  border: 1px solid var(--bdr2);
+}
 .sr-select {
   flex: 1;
   height: 36px;
