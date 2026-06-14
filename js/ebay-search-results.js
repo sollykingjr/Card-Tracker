@@ -192,7 +192,7 @@ async function saveData() {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
-function renderList() {
+async function renderList() {
   const list = document.getElementById('sr-list');
   if (!list) return;
   let html = '';
