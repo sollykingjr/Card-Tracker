@@ -1287,8 +1287,11 @@ async function handleRunSearch(request, env, cors) {
     const targetKey = (group || search).digestKey;
     const existing = await env.CACHE.get(targetKey);
     const existingItems = existing ? JSON.parse(existing) : [];
-    const merged = [...existingItems, ...items];
+    const existingUrls = new Set(existingItems.map(i => i.url));
+    const deduped = items.filter(i => !existingUrls.has(i.url));
+    const merged = [...existingItems, ...deduped];
     await env.CACHE.put(targetKey, JSON.stringify(merged));
+
 
     return new Response(JSON.stringify({ ok: true, count: items.length }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
