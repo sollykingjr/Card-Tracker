@@ -201,7 +201,7 @@ async function renderList() {
     const groupSearches = srData.searches.filter(s => s.groupId === group.id);
     html += `
       <div class="sr-group-card" id="srg-${group.id}">
-        <div class="sr-card-header">
+        <div class="sr-card-header" style="cursor:pointer" onclick="document.getElementById('sr-group-searches-${group.id}').style.display = document.getElementById('sr-group-searches-${group.id}').style.display === 'none' ? 'block' : 'none'">
           <div class="sr-group-label">${group.label} <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span></div>
           <div class="sr-header-right">
             <span class="sr-schedule-badge">${group.schedule || 'hourly'}</span>
@@ -215,7 +215,7 @@ async function renderList() {
             </div>
           </div>
         </div>
-        <div class="sr-group-searches">
+        <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
           ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
             <div class="sr-search-row">
               <div class="sr-search-row-label">🔍 ${s.label}</div>
