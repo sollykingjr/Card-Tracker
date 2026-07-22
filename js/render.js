@@ -520,7 +520,7 @@ function buildValueGaps() {
     const price = safeNum(d.price);
     const ev = safeNum(d.expectedValue);
     if(!price || !ev) return null;
-    const pct = (price-ev)/ev*100;
+    const pct = (ev-price)/price*100;
     const dispName = players.find(p=>normName(p.name)===nm)?.name || nm.replace(/\b\w/g,l=>l.toUpperCase());
     return {name:dispName, normName:nm, pct};
   }).filter(Boolean).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)).slice(0,10);
