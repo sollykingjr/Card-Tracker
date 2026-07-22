@@ -406,6 +406,7 @@ function showDetail(p, tp) {
 
   const currentPrice = d.price?(String(d.price).startsWith('$')?d.price:'$'+d.price):'—';
   const currentRank  = d.rank?'#'+d.rank:'—';
+  const currentEV    = d.expectedValue?(String(d.expectedValue).startsWith('$')?d.expectedValue:'$'+d.expectedValue):'—';
 
   // Buy Score asterisk if no Buy Score sheet entry
   const hasBsEntry = buyScores.some(b=>normName(b.name)===nm);
@@ -436,6 +437,7 @@ function showDetail(p, tp) {
       <div class="scard"><div class="slbl">Price</div><div class="sval">${currentPrice}</div></div>
       <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
       <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
+      <div class="scard"><div class="slbl">Expected Value</div><div class="sval">${currentEV}</div></div>
     </div>
 ${modalCards(p.name)}
     ${noteHtml}
@@ -509,6 +511,34 @@ function buildPricePerformance(playerList) {
     ${all.length>preview.length?`<button onclick="document.getElementById('pp-preview').style.display='none';document.getElementById('pp-full').style.display='';this.style.display='none'" style="width:100%;padding:6px;background:none;border:.5px solid var(--bdr2);border-radius:7px;color:var(--tx2);font-size:12px;cursor:pointer;margin-top:6px;font-family:inherit">Show all ${all.length}</button>`:''}
   </div>`;
 }
+
+// ── Expected value vs. price ────────────────────────────────────────────────────
+function buildValueGaps() {
+  const uniqueNames = [...new Set(buyScores.map(b=>normName(b.name)))];
+  const withPct = uniqueNames.map(nm=>{
+    const d = getResolved(nm);
+    const price = safeNum(d.price);
+    const ev = safeNum(d.expectedValue);
+    if(!price || !ev) return null;
+    const pct = (price-ev)/ev*100;
+    const dispName = players.find(p=>normName(p.name)===nm)?.name || nm.replace(/\b\w/g,l=>l.toUpperCase());
+    return {name:dispName, normName:nm, pct};
+  }).filter(Boolean).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)).slice(0,10);
+
+  if(!withPct.length) return '';
+
+  const rowHtml = withPct.map(e=>`
+    <div class="pp-row" onclick="openPlayerFromPortfolio('${e.normName}')" style="cursor:pointer">
+      <span class="pp-name">${e.name}</span>
+      <span class="${e.pct>=0?'up':'dn'}" style="font-weight:600;font-size:13px">${e.pct>=0?'+':''}${e.pct.toFixed(0)}%</span>
+    </div>`).join('');
+
+  return `<div class="srow" style="margin-bottom:11px">
+    <div class="srow-t">Price vs. Expected Value</div>
+    ${rowHtml}
+  </div>`;
+}
+
 function modalHsHistory(hist) {
   if(!hist.length) return '';
   const rows = hist.map(h=>{
@@ -660,7 +690,8 @@ function renderPortfolio() {
     }).join('')}`:'<div class="empty-msg" style="padding:20px 0">No prospect cards found</div>';
 
   const perfHtml = buildPricePerformance(playerList);
-  document.getElementById('list').innerHTML=summaryHtml+perfHtml+recentHtml+holdingsHtml;
+  const valueGapHtml = buildValueGaps();
+  document.getElementById('list').innerHTML=summaryHtml+perfHtml+valueGapHtml+recentHtml+holdingsHtml;
   document.getElementById('cntlbl').textContent=`${playerList.length} player${playerList.length===1?'':'s'}`;
 }
 
