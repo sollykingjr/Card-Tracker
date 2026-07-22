@@ -190,7 +190,7 @@ async function loadAll() {
       fetchRange("'Hot Sheet'!A2:AE10000"),
       fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W2000")}?key=${KEY}`)
         .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
-    fetchRange("'Buy Score'!A2:I10000"),
+    fetchRange("'Buy Score'!A2:J10000"),
     ]);
 
     players = pR.filter(r=>r[3]).map(r=>({
@@ -219,8 +219,8 @@ async function loadAll() {
       hotsheet = hsR.filter(r=>r[4]).map(r=>({
       date:cl(r[0]),week:cl(r[1]),pos:cl(r[2]),level:cl(r[3]),
       name:cl(r[4])||'',age:cl(r[5]),aff:cl(r[6]),
-      auto:cl(r[7]),day14:cl(r[8]),hobby:cl(r[9]),buyScore:cl(r[10]),
-      repeat:cl(r[11])==='Yes',category:cl(r[12]),notes:cl(r[13])
+      auto:cl(r[7]),hobby:cl(r[8]),buyScore:cl(r[9]),
+      notes:cl(r[10])
     }));
 
     cards = cR.filter(r=>r[7]).map(r=>({
@@ -234,7 +234,7 @@ async function loadAll() {
 buyScores = bsR.filter(r=>r[3]).map(r=>({
       date:cl(r[0]), pos:cl(r[1]), rank:cl(r[2]), name:cl(r[3])||'',
       team:cl(r[4])||'', age:cl(r[5]), price:cl(r[6]),
-      score:cl(r[7]), notes:cl(r[8])
+      score:cl(r[7]), notes:cl(r[8]), expectedValue:cl(r[9])
     }));
     
     buildCache();
