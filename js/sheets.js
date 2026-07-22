@@ -120,6 +120,7 @@ function buildCache() {
       entry.buy = bsDate>=hsDate && bsBest ? cl(bsBest.score)
         : hsBest ? cl(hsBest.buyScore)
         : (buyEntry ? cl(buyEntry.buy) : null);
+      entry.expectedValue = bsBest ? cl(bsBest.expectedValue) : null;
 
       let hsLabel = null;
       if(hsEntries.length) {
@@ -136,7 +137,7 @@ function buildCache() {
         if(orig>0) entry.priceChange={orig:buyPrice, now:best.price, pct:parseFloat(((now-orig)/orig*100).toFixed(0))};
       }
     } else {
-      entry.rank=null; entry.price=null; entry.buy=null; entry.hsLabel=null; entry.priceChange=null;
+      entry.rank=null; entry.price=null; entry.buy=null; entry.hsLabel=null; entry.priceChange=null; entry.expectedValue=null;
     }
 
     const playerCards = cards.filter(c=>normName(c.player)===nm);
@@ -164,7 +165,7 @@ function buildCache() {
 }
 
 // ── Cache accessors ───────────────────────────────────────────────────────────
-const getResolved  = name => CACHE?.get(normName(name)) || {rank:null,price:null,buy:null,hsLabel:null,priceChange:null};
+const getResolved  = name => CACHE?.get(normName(name)) || {rank:null,price:null,buy:null,hsLabel:null,priceChange:null,expectedValue:null};
 const getCardStats = name => CACHE?.get(normName(name))?.cards || {owned:[],sold:[],totalInvested:0,totalSoldFor:0,totalNetProfit:0,avgHold:null,bestFlip:null};
 const getHsInfo    = name => CACHE?.get(normName(name))?.hsInfo || {totalAppearances:0,onLatest:false,streak:0,maxWeek:0};
 
