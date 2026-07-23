@@ -110,6 +110,13 @@ async function initSearchResults() {
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">US Only</div>
+            <label class="sr-toggle">
+              <input type="checkbox" id="sr-us-only">
+              <span class="sr-toggle-slider"></span>
+            </label>
+          </div>
           <div class="sr-form-section">Price</div>
           <div class="sr-form-row">
             <div class="sr-form-label">Min Price</div>
@@ -553,6 +560,7 @@ function openSearchForm(search, presetGroupId) {
     document.getElementById('sr-seller').value = search.seller || '';
     document.getElementById('sr-keywords').value = (search.priorityKeywords || []).join(', ');
     document.getElementById('sr-serial').checked = search.serial || false;
+    document.getElementById('sr-us-only').checked = search.usOnly || false;
     document.getElementById('sr-notify').checked = search.notify !== false;
     document.getElementById('sr-keywords-wrap').style.display = search.notify !== false ? 'block' : 'none';
     document.getElementById('sr-min-price').value = search.minPrice || '';
@@ -580,6 +588,7 @@ function openSearchForm(search, presetGroupId) {
       search.sport = getChipVal('sr-sport-chips');
       search.condition = getChipVal('sr-condition-chips');
       search.serial = document.getElementById('sr-serial').checked;
+      search.usOnly = document.getElementById('sr-us-only').checked;
       search.listingType = getChipVal('sr-type-chips') || 'BOTH';
       search.schedule = search.groupId ? null : (getChipVal('sr-schedule-chips') || 'hourly');
       search.notify = search.groupId ? null : document.getElementById('sr-notify').checked;
@@ -626,6 +635,7 @@ function clearSearchForm() {
   document.getElementById('sr-seller').value = '';
   document.getElementById('sr-keywords').value = '';
   document.getElementById('sr-serial').checked = false;
+  document.getElementById('sr-us-only').checked = false;
   document.getElementById('sr-notify').checked = false;
   document.getElementById('sr-min-price').value = '';
   document.getElementById('sr-max-price').value = '';
@@ -661,6 +671,7 @@ async function saveSearch() {
     sport: getChipVal('sr-sport-chips'),
     condition: getChipVal('sr-condition-chips'),
     serial: document.getElementById('sr-serial').checked,
+    usOnly: document.getElementById('sr-us-only').checked,
     listingType: getChipVal('sr-type-chips') || 'BOTH',
     schedule: groupId ? null : (getChipVal('sr-schedule-chips') || 'hourly'),
     notify: groupId ? null : document.getElementById('sr-notify').checked,
