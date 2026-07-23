@@ -197,7 +197,7 @@ async function loadAll() {
       fetchRange("'200 Hitters Original'!A2:G2000"),
       fetchRange("'100 Pitchers Original'!A2:G2000"),
       fetchRange("'Hot Sheet'!A2:AE10000"),
-      fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W2000")}?key=${KEY}`)
+      fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
         .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
     fetchRange("'Buy Score'!A2:J10000"),
     fetchRange("'Parallel Multiplier'!A2:G500"),
