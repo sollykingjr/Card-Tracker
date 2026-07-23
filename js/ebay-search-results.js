@@ -8,14 +8,25 @@ const BUY_SCORE_THRESHOLD = 5;
 const BUY_SCORE_SEARCH_LABELS = ['Prospects Buy Score 5 - Auction', 'Prospects Buy Score 5 - BIN'];
 
 function getBuyScoreQualifiers() {
+  if (!buyScores.length) return [];
+  const isPitcher = b => (b.pos || '').toLowerCase().includes('pitcher');
+  const hitterDates = buyScores.filter(b => !isPitcher(b)).map(b => parseDate(b.date));
+  const pitcherDates = buyScores.filter(b => isPitcher(b)).map(b => parseDate(b.date));
+  const maxHitDate = hitterDates.length ? Math.max(...hitterDates) : 0;
+  const maxPitDate = pitcherDates.length ? Math.max(...pitcherDates) : 0;
+
   const seen = new Set();
   const names = [];
-  players.forEach(p => {
-    const nm = normName(p.name);
+  buyScores.forEach(b => {
+    const maxDate = isPitcher(b) ? maxPitDate : maxHitDate;
+    if (parseDate(b.date) !== maxDate) return;
+    const nm = normName(b.name);
     if (seen.has(nm)) return;
-    seen.add(nm);
-    const buy = parseFloat(getResolved(p.name).buy || 0);
-    if (buy >= BUY_SCORE_THRESHOLD) names.push(p.name);
+    const score = parseFloat(b.score || 0);
+    if (score >= BUY_SCORE_THRESHOLD) {
+      seen.add(nm);
+      names.push(b.name);
+    }
   });
   return names;
 }
