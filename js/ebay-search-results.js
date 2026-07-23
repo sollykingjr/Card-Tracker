@@ -780,6 +780,27 @@ function updateDigestCount(items, showAll = false) {
   }
 }
 
+function resolveItemPlayer(title) {
+  const lc = (title || '').toLowerCase();
+  let best = null;
+  for (const p of players) {
+    const nm = (p.name || '').toLowerCase();
+    if (nm && lc.includes(nm)) {
+      if (!best || nm.length > best.name.toLowerCase().length) best = p;
+    }
+  }
+  return best;
+}
+function buildListingExpectedValue(title) {
+  const player = resolveItemPlayer(title);
+  if (!player) return '';
+  const mult = getParallelMultiplier(title, player.name);
+  if (mult === null) return '';
+  const base = safeNum(getResolved(player.name).price);
+  if (base <= 0) return '';
+  const ev = base * mult;
+  return ` <span class="sr-listing-ev">Exp: ${fmtMoney(ev)}</span>`;
+}
 function renderDigestItems(allItems, sortMode, filterText, key, showAll = false) {
   const list = document.getElementById('sr-digest-list');
   if (!list) return;
