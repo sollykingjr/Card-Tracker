@@ -365,8 +365,15 @@ function showCardsSubview(type, name) {
         }
       } else if(currentPrice>0 && cardTs && cardPriceHistory.length){
         const closest=cardPriceHistory.reduce((a,b)=>Math.abs(b.ts-cardTs)<Math.abs(a.ts-cardTs)?b:a);
-        if(closest.price){ const pct=(currentPrice-closest.price)/closest.price*100;
-          pctHtml=`<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`; }
+        if(closest.price){
+          const pct=(currentPrice-closest.price)/closest.price*100;
+          pctHtml=`<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`;
+          const cost = safeNum(c.purchasePrice);
+          if(cost>0){
+            const ev = cost*(1+pct/100);
+            evHtml=`<div class="ct-stat"><div class="ct-l">Expected Value</div><div class="ct-v">${fmtMoney(ev)}</div></div>`;
+          }
+        }
       }
       return `<div class="ct-entry owned">
         <div class="ct-name">${c.fullCard||'—'}</div>
