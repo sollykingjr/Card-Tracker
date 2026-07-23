@@ -37,6 +37,13 @@ const invTier=amt=>{
   if(amt<=25) return 'inv1'; if(amt<=50) return 'inv2';
   if(amt<=100) return 'inv3'; return 'inv4';
 };
+const getParallelMultiplier=cardName=>{
+  const cn=(cardName||'').toLowerCase();
+  if(!cn.includes('auto')) return null;
+  const colorMatch = parallelMultipliers.find(p=>p.parallel && p.parallel.toLowerCase()!=='refractor' && cn.includes(p.parallel.toLowerCase()));
+  const match = colorMatch || parallelMultipliers.find(p=>p.parallel && p.parallel.toLowerCase()==='refractor' && cn.includes('refractor'));
+  return match ? (parseFloat(match.multiplier)||1) : 1;
+};
 
 // ── mostRecentStatic ──────────────────────────────────────────────────────────
 function mostRecentStatic(arr) {
