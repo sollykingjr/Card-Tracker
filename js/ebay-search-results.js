@@ -253,75 +253,88 @@ async function renderList() {
   if (!list) return;
   let html = '';
 
-  // Groups
-  for (const group of srData.groups) {
-    const groupSearches = srData.searches.filter(s => s.groupId === group.id);
-    html += `
-      <div class="sr-group-card" id="srg-${group.id}">
-        <div class="sr-card-header" style="cursor:pointer" onclick="document.getElementById('sr-group-searches-${group.id}').style.display = document.getElementById('sr-group-searches-${group.id}').style.display === 'none' ? 'block' : 'none'">
-          <div class="sr-group-label">${group.label} <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span></div>
-          <div class="sr-header-right">
-            <span class="sr-schedule-badge">${group.schedule || 'hourly'}</span>
-            <div class="sr-menu-wrap">
-              <button class="sr-menu-btn" data-id="${group.id}" data-type="group">···</button>
-              <div class="sr-menu-dropdown" id="srm-${group.id}" style="display:none">
-                <button class="sr-menu-item sr-menu-edit-group" data-id="${group.id}">Edit</button>
-                <button class="sr-menu-item sr-menu-add-search-to-group" data-id="${group.id}">Add Search</button>
-                <button class="sr-menu-item sr-menu-delete sr-menu-delete-group" data-id="${group.id}">Delete Group</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
-          ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
-            <div class="sr-search-row">
-              <div class="sr-search-row-label">🔍 ${s.label}</div>
+  const standalone = srData.searches.filter(s => !s.groupId);
+  const topItems = [
+    ...srData.groups.map(g => ({ type: 'group', obj: g })),
+    ...standalone.map(s => ({ type: 'search', obj: s }))
+  ];
+  topItems.sort((a, b) => (a.obj.order ?? 0) - (b.obj.order ?? 0));
+
+  topItems.forEach((entry, idx) => {
+    const moveHtml = `
+      <button class="sr-menu-item sr-menu-move-up" data-toptype="${entry.type}" data-id="${entry.obj.id}" ${idx === 0 ? 'disabled' : ''}>Move Up</button>
+      <button class="sr-menu-item sr-menu-move-down" data-toptype="${entry.type}" data-id="${entry.obj.id}" ${idx === topItems.length - 1 ? 'disabled' : ''}>Move Down</button>
+    `;
+
+    if (entry.type === 'group') {
+      const group = entry.obj;
+      const groupSearches = srData.searches.filter(s => s.groupId === group.id);
+      html += `
+        <div class="sr-group-card" id="srg-${group.id}">
+          <div class="sr-card-header" style="cursor:pointer" onclick="document.getElementById('sr-group-searches-${group.id}').style.display = document.getElementById('sr-group-searches-${group.id}').style.display === 'none' ? 'block' : 'none'">
+            <div class="sr-group-label">${group.label} <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span></div>
+            <div class="sr-header-right">
+              <span class="sr-schedule-badge">${group.schedule || 'hourly'}</span>
               <div class="sr-menu-wrap">
-                <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
-                <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
-                  <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
-                  <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
-                  <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
+                <button class="sr-menu-btn" data-id="${group.id}" data-type="group">···</button>
+                <div class="sr-menu-dropdown" id="srm-${group.id}" style="display:none">
+                  <button class="sr-menu-item sr-menu-edit-group" data-id="${group.id}">Edit</button>
+                  <button class="sr-menu-item sr-menu-add-search-to-group" data-id="${group.id}">Add Search</button>
+                  ${moveHtml}
+                  <button class="sr-menu-item sr-menu-delete sr-menu-delete-group" data-id="${group.id}">Delete Group</button>
                 </div>
               </div>
             </div>
-          `).join('')}
-        </div>
-        <div class="sr-card-links">
-          <button class="sr-run-btn" data-digestkey="${group.digestKey}" data-label="${group.label}">▶ Run</button>
-          <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false)">Today →</button>
-          <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', true)">7-Day →</button>
-        </div>
-      </div>
-    `;
-  }
-
-  // Standalone searches
-  const standalone = srData.searches.filter(s => !s.groupId);
-  for (const s of standalone) {
-    html += `
-      <div class="sr-card">
-        <div class="sr-card-header">
-          <div class="sr-card-label">${s.label} <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span></div>
-          <div class="sr-menu-wrap">
-            <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
-            <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
-              <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
-              <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
-              <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
-            </div>
+          </div>
+          <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
+            ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
+              <div class="sr-search-row">
+                <div class="sr-search-row-label">🔍 ${s.label}</div>
+                <div class="sr-menu-wrap">
+                  <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
+                  <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
+                    <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
+                    <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
+                    <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="sr-card-links">
+            <button class="sr-run-btn" data-digestkey="${group.digestKey}" data-label="${group.label}">▶ Run</button>
+            <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false)">Today →</button>
+            <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', true)">7-Day →</button>
           </div>
         </div>
-        <div class="sr-card-query">🔍 ${s.query || ''}</div>
-        <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
-        <div class="sr-card-links">
-          <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
-          <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
-          <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
+      `;
+    } else {
+      const s = entry.obj;
+      html += `
+        <div class="sr-card">
+          <div class="sr-card-header">
+            <div class="sr-card-label">${s.label} <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span></div>
+            <div class="sr-menu-wrap">
+              <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
+              <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
+                <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
+                <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
+                ${moveHtml}
+                <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
+              </div>
+            </div>
+          </div>
+          <div class="sr-card-query">🔍 ${s.query || ''}</div>
+          <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
+          <div class="sr-card-links">
+            <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
+            <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
+            <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
+          </div>
         </div>
-      </div>
-    `;
-  }
+      `;
+    }
+  });
 
   if (srData.groups.length === 0 && standalone.length === 0) {
     html = '<div class="sr-empty">No searches yet. Add a group or standalone search above.</div>';
@@ -359,6 +372,22 @@ async function renderList() {
       }
     } catch(e) {}
   }));
+}
+
+function moveTopLevel(type, id, direction) {
+  const items = [
+    ...srData.groups.map(g => ({ type: 'group', obj: g })),
+    ...srData.searches.filter(s => !s.groupId).map(s => ({ type: 'search', obj: s }))
+  ];
+  items.sort((a, b) => (a.obj.order ?? 0) - (b.obj.order ?? 0));
+  items.forEach((it, i) => { it.obj.order = i; });
+  const idx = items.findIndex(it => it.type === type && it.obj.id === id);
+  if (idx === -1) return;
+  const swapIdx = idx + direction;
+  if (swapIdx < 0 || swapIdx >= items.length) return;
+  const tmp = items[idx].obj.order;
+  items[idx].obj.order = items[swapIdx].obj.order;
+  items[swapIdx].obj.order = tmp;
 }
 
 function wireListEvents() {
@@ -436,6 +465,28 @@ function wireListEvents() {
       e.stopPropagation();
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       duplicateSearch(btn.dataset.id);
+    };
+  });
+
+// Move up/down (top-level groups + standalone searches only)
+  document.querySelectorAll('.sr-menu-move-up').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      moveTopLevel(btn.dataset.toptype, btn.dataset.id, -1);
+      await saveData();
+      renderList();
+    };
+  });
+  document.querySelectorAll('.sr-menu-move-down').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      moveTopLevel(btn.dataset.toptype, btn.dataset.id, 1);
+      await saveData();
+      renderList();
     };
   });
 
