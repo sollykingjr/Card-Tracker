@@ -234,11 +234,24 @@ async function loadAll() {
     }));
 
     cards = cR.filter(r=>r[7]).map(r=>({
+      itemId:cl(r[0]),
+      sport:cl(r[1]),
+      year:cl(r[2]),
+      set:cl(r[3]),
+      variation:cl(r[4]),
+      version:cl(r[5]),
+      cardNo:cl(r[6]),
       player:(cl(r[7])||'').toLowerCase(),
-      fullCard:cl(r[22])||[cl(r[2]),cl(r[3]),cl(r[4]),cl(r[7])].filter(Boolean).join(' '),
+      playerDisplay:cl(r[7])||'',
+      serialNo:cl(r[8]),
+      qtyManufactured:cl(r[9]),
       purchasePrice:cl(r[10]),salePrice:cl(r[11]),saleFees:cl(r[12]),
-      netProfit:cl(r[13]),datePurchased:cl(r[15]),transactionDate:cl(r[16]),
-      serialNo:cl(r[8]),daysOwned:cl(r[20])
+      netProfit:cl(r[13]),profitPct:cl(r[14]),
+      datePurchased:cl(r[15]),transactionDate:cl(r[16]),
+      purchasedFrom:cl(r[17]),purchasedBy:cl(r[18]),
+      daysOwned:cl(r[19]),
+      grade:cl(r[20]),
+      fullCard:cl(r[21])||[cl(r[2]),cl(r[3]),cl(r[4]),cl(r[7])].filter(Boolean).join(' ')
     }));
 
 buyScores = bsR.filter(r=>r[3]).map(r=>({
