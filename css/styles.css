@@ -791,6 +791,7 @@ html, body {
   #prospects-section,
   #sb-root,
   #cardtracker-root,
+  #home-root,
   .meta,
   .list {
     margin-left: var(--nav-w);
