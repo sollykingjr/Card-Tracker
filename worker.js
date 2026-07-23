@@ -561,6 +561,7 @@ async function checkPlayerSearches(env) {
       }
       if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
       if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (search.usOnly) filters.push('itemLocationCountry:US');
       if (search.minPrice || search.maxPrice) {
         filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
         filters.push('priceCurrency:USD');
@@ -662,6 +663,7 @@ async function checkPlayerSearches(env) {
     }
     if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
     if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+    if (search.usOnly) filters.push('itemLocationCountry:US');
     if (search.minPrice || search.maxPrice) {
       const min = search.minPrice || '0';
       const max = search.maxPrice || '';
@@ -796,6 +798,7 @@ async function checkNightlySearches(env) {
       }
       if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
       if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (search.usOnly) filters.push('itemLocationCountry:US');
       if (search.minPrice || search.maxPrice) {
         filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
         filters.push('priceCurrency:USD');
@@ -884,6 +887,7 @@ async function checkNightlySearches(env) {
     }
     if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
     if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+    if (search.usOnly) filters.push('itemLocationCountry:US');
     if (search.minPrice || search.maxPrice) {
       filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
       filters.push('priceCurrency:USD');
@@ -1243,6 +1247,7 @@ async function handleRunSearch(request, env, cors) {
       }
       if (s.condition === 'Graded') filters.push('conditionIds:{2750}');
       if (s.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+      if (s.usOnly) filters.push('itemLocationCountry:US');
       if (s.minPrice || s.maxPrice) {
         filters.push(`price:[${s.minPrice || '0'}..${s.maxPrice || ''}]`);
         filters.push('priceCurrency:USD');
