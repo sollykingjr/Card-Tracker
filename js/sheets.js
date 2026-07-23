@@ -1,5 +1,5 @@
 // ── State ─────────────────────────────────────────────────────────────────────
-let players=[], top200=[], top100=[], origTop200=[], origTop100=[], hotsheet=[], cards=[], buyScores=[];
+let players=[], top200=[], top100=[], origTop200=[], origTop100=[], hotsheet=[], cards=[], buyScores=[], parallelMultipliers=[];
 
 // Global cache — built once after load, cleared on refresh
 let CACHE = null;
@@ -182,7 +182,7 @@ async function loadAll() {
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
-    const [pR,h2,p1,oh2,op1,hsR,cR,bsR] = await Promise.all([
+    const [pR,h2,p1,oh2,op1,hsR,cR,bsR,pmR] = await Promise.all([
       fetchRange("'Players All'!A2:P2000"),
       fetchRange("'Top 200 Hitters Updated'!A2:I2000"),
       fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
@@ -192,6 +192,7 @@ async function loadAll() {
       fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W2000")}?key=${KEY}`)
         .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
     fetchRange("'Buy Score'!A2:J10000"),
+    fetchRange("'Parallel Multiplier'!A2:G500"),
     ]);
 
     players = pR.filter(r=>r[3]).map(r=>({
@@ -236,6 +237,11 @@ buyScores = bsR.filter(r=>r[3]).map(r=>({
       date:cl(r[0]), pos:cl(r[1]), rank:cl(r[2]), name:cl(r[3])||'',
       team:cl(r[4])||'', age:cl(r[5]), price:cl(r[6]),
       score:cl(r[7]), notes:cl(r[8]), expectedValue:cl(r[9])
+    }));
+
+    parallelMultipliers = pmR.filter(r=>r[0]).map(r=>({
+      parallel:cl(r[0])||'', printRun:cl(r[1]), low:cl(r[2]), high:cl(r[3]),
+      multiplier:cl(r[4]), totalSales:cl(r[5]), confidence:cl(r[6])
     }));
     
     buildCache();
