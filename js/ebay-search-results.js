@@ -839,17 +839,17 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
   list.innerHTML = items.map(item => {
     const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const endDate = item.endDate ? new Date(item.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+    const evHtml = buildListingExpectedValue(item.title);
     return `
       <div class="sr-listing-card">
         ${item.image ? `<img class="sr-listing-img" src="${item.image}" alt="${item.title}" loading="lazy">` : ''}
         <div class="sr-listing-title">${item.title}</div>
         <div class="sr-listing-meta">${item.type} · Listed ${date}${endDate ? ` · Ends ${endDate}` : ''}</div>
         <div class="sr-listing-bottom">
-          <div class="sr-listing-price">$${item.price}</div>
+          <div class="sr-listing-price">$${item.price}${evHtml}</div>
           <a href="${item.url}" target="_blank" class="sr-listing-link">View on eBay →</a>
           ${item.type === 'Auction' ? `<button class="sr-listing-snipe" onclick="openSnipeModal('${item.url.match(/itm\/(\d+)/)?.[1]}')">🎯 Snipe</button>` : ''}
         </div>
       </div>
     `;
   }).join('');
-}
