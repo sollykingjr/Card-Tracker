@@ -280,6 +280,7 @@ async function renderList() {
                 <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
                 <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
                   <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
+                  <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
                   <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
                 </div>
               </div>
@@ -306,6 +307,7 @@ async function renderList() {
             <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
             <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
               <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
+              <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
               <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
             </div>
           </div>
@@ -417,7 +419,7 @@ function wireListEvents() {
     };
   });
 
-  // Edit search
+// Edit search
   document.querySelectorAll('.sr-menu-edit-search').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -425,6 +427,15 @@ function wireListEvents() {
       if (!search) return;
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       openSearchForm(search);
+    };
+  });
+
+  // Duplicate search
+  document.querySelectorAll('.sr-menu-duplicate-search').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      duplicateSearch(btn.dataset.id);
     };
   });
 
@@ -522,6 +533,15 @@ async function saveGroup() {
 }
 
 // ── Search Form ───────────────────────────────────────────────────────────────
+function duplicateSearch(id) {
+  const search = srData.searches.find(s => s.id === id);
+  if (!search) return;
+  openSearchForm(search);
+  document.getElementById('sr-form-title').textContent = 'Duplicate Search';
+  document.getElementById('sr-label').value = `${search.label} (copy)`;
+  document.getElementById('sr-save-btn').onclick = saveSearch;
+}
+
 function openSearchForm(search, presetGroupId) {
   const wrap = document.getElementById('sr-form-wrap');
   wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;';
