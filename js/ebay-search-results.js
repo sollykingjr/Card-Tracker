@@ -156,6 +156,13 @@ async function initSearchResults() {
               <span class="sr-toggle-slider"></span>
             </label>
           </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Show on Home Page</div>
+            <label class="sr-toggle">
+              <input type="checkbox" id="sr-show-on-home">
+              <span class="sr-toggle-slider"></span>
+            </label>
+          </div>
           <div id="sr-keywords-wrap" style="display:none">
             <input class="sr-input" id="sr-keywords" placeholder="Notification keywords, comma separated (e.g. 2005,2006,psa)">
           </div>
@@ -218,8 +225,9 @@ async function initSearchResults() {
 
   if (window._pendingDigest) {
     const key = window._pendingDigest;
-    const label = key.replace('_digest', '').replace(/_/g, ' ').trim();
+    const label = window._pendingDigestLabel || key.replace('_digest', '').replace(/_/g, ' ').trim();
     window._pendingDigest = null;
+    window._pendingDigestLabel = null;
     showDigest(key, label, false);
   }
 }
@@ -641,6 +649,7 @@ function openSearchForm(search, presetGroupId) {
     document.getElementById('sr-include-keywords').value = search.includeKeywords || '';
     document.getElementById('sr-exclude-keywords').value = search.excludeKeywords || '';
     document.getElementById('sr-daily-digest').checked = search.dailyDigest || false;
+    document.getElementById('sr-show-on-home').checked = search.showOnHome || false;
     sel.value = search.groupId || '';
     setChip('sr-seller-mode-chips', search.sellerMode || 'exclude');
     setChip('sr-sport-chips', search.sport || '');
@@ -672,6 +681,7 @@ function openSearchForm(search, presetGroupId) {
       search.includeLogic = getChipVal('sr-include-logic') || 'OR';
       search.excludeKeywords = document.getElementById('sr-exclude-keywords').value || '';
       search.dailyDigest = document.getElementById('sr-daily-digest').checked;
+      search.showOnHome = document.getElementById('sr-show-on-home').checked;
       await saveData();
       closeSearchForm();
       renderList();
@@ -715,6 +725,7 @@ function clearSearchForm() {
   document.getElementById('sr-include-keywords').value = '';
   document.getElementById('sr-exclude-keywords').value = '';
   document.getElementById('sr-daily-digest').checked = false;
+  document.getElementById('sr-show-on-home').checked = false;
   document.getElementById('sr-group-select').value = '';
   document.querySelectorAll('#sr-seller-mode-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-sport-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
@@ -748,7 +759,8 @@ async function saveSearch() {
     listingType: getChipVal('sr-type-chips') || 'BOTH',
     schedule: groupId ? null : (getChipVal('sr-schedule-chips') || 'hourly'),
     notify: groupId ? null : document.getElementById('sr-notify').checked,
-    dailyDigest: groupId ? null : document.getElementById('sr-daily-digest').checked,
+   dailyDigest: groupId ? null : document.getElementById('sr-daily-digest').checked,
+    showOnHome: document.getElementById('sr-show-on-home').checked,
     priorityKeywords: keywords ? keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean) : [],
     minPrice: document.getElementById('sr-min-price').value || '',
     maxPrice: document.getElementById('sr-max-price').value || '',
