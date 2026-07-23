@@ -356,12 +356,18 @@ function showCardsSubview(type, name) {
         if(closest.price){ const pct=(currentPrice-closest.price)/closest.price*100;
           pctHtml=`<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`; }
       }
+      const mult = getParallelMultiplier(c.fullCard);
+      let evHtml = '';
+      if(mult!==null && currentPrice>0){
+        evHtml=`<div class="ct-stat"><div class="ct-l">Expected Value</div><div class="ct-v">${fmtMoney(currentPrice*mult)}</div></div>`;
+      }
       return `<div class="ct-entry owned">
         <div class="ct-name">${c.fullCard||'—'}</div>
         <div class="ct-row">
           <div class="ct-stat"><div class="ct-l">Purchased</div><div class="ct-v">${fmtShortDate(c.datePurchased||c.transactionDate)}</div></div>
           <div class="ct-stat"><div class="ct-l">Cost</div><div class="ct-v">${fmtMoney(c.purchasePrice)}</div></div>
           ${pctHtml}
+          ${evHtml}
         </div>
         ${c.serialNo?`<div class="ct-serial">/${c.serialNo}</div>`:''}
       </div>`;
