@@ -477,36 +477,42 @@ ${modalCards(p.name)}
 // ── Price performance ─────────────────────────────────────────────────────────
 function buildPricePerformance(playerList) {
   const withPct = playerList.map(entry=>{
-    const d = getResolved(entry.name);
-    const currentPrice = safeNum(d.price);
-    if(!entry.ownedCards.length || currentPrice===0) return null;
-
-    // Find oldest owned card date
-    const oldest = entry.ownedCards.reduce((a,b)=>
-      parseDate(a.datePurchased||a.transactionDate)<parseDate(b.datePurchased||b.transactionDate)?a:b);
-    const oldestTs = parseDate(oldest.datePurchased||oldest.transactionDate);
-    if(!oldestTs) return null;
-
-    // Build price history from sheet data for this player
+    if(!entry.ownedCards.length) return null;
     const nm = entry.name;
-    const priceHistory = [];
-    [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{
-      const ts=parseDate(e.date); const p=safeNum(e.price);
-      if(ts&&p) priceHistory.push({ts,price:p});
+    const currentPrice = safeNum(getResolved(nm).price);
+
+    let totalCost = 0, totalEV = 0, hasEV = false;
+    entry.ownedCards.forEach(c=>{
+      const cost = safeNum(c.purchasePrice);
+      if(cost<=0) return;
+      const mult = getParallelMultiplier(c.fullCard);
+      let ev = null;
+      if(mult!==null){
+        if(currentPrice>0) ev = currentPrice*mult;
+      } else {
+        const cardTs = parseDate(c.datePurchased||c.transactionDate);
+        const cardPriceHistory = [];
+        [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{
+          const ts=parseDate(e.date); const p=safeNum(e.price);
+          if(ts&&p) cardPriceHistory.push({ts,price:p});
+        });
+        hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{
+          const ts=parseDate(h.date); const p=safeNum(h.auto);
+          if(ts&&p) cardPriceHistory.push({ts,price:p});
+        });
+        if(currentPrice>0 && cardTs && cardPriceHistory.length){
+          const closest=cardPriceHistory.reduce((a,b)=>Math.abs(b.ts-cardTs)<Math.abs(a.ts-cardTs)?b:a);
+          if(closest.price){
+            const pct=(currentPrice-closest.price)/closest.price*100;
+            ev = cost*(1+pct/100);
+          }
+        }
+      }
+      if(ev!==null){ totalCost+=cost; totalEV+=ev; hasEV=true; }
     });
-    hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{
-      const ts=parseDate(h.date); const p=safeNum(h.auto);
-      if(ts&&p) priceHistory.push({ts,price:p});
-    });
 
-    if(!priceHistory.length) return null;
-
-    // Find closest price to oldest purchase date
-    const closest = priceHistory.reduce((a,b)=>
-      Math.abs(b.ts-oldestTs)<Math.abs(a.ts-oldestTs)?b:a);
-    if(!closest.price) return null;
-
-    const pct = (currentPrice-closest.price)/closest.price*100;
+    if(!hasEV || totalCost<=0) return null;
+    const pct = (totalEV-totalCost)/totalCost*100;
     const dispName = players.find(p=>normName(p.name)===nm)?.name||nm.replace(/\b\w/g,l=>l.toUpperCase());
     return {name:dispName, normName:nm, pct};
   }).filter(Boolean).sort((a,b)=>b.pct-a.pct);
