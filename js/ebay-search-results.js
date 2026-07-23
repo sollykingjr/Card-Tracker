@@ -64,8 +64,8 @@ async function initSearchResults() {
         </div>
       </div>
       <div id="sr-list"></div>
-      <div id="sr-form-wrap" style="display:none">
-        <div class="sr-form">
+      <div id="sr-form-wrap" style="display:none" onclick="if(event.target===this) closeSearchForm()">
+        <div class="sr-form" style="max-width:480px;width:100%;max-height:90vh;overflow-y:auto;">
           <div class="sr-form-title" id="sr-form-title">New Search Alert</div>
           <input class="sr-input" id="sr-label" placeholder="Label (e.g. Scott Brosius)">
           <div class="sr-form-row">
@@ -173,8 +173,8 @@ async function initSearchResults() {
           </div>
         </div>
       </div>
-      <div id="sr-group-form-wrap" style="display:none">
-        <div class="sr-form">
+      <div id="sr-group-form-wrap" style="display:none" onclick="if(event.target===this) closeGroupForm()">
+        <div class="sr-form" style="max-width:480px;width:100%;max-height:90vh;overflow-y:auto;">
           <div class="sr-form-title" id="sr-group-form-title">New Group</div>
           <input class="sr-input" id="sr-group-label" placeholder="Group name (e.g. DC Sports Baseball)">
           <div class="sr-form-row">
@@ -471,7 +471,8 @@ function wireListEvents() {
 
 // ── Group Form ────────────────────────────────────────────────────────────────
 function openGroupForm(group) {
-  document.getElementById('sr-group-form-wrap').style.display = 'block';
+  const wrap = document.getElementById('sr-group-form-wrap');
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;';
   document.getElementById('sr-form-wrap').style.display = 'none';
   document.getElementById('sr-group-form-title').textContent = group ? 'Edit Group' : 'New Group';
   wireChips('sr-group-schedule-chips');
@@ -499,7 +500,7 @@ function openGroupForm(group) {
 }
 
 function closeGroupForm() {
-  document.getElementById('sr-group-form-wrap').style.display = 'none';
+  document.getElementById('sr-group-form-wrap').style.cssText = 'display:none';
   document.getElementById('sr-group-label').value = '';
   document.getElementById('sr-group-save-btn').onclick = saveGroup;
 }
@@ -522,7 +523,8 @@ async function saveGroup() {
 
 // ── Search Form ───────────────────────────────────────────────────────────────
 function openSearchForm(search, presetGroupId) {
-  document.getElementById('sr-form-wrap').style.display = 'block';
+  const wrap = document.getElementById('sr-form-wrap');
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;';
   document.getElementById('sr-group-form-wrap').style.display = 'none';
   document.getElementById('sr-form-title').textContent = search ? 'Edit Search' : 'New Search Alert';
   wireForm();
@@ -624,7 +626,7 @@ function updateScheduleNotifyVisibility(groupId) {
 }
 
 function closeSearchForm() {
-  document.getElementById('sr-form-wrap').style.display = 'none';
+  document.getElementById('sr-form-wrap').style.cssText = 'display:none';
   clearSearchForm();
   document.getElementById('sr-save-btn').onclick = saveSearch;
 }
