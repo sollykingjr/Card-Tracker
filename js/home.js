@@ -103,7 +103,7 @@ function homeRenderBody() {
 
   body.innerHTML = `
     <div class="srow" style="margin:16px">
-      <div class="srow-t">Closing soon</div>
+      <div class="srow-t">Ending Soon</div>
       <div id="home-closing-soon"><div style="font-size:12px;color:var(--tx3);padding:4px 0">Loading...</div></div>
     </div>
     <div class="srow" style="margin:16px">
@@ -158,13 +158,19 @@ async function homeLoadClosingSoon() {
       const rawTitle = item.savedTitle || item.title || '';
       const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
       const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
+      const player = resolveItemPlayer(safeTitle);
+      const playerPrice = player ? safeNum(getResolved(player.name).price) : 0;
+      const playerPriceHtml = playerPrice > 0 ? ` · Player: $${playerPrice.toFixed(2)}` : '';
       return `
         <div class="recent-row" style="align-items:flex-start">
           <div class="recent-info">
             <div class="rc-name">${safeTitle.slice(0,70)}${safeTitle.length>70?'…':''}</div>
-            <div class="rc-date"><span class="wl-countdown ${cls}" data-end="${item.endTime}">${text}</span>${price ? ' · ' + price : ''}</div>
+            <div class="rc-date"><span class="wl-countdown ${cls}" data-end="${item.endTime}">${text}</span>${price ? ' · ' + price : ''}${playerPriceHtml}</div>
           </div>
-          <a href="${ebayUrl}" target="_blank" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;text-decoration:none">View</a>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+            <a href="${ebayUrl}" target="_blank" style="padding:6px 10px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;text-decoration:none;text-align:center">View</a>
+            <button class="sr-listing-snipe" onclick="openSnipeModal('${item.itemId}')" style="padding:6px 10px;font-size:11px">Snipe</button>
+          </div>
         </div>
       `;
     }).join('');
