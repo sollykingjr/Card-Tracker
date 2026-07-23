@@ -19,7 +19,7 @@ function renderCardTracker() {
   `;
 
   if (ctView === 'list') {
-    root.innerHTML = navHtml + renderCardListView();
+    root.innerHTML = `<div class="sr-wrap">${navHtml}${renderCardListView()}</div>`;
     return;
   }
 
@@ -56,7 +56,7 @@ function renderCardTracker() {
     </div>
   `;
 
-  root.innerHTML = navHtml + statHtml + recentHtml;
+  root.innerHTML = `<div class="sr-wrap">${navHtml}${statHtml}${recentHtml}</div>`;
 }
 
 function renderCardListView() {
