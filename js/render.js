@@ -350,16 +350,23 @@ function showCardsSubview(type, name) {
         const ts=parseDate(b.date); const pr=safeNum(b.price);
         if(ts&&pr) cardPriceHistory.push({ts,price:pr});
       });
+      const mult = getParallelMultiplier(c.fullCard);
       let pctHtml='';
-      if(currentPrice>0 && cardTs && cardPriceHistory.length){
+      let evHtml='';
+      if(mult!==null){
+        const cost = safeNum(c.purchasePrice);
+        if(currentPrice>0){
+          const ev = currentPrice*mult;
+          evHtml=`<div class="ct-stat"><div class="ct-l">Expected Value</div><div class="ct-v">${fmtMoney(ev)}</div></div>`;
+          if(cost>0){
+            const pct=(ev-cost)/cost*100;
+            pctHtml=`<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`;
+          }
+        }
+      } else if(currentPrice>0 && cardTs && cardPriceHistory.length){
         const closest=cardPriceHistory.reduce((a,b)=>Math.abs(b.ts-cardTs)<Math.abs(a.ts-cardTs)?b:a);
         if(closest.price){ const pct=(currentPrice-closest.price)/closest.price*100;
           pctHtml=`<div class="ct-stat"><div class="ct-l">Since buy</div><div class="ct-v"><span class="${pct>=0?'up':'dn'}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></div></div>`; }
-      }
-      const mult = getParallelMultiplier(c.fullCard);
-      let evHtml = '';
-      if(mult!==null && currentPrice>0){
-        evHtml=`<div class="ct-stat"><div class="ct-l">Expected Value</div><div class="ct-v">${fmtMoney(currentPrice*mult)}</div></div>`;
       }
       return `<div class="ct-entry owned">
         <div class="ct-name">${c.fullCard||'—'}</div>
