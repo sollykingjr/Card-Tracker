@@ -44,4 +44,21 @@ function renderCardTracker() {
 
   const recentHtml = `
     <div class="srow" style="margin:16px">
-      <div class="srow-t">Recent
+      <div class="srow-t">Recent activity</div>
+      ${recent.length ? recent.map(c => {
+        const isSold = !!c.salePrice;
+        const date = fmtShortDate(c.transactionDate || c.datePurchased);
+        return `<div class="recent-row">
+          <div class="recent-info"><div class="rc-name">${c.fullCard || '—'}</div><div class="rc-date">${date}${isSold ? ' · Sold' : ' · Purchased'}</div></div>
+          <div class="${isSold ? 'recent-sale' : 'recent-price'}">${isSold ? `$${safeNum(c.salePrice).toFixed(2)}` : `$${safeNum(c.purchasePrice).toFixed(2)}`}</div>
+        </div>`;
+      }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No activity yet</div>'}
+    </div>
+  `;
+
+  root.innerHTML = navHtml + statHtml + recentHtml;
+}
+
+function renderCardListView() {
+  return `<div style="padding:16px;color:var(--tx3);font-size:13px">Card List view coming next.</div>`;
+}
