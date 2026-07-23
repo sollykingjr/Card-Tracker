@@ -3,6 +3,44 @@ const WORKER = 'https://card-app.maxcsolomon.workers.dev';
 
 let srData = { groups: [], searches: [] };
 
+// ── Buy Score auto-managed searches ────────────────────────────────────────────
+const BUY_SCORE_THRESHOLD = 5;
+const BUY_SCORE_SEARCH_LABELS = ['Prospects Buy Score 5 - Auction', 'Prospects Buy Score 5 - BIN'];
+
+function getBuyScoreQualifiers() {
+  const seen = new Set();
+  const names = [];
+  players.forEach(p => {
+    const nm = normName(p.name);
+    if (seen.has(nm)) return;
+    seen.add(nm);
+    const buy = parseFloat(getResolved(p.name).buy || 0);
+    if (buy >= BUY_SCORE_THRESHOLD) names.push(p.name);
+  });
+  return names;
+}
+
+function buildBuyScoreQuery(names) {
+  if (!names.length) return '';
+  return '(' + names.join(', ') + ')';
+}
+
+async function syncBuyScoreSearches() {
+  const names = getBuyScoreQualifiers();
+  if (names.length > 30) console.warn(`Buy Score sync: ${names.length} qualifying players — combined eBay query may be too long.`);
+  const query = buildBuyScoreQuery(names);
+  if (!query) return;
+  let changed = false;
+  BUY_SCORE_SEARCH_LABELS.forEach(label => {
+    const search = srData.searches.find(s => s.label === label);
+    if (search && search.query !== query) {
+      search.query = query;
+      changed = true;
+    }
+  });
+  if (changed) await saveData();
+}
+
 async function initSearchResults() {
   const root = document.getElementById('sr-root');
   root.innerHTML = `
@@ -175,6 +213,7 @@ async function loadData() {
     srData = await res.json();
     if (!srData.groups) srData.groups = [];
     if (!srData.searches) srData.searches = [];
+    await syncBuyScoreSearches();
     renderList();
   } catch(e) {
     document.getElementById('sr-list').innerHTML = '<div class="sr-empty">Failed to load.</div>';
