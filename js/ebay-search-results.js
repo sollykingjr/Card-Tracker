@@ -312,7 +312,7 @@ async function renderList() {
       const s = entry.obj;
       html += `
         <div class="sr-card">
-          <div class="sr-card-header">
+          <div class="sr-card-header" style="cursor:pointer" onclick="document.getElementById('sr-query-${s.id}').style.display = document.getElementById('sr-query-${s.id}').style.display === 'none' ? 'block' : 'none'">
             <div class="sr-card-label">${s.label} <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span></div>
             <div class="sr-menu-wrap">
               <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
@@ -324,7 +324,7 @@ async function renderList() {
               </div>
             </div>
           </div>
-          <div class="sr-card-query">🔍 ${s.query || ''}</div>
+          <div class="sr-card-query" id="sr-query-${s.id}" style="display:none">🔍 ${s.query || ''}</div>
           <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
           <div class="sr-card-links">
             <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
