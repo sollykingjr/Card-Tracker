@@ -350,7 +350,7 @@ function showCardsSubview(type, name) {
         const ts=parseDate(b.date); const pr=safeNum(b.price);
         if(ts&&pr) cardPriceHistory.push({ts,price:pr});
       });
-      const mult = getParallelMultiplier(c.fullCard);
+      const mult = getParallelMultiplier(c.fullCard, c.player);
       let pctHtml='';
       let evHtml='';
       if(mult!==null){
@@ -485,7 +485,7 @@ function buildPricePerformance(playerList) {
     entry.ownedCards.forEach(c=>{
       const cost = safeNum(c.purchasePrice);
       if(cost<=0) return;
-      const mult = getParallelMultiplier(c.fullCard);
+      const mult = getParallelMultiplier(c.fullCard, c.player);
       let ev = null;
       if(mult!==null){
         if(currentPrice>0) ev = currentPrice*mult;
