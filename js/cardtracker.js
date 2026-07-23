@@ -6,8 +6,9 @@ function renderCardTracker() {
 
   const owned = cards.filter(c => !c.salePrice);
   const sold  = cards.filter(c =>  c.salePrice);
-  const totalInvested     = owned.reduce((s,c) => s + safeNum(c.purchasePrice), 0);
-  const totalRecovered    = sold.reduce((s,c) => s + safeNum(c.salePrice), 0);
+  const totalPurchasesCount = cards.length;
+  const totalInvested     = cards.reduce((s,c) => s + safeNum(c.purchasePrice), 0);
+  const totalRecovered    = sold.reduce((s,c) => s + safeNum(c.salePrice) - safeNum(c.saleFees), 0);
   const realizedNetProfit = sold.reduce((s,c) => s + safeNum(c.netProfit, true), 0);
   const netCashPosition   = totalInvested - realizedNetProfit;
 
@@ -32,12 +33,11 @@ function renderCardTracker() {
     <div class="srow" style="margin:16px">
       <div class="srow-t">Overview</div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;text-align:center;margin-top:8px">
-        <div><div class="sc-l">Cards owned</div><div class="sc-v">${owned.length}</div></div>
-        <div><div class="sc-l">Total invested</div><div class="sc-v">$${totalInvested.toFixed(0)}</div></div>
-        <div><div class="sc-l">Cards sold</div><div class="sc-v">${sold.length}</div></div>
-        <div><div class="sc-l">Total recovered</div><div class="sc-v">$${totalRecovered.toFixed(0)}</div></div>
-        <div><div class="sc-l">Net cash position</div><div class="sc-v"><span class="${netCashPosition>=0?'up':'dn'}">${netCashPosition>=0?'+':''}$${netCashPosition.toFixed(0)}</span></div></div>
-        <div><div class="sc-l">Realized profit</div><div class="sc-v"><span class="${realizedNetProfit>=0?'up':'dn'}">${realizedNetProfit>=0?'+':''}$${realizedNetProfit.toFixed(2)}</span></div></div>
+        <div><div class="sc-l">Total purchases</div><div class="sc-v">${totalPurchasesCount}</div></div>
+        <div><div class="sc-l">Purchases</div><div class="sc-v">$${totalInvested.toFixed(2)}</div></div>
+        <div><div class="sc-l">Total sales</div><div class="sc-v">${sold.length}</div></div>
+        <div><div class="sc-l">Net sales</div><div class="sc-v">$${totalRecovered.toFixed(2)}</div></div>
+        <div><div class="sc-l">Net profit</div><div class="sc-v"><span class="${realizedNetProfit>=0?'up':'dn'}">${realizedNetProfit>=0?'+':''}$${realizedNetProfit.toFixed(2)}</span></div></div>
       </div>
     </div>
   `;
