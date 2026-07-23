@@ -850,6 +850,7 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
           <a href="${item.url}" target="_blank" class="sr-listing-link">View on eBay →</a>
           ${item.type === 'Auction' ? `<button class="sr-listing-snipe" onclick="openSnipeModal('${item.url.match(/itm\/(\d+)/)?.[1]}')">🎯 Snipe</button>` : ''}
         </div>
-      </div>
+            </div>
     `;
   }).join('');
+}
