@@ -85,15 +85,26 @@ function ctRenderBody() {
     body.innerHTML = `
       <div class="srow" style="margin:16px">
         <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
-        ${matches.length ? matches.map(c => `
-          <div class="recent-row" style="cursor:pointer" onclick="ctOpenCard(${cards.indexOf(c)})">
+        ${matches.length ? matches.map(c => {
+          const pDate = fmtShortDate(c.datePurchased);
+          const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
+          const dateLine = [
+            c.itemId ? 'ID: ' + c.itemId : 'No item ID',
+            pDate !== '—' ? 'Purchased ' + pDate : null,
+            sDate && sDate !== '—' ? 'Sold ' + sDate : null
+          ].filter(Boolean).join(' · ');
+          return `
+          <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
             <div class="recent-info">
               <div class="rc-name">${c.fullCard || '—'}</div>
-              <div class="rc-date">${c.itemId ? 'ID: ' + c.itemId : 'No item ID'}</div>
+              <div class="rc-date">${dateLine}</div>
             </div>
-            <button onclick="event.stopPropagation();ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:8px">Copy ID</button>
-          </div>
-        `).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+              <div class="recent-price">$${safeNum(c.purchasePrice).toFixed(2)}</div>
+              <button onclick="event.stopPropagation();ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="padding:6px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Copy ID</button>
+            </div>
+          </div>`;
+        }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
       </div>
     `;
     return;
