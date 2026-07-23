@@ -20,11 +20,13 @@ function setSection(s) {
   const isWatch = s === 'watchlist';
   const isSB    = s === 'searchbuilder';
   const isSR    = s === 'searchresults';
-  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR) ? 'none' : '';
+  const isHome  = s === 'home';
+  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? 'block' : 'none';
   document.getElementById('sr-root').style.display = isSR ? 'block' : 'none';
-  document.getElementById('list').style.display = (isSB || isSR) ? 'none' : '';
-  document.querySelector('.meta').style.display = (isSB || isSR) ? 'none' : '';
+  document.getElementById('home-root').style.display = isHome ? 'block' : 'none';
+  document.getElementById('list').style.display = (isSB || isSR || isHome) ? 'none' : '';
+  document.querySelector('.meta').style.display = (isSB || isSR || isHome) ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
@@ -42,6 +44,9 @@ function setSection(s) {
   } else if (isSR) {
     document.getElementById('cntlbl').textContent = '';
     initSearchResults();
+  } else if (isHome) {
+    document.getElementById('cntlbl').textContent = '';
+    renderHome();
   } else {
     render();
   }
@@ -97,6 +102,6 @@ if (digestParam) {
   window._pendingDigest = digestParam;
   setSection('searchresults');
 } else {
-  setSection('searchbuilder');
+  setSection('home');
 }
 loadAll();
