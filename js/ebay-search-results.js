@@ -791,15 +791,14 @@ function resolveItemPlayer(title) {
   }
   return best;
 }
-function buildListingExpectedValue(title) {
+function getListingExpectedValue(title) {
   const player = resolveItemPlayer(title);
-  if (!player) return '';
+  if (!player) return null;
   const mult = getParallelMultiplier(title, player.name);
-  if (mult === null) return '';
+  if (mult === null) return null;
   const base = safeNum(getResolved(player.name).price);
-  if (base <= 0) return '';
-  const ev = base * mult;
-  return ` <span class="sr-listing-ev">Exp: ${fmtMoney(ev)}</span>`;
+  if (base <= 0) return null;
+  return base * mult;
 }
 function renderDigestItems(allItems, sortMode, filterText, key, showAll = false) {
   const list = document.getElementById('sr-digest-list');
@@ -839,18 +838,25 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
   list.innerHTML = items.map(item => {
     const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const endDate = item.endDate ? new Date(item.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
-    const evHtml = buildListingExpectedValue(item.title);
+    const ev = getListingExpectedValue(item.title);
+    let priceColor = '#fff';
+    let evHtml = '';
+    if (ev !== null) {
+      const pct = (safeNum(item.price) - ev) / ev * 100;
+      priceColor = pct <= -10 ? '#4ade80' : pct >= 10 ? '#f87171' : '#eab308';
+      evHtml = ` <span class="sr-listing-ev" style="color:#fff">Exp: ${fmtMoney(ev)}</span>`;
+    }
     return `
       <div class="sr-listing-card">
         ${item.image ? `<img class="sr-listing-img" src="${item.image}" alt="${item.title}" loading="lazy">` : ''}
         <div class="sr-listing-title">${item.title}</div>
         <div class="sr-listing-meta">${item.type} · Listed ${date}${endDate ? ` · Ends ${endDate}` : ''}</div>
         <div class="sr-listing-bottom">
-          <div class="sr-listing-price">$${item.price}${evHtml}</div>
+          <div class="sr-listing-price"><span style="color:${priceColor}">$${item.price}</span>${evHtml}</div>
           <a href="${item.url}" target="_blank" class="sr-listing-link">View on eBay →</a>
           ${item.type === 'Auction' ? `<button class="sr-listing-snipe" onclick="openSnipeModal('${item.url.match(/itm\/(\d+)/)?.[1]}')">🎯 Snipe</button>` : ''}
         </div>
-            </div>
+      </div>
     `;
   }).join('');
 }
