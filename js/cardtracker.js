@@ -6,8 +6,9 @@ function renderCardTracker() {
 
   const owned = cards.filter(c => !c.salePrice);
   const sold  = cards.filter(c =>  c.salePrice);
-  const totalPurchasesCount = cards.length;
-  const totalInvested     = cards.reduce((s,c) => s + safeNum(c.purchasePrice), 0);
+  const purchased = cards.filter(c => c.purchasePrice);
+  const totalPurchasesCount = purchased.length;
+  const totalInvested     = purchased.reduce((s,c) => s + safeNum(c.purchasePrice), 0);
   const totalRecovered    = sold.reduce((s,c) => s + safeNum(c.salePrice) - safeNum(c.saleFees), 0);
   const realizedNetProfit = sold.reduce((s,c) => s + safeNum(c.netProfit, true), 0);
   const netCashPosition   = totalInvested - realizedNetProfit;
