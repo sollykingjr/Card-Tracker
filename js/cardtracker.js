@@ -1,8 +1,103 @@
 // ── Card Tracker ──────────────────────────────────────────────────────────────
-let ctView = 'dashboard';
+let ctQuery = '';
+
+function ctMatches(c, q) {
+  const hay = [c.playerDisplay, c.fullCard, c.itemId, c.serialNo, c.sport, c.year, c.set, c.variation, c.version, c.cardNo, c.grade]
+    .filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+function ctCopyId(id, btn) {
+  if (!id) return;
+  navigator.clipboard.writeText(id).then(() => {
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    }
+  }).catch(()=>{});
+}
+
+function ctOpenCard(idx) {
+  const c = cards[idx];
+  if (!c) return;
+  const date = c.transactionDate || c.datePurchased;
+  document.getElementById('mcontent').innerHTML = `
+    <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
+    <div class="msub">${[c.year, c.sport].filter(Boolean).join(' ')}${c.grade ? ' · Graded ' + c.grade : ''}</div>
+    <div class="sgrid">
+      <div class="scard"><div class="slbl">Item ID</div><div class="sval">${c.itemId || '—'}</div></div>
+      <div class="scard"><div class="slbl">Serial No</div><div class="sval">${c.serialNo || '—'}</div></div>
+      <div class="scard"><div class="slbl">Purchase price</div><div class="sval">$${safeNum(c.purchasePrice).toFixed(2)}</div></div>
+      <div class="scard"><div class="slbl">Sale price</div><div class="sval">${c.salePrice ? '$'+safeNum(c.salePrice).toFixed(2) : '—'}</div></div>
+      <div class="scard"><div class="slbl">Net profit</div><div class="sval"><span class="${safeNum(c.netProfit,true)>=0?'up':'dn'}">${safeNum(c.netProfit,true)>=0?'+':''}$${safeNum(c.netProfit,true).toFixed(2)}</span></div></div>
+      <div class="scard"><div class="slbl">Date</div><div class="sval">${fmtShortDate(date)}</div></div>
+    </div>
+    <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="width:100%;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">Copy Item ID</button>
+  `;
+  document.getElementById('mwrap').classList.add('on');
+}
 
 function renderCardTracker() {
   const root = document.getElementById('cardtracker-root');
+
+  root.innerHTML = `
+    <div class="sr-wrap">
+      <div style="padding:16px 16px 0">
+        <div class="si">
+          <input id="ct-search" placeholder="Search name, set, year, item ID..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button id="ct-clear">&times;</button>
+        </div>
+      </div>
+      <div id="ct-body"></div>
+    </div>
+  `;
+
+  const input = document.getElementById('ct-search');
+  const clearBtn = document.getElementById('ct-clear');
+  input.value = ctQuery;
+  clearBtn.classList.toggle('on', ctQuery.length > 0);
+
+  input.addEventListener('input', e => {
+    ctQuery = e.target.value;
+    clearBtn.classList.toggle('on', ctQuery.length > 0);
+    ctRenderBody();
+  });
+  clearBtn.addEventListener('click', () => {
+    ctQuery = '';
+    input.value = '';
+    clearBtn.classList.remove('on');
+    input.focus();
+    ctRenderBody();
+  });
+
+  ctRenderBody();
+}
+
+function ctRenderBody() {
+  const body = document.getElementById('ct-body');
+  if (!body) return;
+
+  const q = ctQuery.trim().toLowerCase();
+
+  if (q) {
+    const matches = cards.filter(c => ctMatches(c, q)).slice(0, 150);
+    body.innerHTML = `
+      <div class="srow" style="margin:16px">
+        <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
+        ${matches.length ? matches.map(c => `
+          <div class="recent-row" style="cursor:pointer" onclick="ctOpenCard(${cards.indexOf(c)})">
+            <div class="recent-info">
+              <div class="rc-name">${c.fullCard || '—'}</div>
+              <div class="rc-date">${c.itemId ? 'ID: ' + c.itemId : 'No item ID'}</div>
+            </div>
+            <button onclick="event.stopPropagation();ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="flex-shrink:0;padding:6px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:8px">Copy ID</button>
+          </div>
+        `).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
+      </div>
+    `;
+    return;
+  }
 
   const sold  = cards.filter(c =>  c.salePrice);
   const purchased = cards.filter(c => c.purchasePrice);
@@ -24,17 +119,6 @@ function renderCardTracker() {
   const recentSold = sold.filter(c => parseDate(c.transactionDate || c.datePurchased) >= flipCutoff);
   const bestFlip  = recentSold.reduce((best,c)  => (!best  || safeNum(c.netProfit,true) > safeNum(best.netProfit,true))  ? c : best,  null);
   const worstFlip = recentSold.reduce((worst,c) => (!worst || safeNum(c.netProfit,true) < safeNum(worst.netProfit,true)) ? c : worst, null);
-  const navHtml = `
-    <div style="display:flex;gap:8px;padding:16px 16px 0">
-      <button onclick="ctView='dashboard';renderCardTracker()" style="flex:1;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:${ctView==='dashboard'?'var(--acc-bg)':'var(--surf)'};color:${ctView==='dashboard'?'var(--acc)':'var(--tx)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Dashboard</button>
-      <button onclick="ctView='list';renderCardTracker()" style="flex:1;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:${ctView==='list'?'var(--acc-bg)':'var(--surf)'};color:${ctView==='list'?'var(--acc)':'var(--tx)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Card List</button>
-    </div>
-  `;
-
-  if (ctView === 'list') {
-    root.innerHTML = `<div class="sr-wrap">${navHtml}${renderCardListView()}</div>`;
-    return;
-  }
 
   const recent = [...cards]
     .filter(c => c.datePurchased || c.transactionDate)
@@ -107,9 +191,5 @@ function renderCardTracker() {
     </div>
   `;
 
-  root.innerHTML = `<div class="sr-wrap">${navHtml}${heroHtml}${purchasesHtml}${salesHtml}${flipHtml}${recentHtml}</div>`;
-}
-
-function renderCardListView() {
-  return `<div style="padding:16px;color:var(--tx3);font-size:13px">Card List view coming next.</div>`;
+  body.innerHTML = `${heroHtml}${purchasesHtml}${salesHtml}${flipHtml}${recentHtml}`;
 }
