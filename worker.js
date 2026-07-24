@@ -1192,15 +1192,23 @@ async function handleScan(request, env, cors) {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
+    const debug = url.searchParams.get('debug');
     const cacheKey = `scan:${itemId}`;
     const cached = await env.CACHE.get(cacheKey);
-    if (cached) return new Response(cached, { headers: { ...cors, 'Content-Type': 'application/json' } });
+    if (cached && !debug) return new Response(cached, { headers: { ...cors, 'Content-Type': 'application/json' } });
 
     const token = await getGoogleAccessToken(env);
     const q = `name contains '${itemId}' and mimeType contains 'image/' and trashed=false`;
     const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=10`;
     const driveRes = await fetch(driveUrl, { headers: { Authorization: `Bearer ${token}` } });
     const driveData = await driveRes.json();
+
+    if (debug) {
+      return new Response(JSON.stringify({ httpStatus: driveRes.status, query: q, driveData }, null, 2), {
+        headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
     const files = driveData.files || [];
 
     const back = files.find(f => /back/i.test(f.name));
