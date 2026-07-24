@@ -1221,6 +1221,9 @@ async function handleScan(request, env, cors) {
   }
 }
 
+// ── [22b] cleanSecret ──────────────────────────────────────────────────────────
+const cleanSecret = s => (s || '').trim().replace(/^"|"$/g, '').replace(/,$/, '').trim();
+
 // ── [23] getGoogleAccessToken ─────────────────────────────────────────────────
 async function getGoogleAccessToken(env) {
   const cached = await env.CACHE.get('google_access_token');
@@ -1229,14 +1232,14 @@ async function getGoogleAccessToken(env) {
   const now = Math.floor(Date.now() / 1000);
   const enc = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
-    iss: env.GOOGLE_SA_EMAIL,
+    iss: cleanSecret(env.GOOGLE_SA_EMAIL),
     scope: 'https://www.googleapis.com/auth/drive.readonly',
     aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600
   })}`;
 
-  const key = await importPrivateKey(env.GOOGLE_SA_KEY);
+  const key = await importPrivateKey(cleanSecret(env.GOOGLE_SA_KEY));
   const signature = await crypto.subtle.sign(
     { name: 'RSASSA-PKCS1-v1_5' },
     key,
