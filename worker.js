@@ -1259,10 +1259,12 @@ async function getGoogleAccessToken(env) {
 
 // ── [24] importPrivateKey ─────────────────────────────────────────────────────
 async function importPrivateKey(pem) {
-  const body = pem.replace(/\\n/g, '\n')
+  let body = pem.trim();
+  if (body.startsWith('"') && body.endsWith('"')) body = body.slice(1, -1);
+  body = body.replace(/\\n/g, '\n')
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s/g, '');
+    .replace(/[^A-Za-z0-9+/=]/g, '');
   const binaryDer = Uint8Array.from(atob(body), c => c.charCodeAt(0));
   return crypto.subtle.importKey(
     'pkcs8',
@@ -1272,7 +1274,6 @@ async function importPrivateKey(pem) {
     ['sign']
   );
 }
-
 // ── [19] handlePlayerDigestJson ───────────────────────────────────────────────
 async function handlePlayerDigestJson(request, env, cors) {
   try {
