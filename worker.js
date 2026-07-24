@@ -52,6 +52,7 @@ export default {
     if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
     if (path === '/mark-seen-urls' && request.method === 'POST') return handleMarkSeenUrls(request, env, cors);
     if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
+    if (path === '/scan' && request.method === 'GET') return handleScan(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1180,6 +1181,96 @@ async function handleSetSnipe(request, env, cors) {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
   }
+}
+
+// ── [22] handleScan — Drive scan lookup by ItemID ────────────────────────────
+async function handleScan(request, env, cors) {
+  try {
+    const url = new URL(request.url);
+    const itemId = url.searchParams.get('id');
+    if (!itemId) return new Response(JSON.stringify({ error: 'missing id' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
+    const cacheKey = `scan:${itemId}`;
+    const cached = await env.CACHE.get(cacheKey);
+    if (cached) return new Response(cached, { headers: { ...cors, 'Content-Type': 'application/json' } });
+
+    const token = await getGoogleAccessToken(env);
+    const q = `name contains '${itemId}' and mimeType contains 'image/' and trashed=false`;
+    const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=10`;
+    const driveRes = await fetch(driveUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const driveData = await driveRes.json();
+    const files = driveData.files || [];
+
+    const back = files.find(f => /back/i.test(f.name));
+    const front = files.find(f => f !== back) || files[0] || null;
+
+    const result = {
+      front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800` } : null,
+      back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800` } : null
+    };
+
+    const body = JSON.stringify(result);
+    await env.CACHE.put(cacheKey, body, { expirationTtl: 604800 });
+    return new Response(body, { headers: { ...cors, 'Content-Type': 'application/json' } });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [23] getGoogleAccessToken ─────────────────────────────────────────────────
+async function getGoogleAccessToken(env) {
+  const cached = await env.CACHE.get('google_access_token');
+  if (cached) return cached;
+
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
+    iss: env.GOOGLE_SA_EMAIL,
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
+  })}`;
+
+  const key = await importPrivateKey(env.GOOGLE_SA_KEY);
+  const signature = await crypto.subtle.sign(
+    { name: 'RSASSA-PKCS1-v1_5' },
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${unsigned}.${sigB64}`
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error('google_auth_failed: ' + JSON.stringify(data));
+
+  await env.CACHE.put('google_access_token', data.access_token, { expirationTtl: 3500 });
+  return data.access_token;
+}
+
+// ── [24] importPrivateKey ─────────────────────────────────────────────────────
+async function importPrivateKey(pem) {
+  const body = pem.replace(/\\n/g, '\n')
+    .replace('-----BEGIN PRIVATE KEY-----', '')
+    .replace('-----END PRIVATE KEY-----', '')
+    .replace(/\s/g, '');
+  const binaryDer = Uint8Array.from(atob(body), c => c.charCodeAt(0));
+  return crypto.subtle.importKey(
+    'pkcs8',
+    binaryDer.buffer,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
 }
 
 // ── [19] handlePlayerDigestJson ───────────────────────────────────────────────
