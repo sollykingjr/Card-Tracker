@@ -51,6 +51,7 @@ export default {
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
     if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
     if (path === '/mark-seen-urls' && request.method === 'POST') return handleMarkSeenUrls(request, env, cors);
+    if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     if (path === '/scan' && request.method === 'GET') return handleScan(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
