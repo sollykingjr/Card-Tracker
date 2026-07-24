@@ -82,22 +82,35 @@ function homeRenderBody() {
     return;
   }
 
-  const recent = [...cards]
-    .filter(c => c.datePurchased || c.transactionDate)
-    .sort((a,b) => parseDate(b.transactionDate || b.datePurchased) - parseDate(a.transactionDate || a.datePurchased))
+  const recentPurchases = [...cards]
+    .filter(c => c.datePurchased)
+    .sort((a,b) => parseDate(b.datePurchased) - parseDate(a.datePurchased))
     .slice(0, 10);
 
+  const recentSales = [...cards]
+    .filter(c => c.salePrice && c.transactionDate)
+    .sort((a,b) => parseDate(b.transactionDate) - parseDate(a.transactionDate))
+    .slice(0, 10);
+
+  const renderRecentRow = c => {
+    const isSold = !!c.salePrice;
+    const date = fmtShortDate(isSold ? c.transactionDate : c.datePurchased);
+    return `<div class="recent-row" style="cursor:pointer" onclick="ctOpenCard(${cards.indexOf(c)})">
+      <div class="recent-info"><div class="rc-name">${c.fullCard || '—'}</div><div class="rc-date">${date}</div></div>
+      <div class="${isSold ? 'recent-sale' : 'recent-price'}">${isSold ? `$${safeNum(c.salePrice).toFixed(2)}` : `$${safeNum(c.purchasePrice).toFixed(2)}`}</div>
+    </div>`;
+  };
+
   const recentHtml = `
-    <div class="srow" style="margin:16px">
-      <div class="srow-t">Recent activity</div>
-      ${recent.length ? recent.map(c => {
-        const isSold = !!c.salePrice;
-        const date = fmtShortDate(c.transactionDate || c.datePurchased);
-        return `<div class="recent-row" style="cursor:pointer" onclick="ctOpenCard(${cards.indexOf(c)})">
-          <div class="recent-info"><div class="rc-name">${c.fullCard || '—'}</div><div class="rc-date">${date}${isSold ? ' · Sold' : ' · Purchased'}</div></div>
-          <div class="${isSold ? 'recent-sale' : 'recent-price'}">${isSold ? `$${safeNum(c.salePrice).toFixed(2)}` : `$${safeNum(c.purchasePrice).toFixed(2)}`}</div>
-        </div>`;
-      }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No activity yet</div>'}
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin:16px">
+      <div class="srow" style="flex:1;min-width:280px;margin:0">
+        <div class="srow-t">Recent purchases</div>
+        ${recentPurchases.length ? recentPurchases.map(renderRecentRow).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No purchases yet</div>'}
+      </div>
+      <div class="srow" style="flex:1;min-width:280px;margin:0">
+        <div class="srow-t">Recent sales</div>
+        ${recentSales.length ? recentSales.map(renderRecentRow).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No sales yet</div>'}
+      </div>
     </div>
   `;
 
