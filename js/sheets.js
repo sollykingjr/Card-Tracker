@@ -289,7 +289,9 @@ buyScores = bsR.filter(r=>r[3]).map(r=>({
       });
     });
 
-    render();
+   if (section === 'home') { renderHome(); }
+    else if (section === 'cardtracker') { renderCardTracker(); }
+    else { render(); }
   } catch(e) {
     document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
     document.getElementById('cntlbl').textContent='Error';
