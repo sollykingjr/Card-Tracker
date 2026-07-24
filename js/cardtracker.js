@@ -4,7 +4,8 @@ let ctQuery = '';
 function ctMatches(c, q) {
   const hay = [c.playerDisplay, c.fullCard, c.itemId, c.serialNo, c.sport, c.year, c.set, c.variation, c.version, c.cardNo, c.grade]
     .filter(Boolean).join(' ').toLowerCase();
-  return hay.includes(q);
+  const words = q.split(/\s+/).filter(Boolean);
+  return words.every(w => hay.includes(w));
 }
 
 function ctCopyId(id, btn) {
