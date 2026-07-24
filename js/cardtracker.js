@@ -35,9 +35,37 @@ function ctOpenCard(idx) {
       <div class="scard"><div class="slbl">Date</div><div class="sval">${fmtShortDate(date)}</div></div>
     </div>
      <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="width:100%;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">Copy Item ID</button>
-    ${c.itemId ? `<a href="https://drive.google.com/drive/search?q=${encodeURIComponent(c.itemId)}" target="_blank" rel="noopener" style="display:block;width:100%;height:40px;line-height:40px;text-align:center;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx2);font-size:13px;font-weight:700;text-decoration:none;margin-top:8px;box-sizing:border-box">View Scans on Drive</a>` : ''}
+    <div id="ct-scans" style="margin-top:14px"></div>
   `;
   document.getElementById('mwrap').classList.add('on');
+  if (c.itemId) ctLoadScans(c.itemId);
+}
+
+async function ctLoadScans(itemId) {
+  const box = document.getElementById('ct-scans');
+  if (!box) return;
+  box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Loading scans...</div>`;
+  try {
+    const res = await fetch(`${WORKER_URL}/scan?id=${encodeURIComponent(itemId)}`);
+    const data = await res.json();
+    if (!document.getElementById('ct-scans')) return;
+    const shots = [data.front, data.back].filter(Boolean);
+    if (!shots.length) {
+      box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">No scans found</div>`;
+      return;
+    }
+    box.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(${shots.length},1fr);gap:8px">
+        ${shots.map(s => `
+          <a href="${s.link}" target="_blank" rel="noopener" style="display:block">
+            <img src="${s.thumb}" style="width:100%;border-radius:10px;border:1px solid var(--bdr2);display:block" loading="lazy">
+          </a>
+        `).join('')}
+      </div>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Couldn't load scans</div>`;
+  }
 }
 
 function renderCardTracker() {
