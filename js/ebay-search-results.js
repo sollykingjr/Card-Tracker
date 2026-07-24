@@ -33,7 +33,7 @@ function getBuyScoreQualifiers() {
 
 function buildBuyScoreQuery(names) {
   if (!names.length) return '';
-  return '(' + names.join(', ') + ')';
+  return 'Bowman Chrome Auto (' + names.join(', ') + ')';
 }
 
 async function syncBuyScoreSearches() {
