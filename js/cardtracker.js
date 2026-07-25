@@ -71,11 +71,102 @@ function ctRenderTags(idx) {
     </div>
     ${c.itemId ? `
       <div style="display:flex;gap:6px">
-        <input id="ct-tag-input" placeholder="Add a tag..." style="flex:1;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:12px;font-family:inherit" onkeydown="if(event.key==='Enter'){event.preventDefault();ctAddTag(${idx})}">
-        <button onclick="ctAddTag(${idx})" style="padding:8px 14px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Add</button>
+        <div style="position:relative;flex:1">
+          <input id="ct-tag-input" placeholder="Add a tag..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:12px;font-family:inherit" oninput="ctFilterTagSuggestions(${idx})" onfocus="ctFilterTagSuggestions(${idx})" onkeydown="if(event.key==='Enter'){event.preventDefault();ctAddTag(${idx})}">
+          <div id="ct-tag-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:8px;max-height:160px;overflow-y:auto;z-index:60;box-shadow:var(--shadow-lg)"></div>
+        </div>
+        <button onclick="ctAddTag(${idx})" style="padding:8px 14px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Add</button>
       </div>
     ` : ''}
   `;
+}
+
+function ctAllTags() {
+  const set = new Set();
+  Object.values(ctTagCache).forEach(tags => (tags || []).forEach(t => set.add(t)));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+function ctHideTagDropdown() {
+  const dd = document.getElementById('ct-tag-dropdown');
+  if (dd) { dd.style.display = 'none'; dd.innerHTML = ''; }
+}
+
+function ctFilterTagSuggestions(idx) {
+  const input = document.getElementById('ct-tag-input');
+  const dd = document.getElementById('ct-tag-dropdown');
+  const c = cards[idx];
+  if (!input || !dd || !c) return;
+  const raw = input.value.trim();
+  const val = raw.toLowerCase();
+
+  const already = new Set((ctTagCache[c.itemId] || []).map(t => t.toLowerCase()));
+  const available = ctAllTags().filter(t => !already.has(t.toLowerCase()));
+  const matches = val ? available.filter(t => t.toLowerCase().includes(val)) : available;
+  const exactExists = available.some(t => t.toLowerCase() === val);
+
+  let html = matches.map(t => `
+    <div onclick="ctSelectTagSuggestion(${idx}, '${t.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--tx)">${t}</div>
+  `).join('');
+
+  if (val && !exactExists) {
+    html += `<div onclick="ctSelectTagSuggestion(${idx}, '${raw.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--acc);border-top:${matches.length ? '1px solid var(--bdr)' : 'none'}">+ Create "${raw}"</div>`;
+  }
+
+  if (!html) { ctHideTagDropdown(); return; }
+  dd.innerHTML = html;
+  dd.style.display = 'block';
+}
+
+function ctSelectTagSuggestion(idx, tag) {
+  const input = document.getElementById('ct-tag-input');
+  if (input) input.value = tag;
+  ctHideTagDropdown();
+  ctAddTag(idx);
+}
+
+function ctAllTags() {
+  const set = new Set();
+  Object.values(ctTagCache).forEach(tags => (tags || []).forEach(t => set.add(t)));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+function ctHideTagDropdown() {
+  const dd = document.getElementById('ct-tag-dropdown');
+  if (dd) { dd.style.display = 'none'; dd.innerHTML = ''; }
+}
+
+function ctFilterTagSuggestions(idx) {
+  const input = document.getElementById('ct-tag-input');
+  const dd = document.getElementById('ct-tag-dropdown');
+  const c = cards[idx];
+  if (!input || !dd || !c) return;
+  const raw = input.value.trim();
+  const val = raw.toLowerCase();
+
+  const already = new Set((ctTagCache[c.itemId] || []).map(t => t.toLowerCase()));
+  const available = ctAllTags().filter(t => !already.has(t.toLowerCase()));
+  const matches = val ? available.filter(t => t.toLowerCase().includes(val)) : available;
+  const exactExists = available.some(t => t.toLowerCase() === val);
+
+  let html = matches.map(t => `
+    <div onclick="ctSelectTagSuggestion(${idx}, '${t.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--tx)">${t}</div>
+  `).join('');
+
+  if (val && !exactExists) {
+    html += `<div onclick="ctSelectTagSuggestion(${idx}, '${raw.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--acc);border-top:${matches.length ? '1px solid var(--bdr)' : 'none'}">+ Create "${raw}"</div>`;
+  }
+
+  if (!html) { ctHideTagDropdown(); return; }
+  dd.innerHTML = html;
+  dd.style.display = 'block';
+}
+
+function ctSelectTagSuggestion(idx, tag) {
+  const input = document.getElementById('ct-tag-input');
+  if (input) input.value = tag;
+  ctHideTagDropdown();
+  ctAddTag(idx);
 }
 
 async function ctAddTag(idx) {
@@ -87,6 +178,7 @@ async function ctAddTag(idx) {
   const current = ctTagCache[c.itemId] || [];
   if (current.some(t => t.toLowerCase() === val.toLowerCase())) {
     input.value = '';
+    ctHideTagDropdown();
     return;
   }
   const updated = [...current, val];
