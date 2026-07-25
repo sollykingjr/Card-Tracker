@@ -154,12 +154,12 @@ function ctRenderBody() {
               <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
               <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
-              <div>
+            <div style="display:flex;gap:16px;flex-shrink:0">
+              <div style="text-align:right">
                 <div style="font-size:11px;color:var(--tx3);font-weight:600">Purchase Price</div>
                 <div style="font-size:14px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
               </div>
-              <div>
+              <div style="text-align:right">
                 <div style="font-size:11px;color:var(--tx3);font-weight:600">Sale Price</div>
                 <div style="font-size:14px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
               </div>
