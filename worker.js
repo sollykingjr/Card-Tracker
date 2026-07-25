@@ -53,6 +53,7 @@ export default {
     if (path === '/mark-seen-urls' && request.method === 'POST') return handleMarkSeenUrls(request, env, cors);
     if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     if (path === '/scan' && request.method === 'GET') return handleScan(request, env, cors);
+    if (path === '/scan-batch' && request.method === 'POST') return handleScanBatch(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1223,6 +1224,56 @@ async function handleScan(request, env, cors) {
 
     return new Response(body, { headers: { ...cors, 'Content-Type': 'application/json' } });
   } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22a] handleScanBatch — batch Drive scan lookup for a page of results ────
+async function handleScanBatch(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemIds = Array.isArray(body.itemIds) ? [...new Set(body.itemIds.filter(Boolean))] : [];
+    if (!itemIds.length) {
+      return new Response(JSON.stringify({ error: 'missing itemIds' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const token = await getGoogleAccessToken(env);
+
+    const results = await Promise.all(itemIds.map(async (itemId) => {
+      const cacheKey = `scan:${itemId}`;
+      const cached = await env.CACHE.get(cacheKey);
+      if (cached) return [itemId, JSON.parse(cached)];
+
+      try {
+        const q = `name contains '${itemId}' and mimeType contains 'image/' and trashed=false`;
+        const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=10`;
+        const driveRes = await fetch(driveUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const driveData = await driveRes.json();
+        const files = driveData.files || [];
+
+        const back = files.find(f => /back/i.test(f.name));
+        const front = files.find(f => f !== back) || files[0] || null;
+
+        const result = {
+          front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800` } : null,
+          back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800` } : null
+        };
+
+        await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 604800 });
+        return [itemId, result];
+      } catch (e) {
+        return [itemId, { front: null, back: null }];
+      }
+    }));
+
+    return new Response(JSON.stringify(Object.fromEntries(results)), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
