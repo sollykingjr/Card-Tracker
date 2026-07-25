@@ -75,14 +75,23 @@ function renderSearchDropdown(idPrefix, matches) {
     dd.innerHTML = '';
     return;
   }
-  dd.innerHTML = matches.slice(0, 6).map(c => `
+  dd.innerHTML = matches.slice(0, 6).map(c => {
+    const pDate = fmtShortDate(c.datePurchased);
+    const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
+    const dateLine = [
+      c.itemId ? 'ID: ' + c.itemId : 'No item ID',
+      pDate !== '—' ? 'Purchased ' + pDate : null,
+      sDate && sDate !== '—' ? 'Sold ' + sDate : null
+    ].filter(Boolean).join(' · ');
+    return `
     <div class="qs-dd-item" onclick="ctOpenCard(${cards.indexOf(c)})" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="min-width:0">
         <div class="qs-dd-name">${c.fullCard || c.playerDisplay || '—'}</div>
-        <div class="qs-dd-sub">${[c.year, c.sport].filter(Boolean).join(' ')}</div>
+        <div class="qs-dd-sub">${dateLine}</div>
       </div>
       ${c.itemId ? `<button onclick="event.stopPropagation();ctCopyId('${c.itemId.replace(/'/g,"\\'")}', this)" style="padding:5px 9px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Copy ID</button>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
   dd.classList.add('on');
 }
