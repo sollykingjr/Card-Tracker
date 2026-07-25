@@ -155,8 +155,8 @@ function ctRenderBody() {
               <div class="rc-date">${dateLine}</div>
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
-              <div class="recent-price">$${safeNum(c.purchasePrice).toFixed(2)}</div>
-              <div style="font-size:11px;color:var(--tx3)">${c.salePrice ? 'Sold $' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+              <div style="font-size:13px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
+              <div style="font-size:13px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
             </div>
           </div>`;
         }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
