@@ -22,7 +22,13 @@ function renderHome() {
     </div>
   `;
 
-  wireSearchBar('home', () => homeQuery, v => homeQuery = v, homeRenderBody);
+  wireSearchBar('home', () => homeQuery, v => homeQuery = v, () => {
+    const q = homeQuery.trim().toLowerCase();
+    renderSearchDropdown('home', q ? cards.filter(c => ctMatches(c, q)) : []);
+  }, () => {
+    ctOpenSearch(homeQuery);
+    setSection('cardtracker');
+  });
 
   homeRenderBody();
 }
@@ -30,38 +36,6 @@ function renderHome() {
 function homeRenderBody() {
   const body = document.getElementById('home-body');
   if (!body) return;
-
-  const q = homeQuery.trim().toLowerCase();
-
-  if (q) {
-    const matches = cards.filter(c => ctMatches(c, q)).slice(0, 150);
-    body.innerHTML = `
-      <div class="srow" style="margin:16px">
-        <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
-        ${matches.length ? matches.map(c => {
-          const pDate = fmtShortDate(c.datePurchased);
-          const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
-          const dateLine = [
-            c.itemId ? 'ID: ' + c.itemId : 'No item ID',
-            pDate !== '—' ? 'Purchased ' + pDate : null,
-            sDate && sDate !== '—' ? 'Sold ' + sDate : null
-          ].filter(Boolean).join(' · ');
-          return `
-          <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
-            <div class="recent-info">
-              <div class="rc-name">${c.fullCard || '—'}</div>
-              <div class="rc-date">${dateLine}</div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-              <div class="recent-price">$${safeNum(c.purchasePrice).toFixed(2)}</div>
-              <button onclick="event.stopPropagation();ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="padding:6px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Copy ID</button>
-            </div>
-          </div>`;
-        }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
-      </div>
-    `;
-    return;
-  }
 
   const recentPurchases = [...cards]
     .filter(c => c.datePurchased)
