@@ -110,3 +110,4 @@ if (digestParam) {
   setSection('home');
 }
 loadAll();
+ctLoadTags();
