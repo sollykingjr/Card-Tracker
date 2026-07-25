@@ -303,7 +303,7 @@ function ctRenderFilterContent() {
       <span style="font-size:14px;color:var(--tx)">Graded</span>
     </label>
 
-    ${ctSportCheckboxesHTML()}
+    ${ctPickerHTML('sports')}
     ${ctPickerHTML('years')}
     ${ctPickerHTML('sets')}
     ${ctPickerHTML('tags')}
@@ -359,32 +359,11 @@ function ctDistinctValues(field) {
   return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-function ctToggleFilterSport(sport) {
-  ctFilterSports = ctFilterSports.includes(sport)
-    ? ctFilterSports.filter(s => s !== sport)
-    : [...ctFilterSports, sport];
-  ctPage = 1;
-  ctRenderFilterContent();
-  ctRenderBody();
-}
-
-function ctSportCheckboxesHTML() {
-  const sports = ctDistinctValues('sport');
-  return `
-    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:20px 0 8px">Sport</div>
-    ${sports.length ? sports.map(s => `
-      <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--bdr)">
-        <input type="checkbox" ${ctFilterSports.includes(s) ? 'checked' : ''} onchange="ctToggleFilterSport('${s.replace(/'/g,"\\'")}')" style="width:18px;height:18px;accent-color:var(--acc)">
-        <span style="font-size:14px;color:var(--tx)">${s}</span>
-      </label>
-    `).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No sport data found</div>'}
-  `;
-}
-
 const CT_FILTER_PICKERS = {
-  tags:  { label: 'Tags', getOptions: () => ctAllTags(),               getSelected: () => ctFilterTags,  setSelected: arr => ctFilterTags = arr },
-  years: { label: 'Year', getOptions: () => ctDistinctValues('year'),  getSelected: () => ctFilterYears, setSelected: arr => ctFilterYears = arr },
-  sets:  { label: 'Set',  getOptions: () => ctDistinctValues('set'),   getSelected: () => ctFilterSets,  setSelected: arr => ctFilterSets = arr }
+  sports: { label: 'Sport', getOptions: () => ctDistinctValues('sport'), getSelected: () => ctFilterSports, setSelected: arr => ctFilterSports = arr },
+  tags:   { label: 'Tags',  getOptions: () => ctAllTags(),               getSelected: () => ctFilterTags,   setSelected: arr => ctFilterTags = arr },
+  years:  { label: 'Year',  getOptions: () => ctDistinctValues('year'),  getSelected: () => ctFilterYears,  setSelected: arr => ctFilterYears = arr },
+  sets:   { label: 'Set',   getOptions: () => ctDistinctValues('set'),  getSelected: () => ctFilterSets,   setSelected: arr => ctFilterSets = arr }
 };
 
 function ctPickerToggle(key, value) {
