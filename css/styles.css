@@ -963,7 +963,7 @@ html, body {
 
 @media (min-width: 768px) {
   #sr-root { margin-left: var(--nav-w); }
-  .sr-wrap { padding: 20px 22px 60px; max-width: 1100px; }
+  .sr-wrap { padding: 20px 22px 60px; }
   #sr-digest-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
