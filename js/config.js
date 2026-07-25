@@ -25,3 +25,33 @@ const SORT_OPTS = {
   all:  [{k:'default',l:'BS'},{k:'rank',l:'Rank'},{k:'price',l:'Price'},{k:'owned',l:'$ Owned'}],
   hs:   [{k:'default',l:'Recent'},{k:'name',l:'Name'},{k:'owned',l:'$ Owned'}],
 };
+
+// ── Shared search bar (used by Home + Card Tracker) ────────────────────────────
+function searchBarHTML(idPrefix, placeholder) {
+  return `
+    <div class="si">
+      <input id="${idPrefix}-search" placeholder="${placeholder}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <button id="${idPrefix}-clear">&times;</button>
+    </div>
+  `;
+}
+
+function wireSearchBar(idPrefix, getQuery, setQuery, onChange) {
+  const input = document.getElementById(`${idPrefix}-search`);
+  const clearBtn = document.getElementById(`${idPrefix}-clear`);
+  input.value = getQuery();
+  clearBtn.classList.toggle('on', getQuery().length > 0);
+
+  input.addEventListener('input', e => {
+    setQuery(e.target.value);
+    clearBtn.classList.toggle('on', e.target.value.length > 0);
+    onChange();
+  });
+  clearBtn.addEventListener('click', () => {
+    setQuery('');
+    input.value = '';
+    clearBtn.classList.remove('on');
+    input.focus();
+    onChange();
+  });
+}
