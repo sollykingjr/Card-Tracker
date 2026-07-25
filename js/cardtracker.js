@@ -4,6 +4,11 @@ let ctSearchActive = false;
 let ctSort = 'default';
 let ctSortDir = 'desc';
 
+function ctOpenSearch(query) {
+  ctQuery = query;
+  ctSearchActive = true;
+}
+
 function ctSetSort(key) {
   if (ctSort !== key) {
     ctSort = key;
