@@ -353,6 +353,94 @@ function ctToggleFilterGraded() {
   ctRenderBody();
 }
 
+function ctDistinctValues(field) {
+  const set = new Set();
+  cards.forEach(c => { if (c[field]) set.add(String(c[field])); });
+  return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function ctToggleFilterSport(sport) {
+  ctFilterSports = ctFilterSports.includes(sport)
+    ? ctFilterSports.filter(s => s !== sport)
+    : [...ctFilterSports, sport];
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctSportCheckboxesHTML() {
+  const sports = ctDistinctValues('sport');
+  return `
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:20px 0 8px">Sport</div>
+    ${sports.length ? sports.map(s => `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--bdr)">
+        <input type="checkbox" ${ctFilterSports.includes(s) ? 'checked' : ''} onchange="ctToggleFilterSport('${s.replace(/'/g,"\\'")}')" style="width:18px;height:18px;accent-color:var(--acc)">
+        <span style="font-size:14px;color:var(--tx)">${s}</span>
+      </label>
+    `).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No sport data found</div>'}
+  `;
+}
+
+const CT_FILTER_PICKERS = {
+  tags:  { label: 'Tags', getOptions: () => ctAllTags(),               getSelected: () => ctFilterTags,  setSelected: arr => ctFilterTags = arr },
+  years: { label: 'Year', getOptions: () => ctDistinctValues('year'),  getSelected: () => ctFilterYears, setSelected: arr => ctFilterYears = arr },
+  sets:  { label: 'Set',  getOptions: () => ctDistinctValues('set'),   getSelected: () => ctFilterSets,  setSelected: arr => ctFilterSets = arr }
+};
+
+function ctPickerToggle(key, value) {
+  const p = CT_FILTER_PICKERS[key];
+  const current = p.getSelected();
+  p.setSelected(current.includes(value) ? current.filter(v => v !== value) : [...current, value]);
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctPickerSelect(key, value) {
+  ctPickerToggle(key, value);
+}
+
+function ctPickerFilterSuggestions(key) {
+  const input = document.getElementById(`ct-picker-input-${key}`);
+  const dd = document.getElementById(`ct-picker-dropdown-${key}`);
+  if (!input || !dd) return;
+  const p = CT_FILTER_PICKERS[key];
+  const val = input.value.trim().toLowerCase();
+  const selected = p.getSelected();
+  const available = p.getOptions().filter(v => !selected.includes(v));
+  const matches = val ? available.filter(v => v.toLowerCase().includes(val)) : available;
+
+  if (!matches.length) {
+    dd.style.display = 'none';
+    dd.innerHTML = '';
+    return;
+  }
+  dd.innerHTML = matches.map(v => `
+    <div onclick="ctPickerSelect('${key}', '${v.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--tx)">${v}</div>
+  `).join('');
+  dd.style.display = 'block';
+}
+
+function ctPickerHTML(key) {
+  const p = CT_FILTER_PICKERS[key];
+  const selected = p.getSelected();
+  return `
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:20px 0 8px">${p.label}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${selected.length ? '10px' : '0'}">
+      ${selected.map(v => `
+        <div style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;background:var(--acc-bg);border:1px solid var(--acc-bdr);color:var(--acc);font-size:11px;font-weight:700">
+          ${v}
+          <button onclick="ctPickerToggle('${key}', '${v.replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--acc);font-size:13px;cursor:pointer;padding:0;line-height:1;font-family:inherit">×</button>
+        </div>
+      `).join('')}
+    </div>
+    <div style="position:relative">
+      <input id="ct-picker-input-${key}" placeholder="Search ${p.label.toLowerCase()}..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:12px;font-family:inherit" oninput="ctPickerFilterSuggestions('${key}')" onfocus="ctPickerFilterSuggestions('${key}')">
+      <div id="ct-picker-dropdown-${key}" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:8px;max-height:160px;overflow-y:auto;z-index:60;box-shadow:var(--shadow-lg)"></div>
+    </div>
+  `;
+}
+
 function ctDateLine(c) {
   const pDate = fmtShortDate(c.datePurchased);
   const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
