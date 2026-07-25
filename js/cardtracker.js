@@ -1,10 +1,33 @@
 // ── Card Tracker ──────────────────────────────────────────────────────────────
 let ctQuery = '';
 let ctSearchActive = false;
+let ctSort = 'default';
 
 function ctOpenSearch(query) {
   ctQuery = query;
   ctSearchActive = true;
+}
+
+function ctSetSort(key) {
+  ctSort = ctSort === key ? 'default' : key;
+  ctRenderBody();
+}
+
+const CT_SORT_OPTS = [
+  { k: 'purchaseDate', l: 'Purchase Date' },
+  { k: 'saleDate', l: 'Sale Date' },
+  { k: 'purchasePrice', l: 'Purchase Price' },
+  { k: 'salePrice', l: 'Sale Price' }
+];
+
+function ctSortMatches(matches) {
+  if (ctSort === 'default') return matches;
+  const arr = matches.slice();
+  if (ctSort === 'purchaseDate') arr.sort((a, b) => new Date(b.datePurchased || 0) - new Date(a.datePurchased || 0));
+  else if (ctSort === 'saleDate') arr.sort((a, b) => new Date(b.transactionDate || 0) - new Date(a.transactionDate || 0));
+  else if (ctSort === 'purchasePrice') arr.sort((a, b) => safeNum(b.purchasePrice) - safeNum(a.purchasePrice));
+  else if (ctSort === 'salePrice') arr.sort((a, b) => safeNum(b.salePrice) - safeNum(a.salePrice));
+  return arr;
 }
 
 function ctMatches(c, q) {
@@ -110,8 +133,11 @@ function ctRenderBody() {
   const q = ctQuery.trim().toLowerCase();
 
   if (ctSearchActive) {
-    const matches = q ? cards.filter(c => ctMatches(c, q)).slice(0, 150) : [];
+    const matches = ctSortMatches(q ? cards.filter(c => ctMatches(c, q)) : []).slice(0, 150);
     body.innerHTML = `
+      <div class="sort-chips" style="margin:16px 16px 0">
+        ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}</button>`).join('')}
+      </div>
       <div class="srow" style="margin:16px">
         <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
         ${matches.length ? matches.map(c => {
@@ -128,9 +154,9 @@ function ctRenderBody() {
               <div class="rc-name">${c.fullCard || '—'}</div>
               <div class="rc-date">${dateLine}</div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
               <div class="recent-price">$${safeNum(c.purchasePrice).toFixed(2)}</div>
-              <button onclick="event.stopPropagation();ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="padding:6px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Copy ID</button>
+              <div style="font-size:11px;color:var(--tx3)">${c.salePrice ? 'Sold $' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
             </div>
           </div>`;
         }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
