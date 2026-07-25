@@ -287,7 +287,7 @@ function ctRenderBody() {
         ${ctPaginationHTML(ctPage, totalPages)}
         ${matches.length
           ? (ctViewMode === 'card'
-? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`              : matches.map(c => ctListRowHTML(c)).join(''))
+? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`              : matches.map(c => ctListRowHTML(c)).join(''))
           : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
         ${ctPaginationHTML(ctPage, totalPages)}
       </div>
