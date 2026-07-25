@@ -1,5 +1,11 @@
 // ── Card Tracker ──────────────────────────────────────────────────────────────
 let ctQuery = '';
+let ctSearchActive = false;
+
+function ctOpenSearch(query) {
+  ctQuery = query;
+  ctSearchActive = true;
+}
 
 function ctMatches(c, q) {
   const hay = [c.playerDisplay, c.fullCard, c.itemId, c.serialNo, c.sport, c.year, c.set, c.variation, c.version, c.cardNo, c.grade]
@@ -80,7 +86,19 @@ function renderCardTracker() {
     </div>
   `;
 
-  wireSearchBar('ct', () => ctQuery, v => ctQuery = v, ctRenderBody);
+  wireSearchBar('ct', () => ctQuery, v => ctQuery = v, () => {
+    const q = ctQuery.trim().toLowerCase();
+    if (ctSearchActive) {
+      if (!q) ctSearchActive = false;
+      ctRenderBody();
+    } else {
+      renderSearchDropdown('ct', q ? cards.filter(c => ctMatches(c, q)) : []);
+    }
+  }, () => {
+    ctSearchActive = true;
+    renderSearchDropdown('ct', []);
+    ctRenderBody();
+  });
 
   ctRenderBody();
 }
@@ -91,8 +109,8 @@ function ctRenderBody() {
 
   const q = ctQuery.trim().toLowerCase();
 
-  if (q) {
-    const matches = cards.filter(c => ctMatches(c, q)).slice(0, 150);
+  if (ctSearchActive) {
+    const matches = q ? cards.filter(c => ctMatches(c, q)).slice(0, 150) : [];
     body.innerHTML = `
       <div class="srow" style="margin:16px">
         <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
