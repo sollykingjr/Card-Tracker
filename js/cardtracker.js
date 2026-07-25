@@ -438,13 +438,15 @@ function ctDateLine(c) {
 function ctListRowHTML(c) {
   const dateLine = ctDateLine(c);
   return `
-    <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
-      ${ctThumbHTML(c.itemId)}
-      <div class="recent-info">
-        <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
-        <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
+    <div class="cs-row" onclick="ctOpenCard(${cards.indexOf(c)})">
+      <div class="cs-row-top">
+        ${ctThumbHTML(c.itemId)}
+        <div class="recent-info">
+          <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
+          <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
+        </div>
       </div>
-      <div style="display:flex;gap:16px;flex-shrink:0">
+      <div class="cs-row-prices">
         <div style="text-align:right">
           <div style="font-size:11px;color:var(--tx3);font-weight:600">Purchase Price</div>
           <div style="font-size:14px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
