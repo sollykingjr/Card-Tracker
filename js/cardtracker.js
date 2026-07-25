@@ -3,10 +3,13 @@ let ctQuery = '';
 let ctSearchActive = false;
 let ctSort = 'default';
 let ctSortDir = 'desc';
+let ctPage = 1;
+const CT_PAGE_SIZE = 50;
 
 function ctOpenSearch(query) {
   ctQuery = query;
   ctSearchActive = true;
+  ctPage = 1;
 }
 
 function ctSetSort(key) {
@@ -19,7 +22,14 @@ function ctSetSort(key) {
     ctSort = 'default';
     ctSortDir = 'desc';
   }
+  ctPage = 1;
   ctRenderBody();
+}
+
+function ctSetPage(p) {
+  ctPage = p;
+  ctRenderBody();
+  document.getElementById('ct-body')?.scrollIntoView({ block: 'start' });
 }
 
 const CT_SORT_OPTS = [
@@ -123,12 +133,14 @@ function renderCardTracker() {
     const q = ctQuery.trim().toLowerCase();
     if (ctSearchActive) {
       if (!q) ctSearchActive = false;
+      ctPage = 1;
       ctRenderBody();
     } else {
       renderSearchDropdown('ct', q ? cards.filter(c => ctMatches(c, q)) : []);
     }
   }, () => {
     ctSearchActive = true;
+    ctPage = 1;
     renderSearchDropdown('ct', []);
     ctRenderBody();
   });
@@ -143,13 +155,17 @@ function ctRenderBody() {
   const q = ctQuery.trim().toLowerCase();
 
   if (ctSearchActive) {
-    const matches = ctSortMatches(q ? cards.filter(c => ctMatches(c, q)) : []).slice(0, 150);
+    const allMatches = ctSortMatches(q ? cards.filter(c => ctMatches(c, q)) : []);
+    const totalPages = Math.max(1, Math.ceil(allMatches.length / CT_PAGE_SIZE));
+    if (ctPage > totalPages) ctPage = totalPages;
+    const startIdx = (ctPage - 1) * CT_PAGE_SIZE;
+    const matches = allMatches.slice(startIdx, startIdx + CT_PAGE_SIZE);
     body.innerHTML = `
       <div class="sort-chips" style="margin:16px 16px 0">
         ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
       </div>
       <div class="srow" style="margin:16px">
-        <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
+        <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
         ${matches.length ? matches.map(c => {
           const pDate = fmtShortDate(c.datePurchased);
           const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
@@ -176,6 +192,13 @@ function ctRenderBody() {
             </div>
           </div>`;
         }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
+        ${totalPages > 1 ? `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px">
+            <button onclick="ctSetPage(${ctPage - 1})" ${ctPage <= 1 ? 'disabled' : ''} style="padding:8px 16px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${ctPage <= 1 ? '0.4' : '1'}">← Prev</button>
+            <div style="font-size:12px;color:var(--tx3)">Page ${ctPage} of ${totalPages}</div>
+            <button onclick="ctSetPage(${ctPage + 1})" ${ctPage >= totalPages ? 'disabled' : ''} style="padding:8px 16px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${ctPage >= totalPages ? '0.4' : '1'}">Next →</button>
+          </div>
+        ` : ''}
       </div>
     `;
     return;
