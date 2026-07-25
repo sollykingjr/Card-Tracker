@@ -16,32 +16,13 @@ function renderHome() {
   root.innerHTML = `
     <div class="sr-wrap">
       <div style="padding:16px 16px 0">
-        <div class="si">
-          <input id="home-search" placeholder="Search your collection..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-          <button id="home-clear">&times;</button>
-        </div>
+        ${searchBarHTML('home', 'Search your collection...')}
       </div>
       <div id="home-body"></div>
     </div>
   `;
 
-  const input = document.getElementById('home-search');
-  const clearBtn = document.getElementById('home-clear');
-  input.value = homeQuery;
-  clearBtn.classList.toggle('on', homeQuery.length > 0);
-
-  input.addEventListener('input', e => {
-    homeQuery = e.target.value;
-    clearBtn.classList.toggle('on', homeQuery.length > 0);
-    homeRenderBody();
-  });
-  clearBtn.addEventListener('click', () => {
-    homeQuery = '';
-    input.value = '';
-    clearBtn.classList.remove('on');
-    input.focus();
-    homeRenderBody();
-  });
+  wireSearchBar('home', () => homeQuery, v => homeQuery = v, homeRenderBody);
 
   homeRenderBody();
 }
