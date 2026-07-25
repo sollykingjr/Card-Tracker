@@ -281,7 +281,10 @@ function ctRenderFilterContent() {
   const box = document.getElementById('ct-filter-content');
   if (!box) return;
   box.innerHTML = `
-    <div class="mname" style="font-size:18px;margin-bottom:16px">Filters</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="mname" style="font-size:18px;margin-bottom:0">Filters</div>
+      <button onclick="ctResetFilters()" style="padding:6px 12px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Reset</button>
+    </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sold</div>
     <div style="display:flex;gap:6px;margin-bottom:20px">
@@ -309,6 +312,19 @@ function ctOpenFilters() {
 
 function ctCloseFilters() {
   document.getElementById('ct-filter-wrap').classList.remove('on');
+}
+
+function ctResetFilters() {
+  ctFilterSold = 'all';
+  ctFilterSerial = false;
+  ctFilterGraded = false;
+  ctFilterTags = [];
+  ctFilterSports = [];
+  ctFilterYears = [];
+  ctFilterSets = [];
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
 }
 
 function ctSetFilterSold(val) {
