@@ -528,7 +528,7 @@ html, body {
 .cs-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--bdr); cursor: pointer; }
 .cs-row:last-child { border-bottom: none; }
 .cs-row-top { display: flex; align-items: center; gap: 8px; }
-.cs-row-prices { display: flex; gap: 16px; }
+.cs-row-prices { display: flex; gap: 16px; justify-content: flex-end; }
 
 @media (min-width: 768px) {
   .cs-row { flex-direction: row; align-items: flex-start; gap: 8px; }
