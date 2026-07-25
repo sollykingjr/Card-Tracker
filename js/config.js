@@ -32,11 +32,12 @@ function searchBarHTML(idPrefix, placeholder) {
     <div class="si">
       <input id="${idPrefix}-search" placeholder="${placeholder}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <button id="${idPrefix}-clear">&times;</button>
+      <div id="${idPrefix}-dropdown" class="qs-dropdown"></div>
     </div>
   `;
 }
 
-function wireSearchBar(idPrefix, getQuery, setQuery, onChange) {
+function wireSearchBar(idPrefix, getQuery, setQuery, onChange, onEnter) {
   const input = document.getElementById(`${idPrefix}-search`);
   const clearBtn = document.getElementById(`${idPrefix}-clear`);
   input.value = getQuery();
@@ -47,11 +48,38 @@ function wireSearchBar(idPrefix, getQuery, setQuery, onChange) {
     clearBtn.classList.toggle('on', e.target.value.length > 0);
     onChange();
   });
+  if (onEnter) {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+        onEnter();
+      }
+    });
+  }
   clearBtn.addEventListener('click', () => {
     setQuery('');
     input.value = '';
     clearBtn.classList.remove('on');
+    renderSearchDropdown(idPrefix, []);
     input.focus();
     onChange();
   });
+}
+
+function renderSearchDropdown(idPrefix, matches) {
+  const dd = document.getElementById(`${idPrefix}-dropdown`);
+  if (!dd) return;
+  if (!matches.length) {
+    dd.classList.remove('on');
+    dd.innerHTML = '';
+    return;
+  }
+  dd.innerHTML = matches.slice(0, 6).map(c => `
+    <div class="qs-dd-item" onclick="ctOpenCard(${cards.indexOf(c)})">
+      <div class="qs-dd-name">${c.fullCard || c.playerDisplay || '—'}</div>
+      <div class="qs-dd-sub">${[c.year, c.sport].filter(Boolean).join(' ')}</div>
+    </div>
+  `).join('');
+  dd.classList.add('on');
 }
