@@ -302,6 +302,14 @@ function ctRenderFilterContent() {
       <input type="checkbox" ${ctFilterGraded ? 'checked' : ''} onchange="ctToggleFilterGraded()" style="width:18px;height:18px;accent-color:var(--acc)">
       <span style="font-size:14px;color:var(--tx)">Graded</span>
     </label>
+
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:20px 0 8px">Tags</div>
+    ${ctAllTags().length ? ctAllTags().map(t => `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--bdr)">
+        <input type="checkbox" ${ctFilterTags.includes(t) ? 'checked' : ''} onchange="ctToggleFilterTag('${t.replace(/'/g,"\\'")}')" style="width:18px;height:18px;accent-color:var(--acc)">
+        <span style="font-size:14px;color:var(--tx)">${t}</span>
+      </label>
+    `).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No tags created yet</div>'}
   `;
 }
 
@@ -312,6 +320,15 @@ function ctOpenFilters() {
 
 function ctCloseFilters() {
   document.getElementById('ct-filter-wrap').classList.remove('on');
+}
+
+function ctToggleFilterTag(tag) {
+  ctFilterTags = ctFilterTags.includes(tag)
+    ? ctFilterTags.filter(t => t !== tag)
+    : [...ctFilterTags, tag];
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
 }
 
 function ctResetFilters() {
