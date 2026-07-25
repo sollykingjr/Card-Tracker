@@ -696,7 +696,6 @@ function ctRenderBody() {
     ctRenderFilterContent();
     return;
   }
-  }
 
   const sold  = cards.filter(c =>  c.salePrice);
   const purchased = cards.filter(c => c.purchasePrice);
