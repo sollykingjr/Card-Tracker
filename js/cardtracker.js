@@ -151,12 +151,18 @@ function ctRenderBody() {
           return `
           <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
             <div class="recent-info">
-              <div class="rc-name">${c.fullCard || '—'}</div>
-              <div class="rc-date">${dateLine}</div>
+              <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
+              <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
-              <div style="font-size:13px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
-              <div style="font-size:13px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
+              <div>
+                <div style="font-size:11px;color:var(--tx3);font-weight:600">Purchase Price</div>
+                <div style="font-size:14px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--tx3);font-weight:600">Sale Price</div>
+                <div style="font-size:14px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+              </div>
             </div>
           </div>`;
         }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
