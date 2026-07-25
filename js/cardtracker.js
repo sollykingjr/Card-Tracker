@@ -32,6 +32,34 @@ function ctSetPage(p) {
   document.getElementById('ct-body')?.scrollIntoView({ block: 'start' });
 }
 
+let ctScanCache = {};
+
+async function ctFetchScansForPage(itemIds) {
+  const needed = [...new Set(itemIds.filter(id => id && !(id in ctScanCache)))];
+  if (!needed.length) return;
+  try {
+    const res = await fetch(`${WORKER_URL}/scan-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemIds: needed })
+    });
+    const data = await res.json();
+    Object.assign(ctScanCache, data);
+  } catch (e) {
+    needed.forEach(id => { if (!(id in ctScanCache)) ctScanCache[id] = { front: null, back: null }; });
+  }
+  ctRenderBody();
+}
+
+function ctThumbHTML(itemId) {
+  const scan = itemId ? ctScanCache[itemId] : null;
+  const src = scan?.front?.thumb;
+  if (src) {
+    return `<img src="${src}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr2);flex-shrink:0" loading="lazy">`;
+  }
+  return `<div style="width:44px;height:44px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);flex-shrink:0"></div>`;
+}
+
 function ctPaginationHTML(page, totalPages) {
   if (totalPages <= 1) return '';
   return `
@@ -171,6 +199,7 @@ function ctRenderBody() {
     if (ctPage > totalPages) ctPage = totalPages;
     const startIdx = (ctPage - 1) * CT_PAGE_SIZE;
     const matches = allMatches.slice(startIdx, startIdx + CT_PAGE_SIZE);
+    ctFetchScansForPage(matches.map(c => c.itemId));
     body.innerHTML = `
       <div class="sort-chips" style="margin:16px 16px 0">
         ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
@@ -188,6 +217,7 @@ function ctRenderBody() {
           ].filter(Boolean).join(' · ');
           return `
           <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
+            ${ctThumbHTML(c.itemId)}
             <div class="recent-info">
               <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
               <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
