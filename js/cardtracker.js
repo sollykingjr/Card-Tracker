@@ -260,6 +260,78 @@ function ctViewToggleHTML() {
   `;
 }
 
+function ctFiltersActiveCount() {
+  let n = 0;
+  if (ctFilterSold !== 'all') n++;
+  if (ctFilterSerial) n++;
+  if (ctFilterGraded) n++;
+  if (ctFilterTags.length) n++;
+  if (ctFilterSports.length) n++;
+  if (ctFilterYears.length) n++;
+  if (ctFilterSets.length) n++;
+  return n;
+}
+
+function ctFilterButtonHTML() {
+  const n = ctFiltersActiveCount();
+  return `<button class="schip${n ? ' on' : ''}" onclick="ctOpenFilters()">Filters${n ? ` (${n})` : ''}</button>`;
+}
+
+function ctRenderFilterContent() {
+  const box = document.getElementById('ct-filter-content');
+  if (!box) return;
+  box.innerHTML = `
+    <div class="mname" style="font-size:18px;margin-bottom:16px">Filters</div>
+
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sold</div>
+    <div style="display:flex;gap:6px;margin-bottom:20px">
+      <button class="schip${ctFilterSold==='all'?' on':''}" onclick="ctSetFilterSold('all')" style="flex:1;padding:8px;font-size:11px">All</button>
+      <button class="schip${ctFilterSold==='exclude'?' on':''}" onclick="ctSetFilterSold('exclude')" style="flex:1;padding:8px;font-size:11px">Exclude Sold</button>
+      <button class="schip${ctFilterSold==='only'?' on':''}" onclick="ctSetFilterSold('only')" style="flex:1;padding:8px;font-size:11px">Sold Only</button>
+    </div>
+
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--bdr)">
+      <input type="checkbox" ${ctFilterSerial ? 'checked' : ''} onchange="ctToggleFilterSerial()" style="width:18px;height:18px;accent-color:var(--acc)">
+      <span style="font-size:14px;color:var(--tx)">Serial Numbered</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer">
+      <input type="checkbox" ${ctFilterGraded ? 'checked' : ''} onchange="ctToggleFilterGraded()" style="width:18px;height:18px;accent-color:var(--acc)">
+      <span style="font-size:14px;color:var(--tx)">Graded</span>
+    </label>
+  `;
+}
+
+function ctOpenFilters() {
+  ctRenderFilterContent();
+  document.getElementById('ct-filter-wrap').classList.add('on');
+}
+
+function ctCloseFilters() {
+  document.getElementById('ct-filter-wrap').classList.remove('on');
+}
+
+function ctSetFilterSold(val) {
+  ctFilterSold = val;
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctToggleFilterSerial() {
+  ctFilterSerial = !ctFilterSerial;
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctToggleFilterGraded() {
+  ctFilterGraded = !ctFilterGraded;
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
 function ctDateLine(c) {
   const pDate = fmtShortDate(c.datePurchased);
   const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
@@ -503,9 +575,12 @@ function ctRenderBody() {
         ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
       </div>
       <div class="srow" style="margin:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
           <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
-          ${ctViewToggleHTML()}
+          <div style="display:flex;gap:6px">
+            ${ctFilterButtonHTML()}
+            ${ctViewToggleHTML()}
+          </div>
         </div>
         ${ctPaginationHTML(ctPage, totalPages)}
         ${matches.length
