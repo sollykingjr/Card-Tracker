@@ -115,8 +115,8 @@ function ctCardBoxHTML(c) {
   return `
     <div style="cursor:pointer;border:1px solid var(--bdr);border-radius:12px;overflow:hidden;background:var(--surf)" onclick="ctOpenCard(${cards.indexOf(c)})">
       ${src
-        ? `<img src="${src}" style="width:90px;height:126px;object-fit:cover;display:block;margin:8px auto 0;border-radius:6px" loading="lazy">`
-        : `<div style="width:90px;height:126px;background:var(--surf2);margin:8px auto 0;border-radius:6px"></div>`
+        ? `<img src="${src}" style="width:100%;aspect-ratio:2.5/3.5;object-fit:cover;display:block;border-radius:6px" loading="lazy">`
+        : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--surf2);border-radius:6px"></div>`
       }
       <div style="padding:7px">
         <div style="font-size:11px;font-weight:700;line-height:1.25">${c.fullCard || '—'}</div>
@@ -287,8 +287,7 @@ function ctRenderBody() {
         ${ctPaginationHTML(ctPage, totalPages)}
         ${matches.length
           ? (ctViewMode === 'card'
-              ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
-              : matches.map(c => ctListRowHTML(c)).join(''))
+? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`              : matches.map(c => ctListRowHTML(c)).join(''))
           : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
         ${ctPaginationHTML(ctPage, totalPages)}
       </div>
