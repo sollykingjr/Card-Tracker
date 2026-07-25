@@ -319,9 +319,6 @@ function ctCloseFilters() {
   document.getElementById('ct-filter-wrap').classList.remove('on');
 }
 
-function ctToggleFilterTag(tag) {
-
-
 function ctResetFilters() {
   ctFilterSold = 'all';
   ctFilterSerial = false;
