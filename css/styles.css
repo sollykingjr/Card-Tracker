@@ -854,6 +854,11 @@ html, body {
 }
 /* ── Search Results ───────────────────────────────────────────────────────── */
 .sr-wrap { padding: 14px 14px 80px; }
+.ct-filter-sidebar { display: none; }
+@media (min-width: 768px) {
+  .ct-filter-sidebar { display: block; }
+  .ct-filter-mobile-btn { display: none; }
+}
 .sr-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .sr-title { font-size: 16px; font-weight: 700; color: var(--tx); letter-spacing: -.01em; }
 .sr-add-btn {
