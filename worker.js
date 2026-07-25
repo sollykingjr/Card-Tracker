@@ -54,6 +54,8 @@ export default {
     if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     if (path === '/scan' && request.method === 'GET') return handleScan(request, env, cors);
     if (path === '/scan-batch' && request.method === 'POST') return handleScanBatch(request, env, cors);
+    if (path === '/card-meta-all' && request.method === 'GET') return handleCardMetaAll(env, cors);
+    if (path === '/card-meta' && request.method === 'POST') return handleCardMetaPost(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1281,6 +1283,57 @@ async function handleScanBatch(request, env, cors) {
 }
 
 // ── [22b] cleanSecret ──────────────────────────────────────────────────────────
+// ── [22c] handleCardMetaAll — bulk read of all card tags via KV list metadata ─
+async function handleCardMetaAll(env, cors) {
+  try {
+    const result = {};
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix: 'card-meta:', cursor });
+      for (const k of page.keys) {
+        const itemId = k.name.slice('card-meta:'.length);
+        const tags = (k.metadata && Array.isArray(k.metadata.tags)) ? k.metadata.tags : [];
+        result[itemId] = tags;
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return new Response(JSON.stringify(result), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22d] handleCardMetaPost — set (or clear) tags for one card ─────────────
+async function handleCardMetaPost(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemId = body.itemId;
+    const tags = Array.isArray(body.tags) ? [...new Set(body.tags.filter(Boolean))] : [];
+    if (!itemId) {
+      return new Response(JSON.stringify({ error: 'missing itemId' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+    const key = `card-meta:${itemId}`;
+    if (!tags.length) {
+      await env.CACHE.delete(key);
+    } else {
+      await env.CACHE.put(key, JSON.stringify({ tags }), { metadata: { tags } });
+    }
+    return new Response(JSON.stringify({ itemId, tags }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 const cleanSecret = s => (s || '').trim().replace(/^"|"$/g, '').replace(/,$/, '').trim();
 
 // ── [23] getGoogleAccessToken ─────────────────────────────────────────────────
