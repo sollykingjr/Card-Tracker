@@ -118,17 +118,17 @@ function ctCardBoxHTML(c) {
         ? `<img src="${src}" style="width:100%;aspect-ratio:2.5/3.5;object-fit:cover;display:block" loading="lazy">`
         : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--surf2)"></div>`
       }
-      <div style="padding:10px">
-        <div style="font-size:13px;font-weight:700;line-height:1.3">${c.fullCard || '—'}</div>
-        <div style="font-size:11px;color:var(--tx2);font-weight:500;margin-top:4px">${dateLine}</div>
-        <div style="display:flex;justify-content:space-between;margin-top:8px;gap:8px">
+      <div style="padding:7px">
+        <div style="font-size:11px;font-weight:700;line-height:1.25">${c.fullCard || '—'}</div>
+        <div style="font-size:9px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;gap:6px">
           <div>
-            <div style="font-size:10px;color:var(--tx3);font-weight:600">Purchase</div>
-            <div style="font-size:13px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
+            <div style="font-size:8px;color:var(--tx3);font-weight:600">Purchase</div>
+            <div style="font-size:11px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:10px;color:var(--tx3);font-weight:600">Sale</div>
-            <div style="font-size:13px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+            <div style="font-size:8px;color:var(--tx3);font-weight:600">Sale</div>
+            <div style="font-size:11px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
           </div>
         </div>
       </div>
@@ -287,7 +287,7 @@ function ctRenderBody() {
         ${ctPaginationHTML(ctPage, totalPages)}
         ${matches.length
           ? (ctViewMode === 'card'
-              ? `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
+              ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
               : matches.map(c => ctListRowHTML(c)).join(''))
           : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
         ${ctPaginationHTML(ctPage, totalPages)}
