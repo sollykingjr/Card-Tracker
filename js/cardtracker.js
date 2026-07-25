@@ -2,14 +2,18 @@
 let ctQuery = '';
 let ctSearchActive = false;
 let ctSort = 'default';
-
-function ctOpenSearch(query) {
-  ctQuery = query;
-  ctSearchActive = true;
-}
+let ctSortDir = 'desc';
 
 function ctSetSort(key) {
-  ctSort = ctSort === key ? 'default' : key;
+  if (ctSort !== key) {
+    ctSort = key;
+    ctSortDir = 'desc';
+  } else if (ctSortDir === 'desc') {
+    ctSortDir = 'asc';
+  } else {
+    ctSort = 'default';
+    ctSortDir = 'desc';
+  }
   ctRenderBody();
 }
 
@@ -23,10 +27,11 @@ const CT_SORT_OPTS = [
 function ctSortMatches(matches) {
   if (ctSort === 'default') return matches;
   const arr = matches.slice();
-  if (ctSort === 'purchaseDate') arr.sort((a, b) => new Date(b.datePurchased || 0) - new Date(a.datePurchased || 0));
-  else if (ctSort === 'saleDate') arr.sort((a, b) => new Date(b.transactionDate || 0) - new Date(a.transactionDate || 0));
-  else if (ctSort === 'purchasePrice') arr.sort((a, b) => safeNum(b.purchasePrice) - safeNum(a.purchasePrice));
-  else if (ctSort === 'salePrice') arr.sort((a, b) => safeNum(b.salePrice) - safeNum(a.salePrice));
+  const dir = ctSortDir === 'asc' ? 1 : -1;
+  if (ctSort === 'purchaseDate') arr.sort((a, b) => dir * (new Date(a.datePurchased || 0) - new Date(b.datePurchased || 0)));
+  else if (ctSort === 'saleDate') arr.sort((a, b) => dir * (new Date(a.transactionDate || 0) - new Date(b.transactionDate || 0)));
+  else if (ctSort === 'purchasePrice') arr.sort((a, b) => dir * (safeNum(a.purchasePrice) - safeNum(b.purchasePrice)));
+  else if (ctSort === 'salePrice') arr.sort((a, b) => dir * (safeNum(a.salePrice) - safeNum(b.salePrice)));
   return arr;
 }
 
@@ -136,7 +141,7 @@ function ctRenderBody() {
     const matches = ctSortMatches(q ? cards.filter(c => ctMatches(c, q)) : []).slice(0, 150);
     body.innerHTML = `
       <div class="sort-chips" style="margin:16px 16px 0">
-        ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}</button>`).join('')}
+        ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
       </div>
       <div class="srow" style="margin:16px">
         <div class="srow-t">${matches.length} result${matches.length===1?'':'s'}</div>
