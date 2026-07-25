@@ -60,6 +60,81 @@ function ctThumbHTML(itemId) {
   return `<div style="width:44px;height:44px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);flex-shrink:0"></div>`;
 }
 
+let ctViewMode = 'list';
+
+function ctSetViewMode(mode) {
+  ctViewMode = mode;
+  ctRenderBody();
+}
+
+function ctViewToggleHTML() {
+  return `
+    <div style="display:flex;gap:6px">
+      <button class="schip${ctViewMode==='list'?' on':''}" onclick="ctSetViewMode('list')">List</button>
+      <button class="schip${ctViewMode==='card'?' on':''}" onclick="ctSetViewMode('card')">Card</button>
+    </div>
+  `;
+}
+
+function ctDateLine(c) {
+  const pDate = fmtShortDate(c.datePurchased);
+  const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
+  return [
+    c.itemId ? 'ID: ' + c.itemId : 'No item ID',
+    pDate !== '—' ? 'Purchased ' + pDate : null,
+    sDate && sDate !== '—' ? 'Sold ' + sDate : null
+  ].filter(Boolean).join(' · ');
+}
+
+function ctListRowHTML(c) {
+  const dateLine = ctDateLine(c);
+  return `
+    <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
+      ${ctThumbHTML(c.itemId)}
+      <div class="recent-info">
+        <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
+        <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
+      </div>
+      <div style="display:flex;gap:16px;flex-shrink:0">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--tx3);font-weight:600">Purchase Price</div>
+          <div style="font-size:14px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--tx3);font-weight:600">Sale Price</div>
+          <div style="font-size:14px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function ctCardBoxHTML(c) {
+  const dateLine = ctDateLine(c);
+  const scan = c.itemId ? ctScanCache[c.itemId] : null;
+  const src = scan?.front?.thumb;
+  return `
+    <div style="cursor:pointer;border:1px solid var(--bdr);border-radius:12px;overflow:hidden;background:var(--surf)" onclick="ctOpenCard(${cards.indexOf(c)})">
+      ${src
+        ? `<img src="${src}" style="width:100%;aspect-ratio:2.5/3.5;object-fit:cover;display:block" loading="lazy">`
+        : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--surf2)"></div>`
+      }
+      <div style="padding:10px">
+        <div style="font-size:13px;font-weight:700;line-height:1.3">${c.fullCard || '—'}</div>
+        <div style="font-size:11px;color:var(--tx2);font-weight:500;margin-top:4px">${dateLine}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;gap:8px">
+          <div>
+            <div style="font-size:10px;color:var(--tx3);font-weight:600">Purchase</div>
+            <div style="font-size:13px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:10px;color:var(--tx3);font-weight:600">Sale</div>
+            <div style="font-size:13px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
 function ctPaginationHTML(page, totalPages) {
   if (totalPages <= 1) return '';
   return `
@@ -205,35 +280,16 @@ function ctRenderBody() {
         ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
       </div>
       <div class="srow" style="margin:16px">
-        <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
+          ${ctViewToggleHTML()}
+        </div>
         ${ctPaginationHTML(ctPage, totalPages)}
-        ${matches.length ? matches.map(c => {
-          const pDate = fmtShortDate(c.datePurchased);
-          const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
-          const dateLine = [
-            c.itemId ? 'ID: ' + c.itemId : 'No item ID',
-            pDate !== '—' ? 'Purchased ' + pDate : null,
-            sDate && sDate !== '—' ? 'Sold ' + sDate : null
-          ].filter(Boolean).join(' · ');
-          return `
-          <div class="recent-row" style="cursor:pointer;align-items:flex-start" onclick="ctOpenCard(${cards.indexOf(c)})">
-            ${ctThumbHTML(c.itemId)}
-            <div class="recent-info">
-              <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
-              <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
-            </div>
-            <div style="display:flex;gap:16px;flex-shrink:0">
-              <div style="text-align:right">
-                <div style="font-size:11px;color:var(--tx3);font-weight:600">Purchase Price</div>
-                <div style="font-size:14px;color:var(--tx);font-weight:700">$${safeNum(c.purchasePrice).toFixed(2)}</div>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:11px;color:var(--tx3);font-weight:600">Sale Price</div>
-                <div style="font-size:14px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
-              </div>
-            </div>
-          </div>`;
-        }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
+        ${matches.length
+          ? (ctViewMode === 'card'
+              ? `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
+              : matches.map(c => ctListRowHTML(c)).join(''))
+          : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
         ${ctPaginationHTML(ctPage, totalPages)}
       </div>
     `;
