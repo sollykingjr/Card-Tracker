@@ -274,13 +274,11 @@ function ctFiltersActiveCount() {
 
 function ctFilterButtonHTML() {
   const n = ctFiltersActiveCount();
-  return `<button class="schip${n ? ' on' : ''}" onclick="ctOpenFilters()">Filters${n ? ` (${n})` : ''}</button>`;
+  return `<button class="schip ct-filter-mobile-btn${n ? ' on' : ''}" onclick="ctOpenFilters()">Filters${n ? ` (${n})` : ''}</button>`;
 }
 
-function ctRenderFilterContent() {
-  const box = document.getElementById('ct-filter-content');
-  if (!box) return;
-  box.innerHTML = `
+function ctFilterPanelHTML(scope) {
+  return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="mname" style="font-size:18px;margin-bottom:0">Filters</div>
       <button onclick="ctResetFilters()" style="padding:6px 12px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Reset</button>
@@ -303,11 +301,18 @@ function ctRenderFilterContent() {
       <span style="font-size:14px;color:var(--tx)">Graded</span>
     </label>
 
-    ${ctPickerHTML('sports')}
-    ${ctPickerHTML('years')}
-    ${ctPickerHTML('sets')}
-    ${ctPickerHTML('tags')}
+    ${ctPickerHTML('sports', scope)}
+    ${ctPickerHTML('years', scope)}
+    ${ctPickerHTML('sets', scope)}
+    ${ctPickerHTML('tags', scope)}
   `;
+}
+
+function ctRenderFilterContent() {
+  const sheetBox = document.getElementById('ct-filter-content');
+  if (sheetBox) sheetBox.innerHTML = ctFilterPanelHTML('sheet');
+  const sidebarBox = document.getElementById('ct-filter-sidebar-content');
+  if (sidebarBox) sidebarBox.innerHTML = ctFilterPanelHTML('sidebar');
 }
 
 function ctOpenFilters() {
@@ -379,9 +384,9 @@ function ctPickerSelect(key, value) {
   ctPickerToggle(key, value);
 }
 
-function ctPickerFilterSuggestions(key) {
-  const input = document.getElementById(`ct-picker-input-${key}`);
-  const dd = document.getElementById(`ct-picker-dropdown-${key}`);
+function ctPickerFilterSuggestions(key, scope) {
+  const input = document.getElementById(`ct-picker-input-${scope}-${key}`);
+  const dd = document.getElementById(`ct-picker-dropdown-${scope}-${key}`);
   if (!input || !dd) return;
   const p = CT_FILTER_PICKERS[key];
   const val = input.value.trim().toLowerCase();
@@ -395,12 +400,12 @@ function ctPickerFilterSuggestions(key) {
     return;
   }
   dd.innerHTML = matches.map(v => `
-    <div onclick="ctPickerSelect('${key}', '${v.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--tx)">${v}</div>
+    <div onclick="ctPickerToggle('${key}', '${v.replace(/'/g,"\\'")}')" style="padding:8px 10px;cursor:pointer;font-size:12px;color:var(--tx)">${v}</div>
   `).join('');
   dd.style.display = 'block';
 }
 
-function ctPickerHTML(key) {
+function ctPickerHTML(key, scope) {
   const p = CT_FILTER_PICKERS[key];
   const selected = p.getSelected();
   return `
@@ -414,8 +419,8 @@ function ctPickerHTML(key) {
       `).join('')}
     </div>
     <div style="position:relative">
-      <input id="ct-picker-input-${key}" placeholder="Search ${p.label.toLowerCase()}..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:12px;font-family:inherit" oninput="ctPickerFilterSuggestions('${key}')" onfocus="ctPickerFilterSuggestions('${key}')">
-      <div id="ct-picker-dropdown-${key}" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:8px;max-height:160px;overflow-y:auto;z-index:60;box-shadow:var(--shadow-lg)"></div>
+      <input id="ct-picker-input-${scope}-${key}" placeholder="Search ${p.label.toLowerCase()}..." autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:12px;font-family:inherit" oninput="ctPickerFilterSuggestions('${key}','${scope}')" onfocus="ctPickerFilterSuggestions('${key}','${scope}')">
+      <div id="ct-picker-dropdown-${scope}-${key}" style="display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:8px;max-height:160px;overflow-y:auto;z-index:60;box-shadow:var(--shadow-lg)"></div>
     </div>
   `;
 }
@@ -659,26 +664,38 @@ function ctRenderBody() {
     const matches = allMatches.slice(startIdx, startIdx + CT_PAGE_SIZE);
     ctFetchScansForPage(matches.map(c => c.itemId));
     body.innerHTML = `
-      <div class="sort-chips" style="margin:16px 16px 0">
-        ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
-      </div>
-      <div class="srow" style="margin:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-          <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
-          <div style="display:flex;gap:6px">
-            ${ctFilterButtonHTML()}
-            ${ctViewToggleHTML()}
+      <div style="display:flex;gap:16px;align-items:flex-start">
+        <div class="ct-filter-sidebar" style="flex-shrink:0;width:240px">
+          <div class="srow" style="margin:16px 0 16px 16px">
+            <div id="ct-filter-sidebar-content"></div>
           </div>
         </div>
-        ${ctPaginationHTML(ctPage, totalPages)}
-        ${matches.length
-          ? (ctViewMode === 'card'
-? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`              : matches.map(c => ctListRowHTML(c)).join(''))
-          : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
-        ${ctPaginationHTML(ctPage, totalPages)}
+        <div style="flex:1;min-width:0">
+          <div class="sort-chips" style="margin:16px 16px 0">
+            ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
+          </div>
+          <div class="srow" style="margin:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
+              <div style="display:flex;gap:6px">
+                ${ctFilterButtonHTML()}
+                ${ctViewToggleHTML()}
+              </div>
+            </div>
+            ${ctPaginationHTML(ctPage, totalPages)}
+            ${matches.length
+              ? (ctViewMode === 'card'
+                ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
+                : matches.map(c => ctListRowHTML(c)).join(''))
+              : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
+            ${ctPaginationHTML(ctPage, totalPages)}
+          </div>
+        </div>
       </div>
     `;
+    ctRenderFilterContent();
     return;
+  }
   }
 
   const sold  = cards.filter(c =>  c.salePrice);
