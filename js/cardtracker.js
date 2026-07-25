@@ -32,6 +32,17 @@ function ctSetPage(p) {
   document.getElementById('ct-body')?.scrollIntoView({ block: 'start' });
 }
 
+function ctPaginationHTML(page, totalPages) {
+  if (totalPages <= 1) return '';
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0;gap:8px">
+      <button onclick="ctSetPage(${page - 1})" ${page <= 1 ? 'disabled' : ''} style="padding:8px 16px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${page <= 1 ? '0.4' : '1'}">← Prev</button>
+      <div style="font-size:12px;color:var(--tx3)">Page ${page} of ${totalPages}</div>
+      <button onclick="ctSetPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''} style="padding:8px 16px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${page >= totalPages ? '0.4' : '1'}">Next →</button>
+    </div>
+  `;
+}
+
 const CT_SORT_OPTS = [
   { k: 'purchaseDate', l: 'Purchase Date' },
   { k: 'saleDate', l: 'Sale Date' },
@@ -166,6 +177,7 @@ function ctRenderBody() {
       </div>
       <div class="srow" style="margin:16px">
         <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
+        ${ctPaginationHTML(ctPage, totalPages)}
         ${matches.length ? matches.map(c => {
           const pDate = fmtShortDate(c.datePurchased);
           const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
@@ -192,13 +204,7 @@ function ctRenderBody() {
             </div>
           </div>`;
         }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
-        ${totalPages > 1 ? `
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px">
-            <button onclick="ctSetPage(${ctPage - 1})" ${ctPage <= 1 ? 'disabled' : ''} style="padding:8px 16px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${ctPage <= 1 ? '0.4' : '1'}">← Prev</button>
-            <div style="font-size:12px;color:var(--tx3)">Page ${ctPage} of ${totalPages}</div>
-            <button onclick="ctSetPage(${ctPage + 1})" ${ctPage >= totalPages ? 'disabled' : ''} style="padding:8px 16px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;opacity:${ctPage >= totalPages ? '0.4' : '1'}">Next →</button>
-          </div>
-        ` : ''}
+        ${ctPaginationHTML(ctPage, totalPages)}
       </div>
     `;
     return;
