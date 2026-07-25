@@ -48,6 +48,75 @@ async function ctLoadTags() {
   ctRenderBody();
 }
 
+function ctGetTags(c) {
+  const stored = c.itemId ? (ctTagCache[c.itemId] || []) : [];
+  return c.salePrice ? [...new Set([...stored, 'Sold'])] : stored;
+}
+
+function ctRenderTags(idx) {
+  const box = document.getElementById('ct-tags');
+  const c = cards[idx];
+  if (!box || !c) return;
+  const tags = ctGetTags(c);
+  box.innerHTML = `
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Tags</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${c.itemId ? '8px' : '0'}">
+      ${tags.length ? tags.map(t => t === 'Sold'
+        ? `<div style="padding:5px 11px;border-radius:20px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700">Sold</div>`
+        : `<div style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;background:var(--surf2);border:1px solid var(--bdr2);color:var(--tx2);font-size:11px;font-weight:700">
+             ${t}
+             <button onclick="ctRemoveTag(${idx}, '${t.replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--tx3);font-size:13px;cursor:pointer;padding:0;line-height:1;font-family:inherit">×</button>
+           </div>`
+      ).join('') : '<div style="font-size:11px;color:var(--tx3)">No tags yet</div>'}
+    </div>
+    ${c.itemId ? `
+      <div style="display:flex;gap:6px">
+        <input id="ct-tag-input" placeholder="Add a tag..." style="flex:1;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:12px;font-family:inherit" onkeydown="if(event.key==='Enter'){event.preventDefault();ctAddTag(${idx})}">
+        <button onclick="ctAddTag(${idx})" style="padding:8px 14px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Add</button>
+      </div>
+    ` : ''}
+  `;
+}
+
+async function ctAddTag(idx) {
+  const c = cards[idx];
+  if (!c || !c.itemId) return;
+  const input = document.getElementById('ct-tag-input');
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  const current = ctTagCache[c.itemId] || [];
+  if (current.some(t => t.toLowerCase() === val.toLowerCase())) {
+    input.value = '';
+    return;
+  }
+  const updated = [...current, val];
+  ctTagCache[c.itemId] = updated;
+  ctRenderTags(idx);
+  try {
+    await fetch(`${WORKER_URL}/card-meta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: c.itemId, tags: updated })
+    });
+  } catch (e) {}
+}
+
+async function ctRemoveTag(idx, tag) {
+  const c = cards[idx];
+  if (!c || !c.itemId) return;
+  const current = ctTagCache[c.itemId] || [];
+  const updated = current.filter(t => t !== tag);
+  ctTagCache[c.itemId] = updated;
+  ctRenderTags(idx);
+  try {
+    await fetch(`${WORKER_URL}/card-meta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: c.itemId, tags: updated })
+    });
+  } catch (e) {}
+}
+
 async function ctFetchScansForPage(itemIds) {
   const needed = [...new Set(itemIds.filter(id => id && !(id in ctScanCache)))];
   if (!needed.length) return;
@@ -212,12 +281,13 @@ function ctOpenCard(idx) {
       <div class="scard"><div class="slbl">Date</div><div class="sval">${fmtShortDate(date)}</div></div>
     </div>
      <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="width:100%;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">Copy Item ID</button>
+    <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
   `;
   document.getElementById('mwrap').classList.add('on');
+  ctRenderTags(idx);
   if (c.itemId) ctLoadScans(c.itemId);
 }
-
 async function ctLoadScans(itemId) {
   const box = document.getElementById('ct-scans');
   if (!box) return;
