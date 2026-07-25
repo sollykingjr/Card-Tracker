@@ -524,6 +524,17 @@ html, body {
 .recent-info { flex: 1; min-width: 0; }
 .recent-info .rc-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-info .rc-date { font-size: 11px; color: var(--tx3); margin-top: 1px; }
+
+.cs-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--bdr); cursor: pointer; }
+.cs-row:last-child { border-bottom: none; }
+.cs-row-top { display: flex; align-items: center; gap: 8px; }
+.cs-row-prices { display: flex; gap: 16px; }
+
+@media (min-width: 768px) {
+  .cs-row { flex-direction: row; align-items: flex-start; gap: 8px; }
+  .cs-row-top { align-items: flex-start; }
+  .cs-row-prices { flex-shrink: 0; }
+}
 .recent-price { font-size: 13px; font-weight: 700; flex-shrink: 0; font-family: 'DM Mono', monospace; }
 .recent-sale { text-align: right; flex-shrink: 0; }
 .recent-sale .rs-price { font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace; }
