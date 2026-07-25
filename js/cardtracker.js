@@ -46,6 +46,7 @@ async function ctLoadTags() {
     ctTagCache = {};
   }
   ctRenderBody();
+  if (ctOpenCardIdx !== null) ctRenderTags(ctOpenCardIdx);
 }
 
 function ctGetTags(c) {
@@ -357,9 +358,12 @@ function ctCopyId(id, btn) {
   }).catch(()=>{});
 }
 
+let ctOpenCardIdx = null;
+
 function ctOpenCard(idx) {
   const c = cards[idx];
   if (!c) return;
+  ctOpenCardIdx = idx;
   const date = c.transactionDate || c.datePurchased;
   document.getElementById('mcontent').innerHTML = `
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
