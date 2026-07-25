@@ -33,6 +33,20 @@ function ctSetPage(p) {
 }
 
 let ctScanCache = {};
+let ctTagCache = {};
+let ctTagsLoaded = false;
+
+async function ctLoadTags() {
+  if (ctTagsLoaded) return;
+  ctTagsLoaded = true;
+  try {
+    const res = await fetch(`${WORKER_URL}/card-meta-all`);
+    ctTagCache = await res.json() || {};
+  } catch (e) {
+    ctTagCache = {};
+  }
+  ctRenderBody();
+}
 
 async function ctFetchScansForPage(itemIds) {
   const needed = [...new Set(itemIds.filter(id => id && !(id in ctScanCache)))];
@@ -233,6 +247,7 @@ async function ctLoadScans(itemId) {
 
 function renderCardTracker() {
   const root = document.getElementById('cardtracker-root');
+  ctLoadTags();
 
   root.innerHTML = `
     <div class="sr-wrap">
