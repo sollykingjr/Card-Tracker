@@ -6,6 +6,14 @@ let ctSortDir = 'desc';
 let ctPage = 1;
 const CT_PAGE_SIZE = 50;
 
+let ctFilterSold = 'all';        // 'all' | 'exclude' | 'only'
+let ctFilterTags = [];           // AND within category
+let ctFilterSports = [];         // OR within category
+let ctFilterYears = [];          // OR within category
+let ctFilterSets = [];           // OR within category
+let ctFilterSerial = false;      // checked = only serial-numbered
+let ctFilterGraded = false;      // checked = only graded
+
 function ctOpenSearch(query) {
   ctQuery = query;
   ctSearchActive = true;
@@ -340,13 +348,45 @@ function ctSortMatches(matches) {
   return arr;
 }
 
+function ctParseQueryGroups(q) {
+  const groups = [];
+  const groupRe = /\(([^)]*)\)/g;
+  let m;
+  while ((m = groupRe.exec(q)) !== null) {
+    const terms = m[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (terms.length) groups.push(terms);
+  }
+  const remaining = q.replace(groupRe, ' ');
+  remaining.split(/\s+/).map(s => s.trim().toLowerCase()).filter(Boolean).forEach(s => groups.push([s]));
+  return groups;
+}
+
 function ctMatches(c, q) {
   const hay = [c.playerDisplay, c.fullCard, c.itemId, c.serialNo, c.sport, c.year, c.set, c.variation, c.version, c.cardNo, c.grade]
     .filter(Boolean).join(' ').toLowerCase();
-  const words = q.split(/\s+/).filter(Boolean);
-  return words.every(w => hay.includes(w));
+  const groups = ctParseQueryGroups(q);
+  if (!groups.length) return true;
+  return groups.every(orGroup => orGroup.some(term => hay.includes(term)));
 }
 
+function ctFilterCategoryMatch(c) {
+  if (ctFilterSold === 'exclude' && c.salePrice) return false;
+  if (ctFilterSold === 'only' && !c.salePrice) return false;
+
+  if (ctFilterSerial && !c.serialNo) return false;
+  if (ctFilterGraded && !c.grade) return false;
+
+  if (ctFilterSports.length && !ctFilterSports.includes(c.sport)) return false;
+  if (ctFilterYears.length && !ctFilterYears.includes(String(c.year))) return false;
+  if (ctFilterSets.length && !ctFilterSets.includes(c.set)) return false;
+
+  if (ctFilterTags.length) {
+    const cardTags = ctGetTags(c);
+    if (!ctFilterTags.every(t => cardTags.includes(t))) return false;
+  }
+
+  return true;
+}
 function ctCopyId(id, btn) {
   if (!id) return;
   navigator.clipboard.writeText(id).then(() => {
@@ -450,7 +490,9 @@ function ctRenderBody() {
   const q = ctQuery.trim().toLowerCase();
 
   if (ctSearchActive) {
-    const allMatches = ctSortMatches(q ? cards.filter(c => ctMatches(c, q)) : []);
+    const allMatches = ctSortMatches(
+      (q ? cards.filter(c => ctMatches(c, q)) : cards.slice()).filter(ctFilterCategoryMatch)
+    );
     const totalPages = Math.max(1, Math.ceil(allMatches.length / CT_PAGE_SIZE));
     if (ctPage > totalPages) ctPage = totalPages;
     const startIdx = (ctPage - 1) * CT_PAGE_SIZE;
