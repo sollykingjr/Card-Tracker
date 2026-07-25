@@ -74,32 +74,13 @@ function renderCardTracker() {
   root.innerHTML = `
     <div class="sr-wrap">
       <div style="padding:16px 16px 0">
-        <div class="si">
-          <input id="ct-search" placeholder="Search name, set, year, item ID..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-          <button id="ct-clear">&times;</button>
-        </div>
+        ${searchBarHTML('ct', 'Search name, set, year, item ID...')}
       </div>
       <div id="ct-body"></div>
     </div>
   `;
 
-  const input = document.getElementById('ct-search');
-  const clearBtn = document.getElementById('ct-clear');
-  input.value = ctQuery;
-  clearBtn.classList.toggle('on', ctQuery.length > 0);
-
-  input.addEventListener('input', e => {
-    ctQuery = e.target.value;
-    clearBtn.classList.toggle('on', ctQuery.length > 0);
-    ctRenderBody();
-  });
-  clearBtn.addEventListener('click', () => {
-    ctQuery = '';
-    input.value = '';
-    clearBtn.classList.remove('on');
-    input.focus();
-    ctRenderBody();
-  });
+  wireSearchBar('ct', () => ctQuery, v => ctQuery = v, ctRenderBody);
 
   ctRenderBody();
 }
