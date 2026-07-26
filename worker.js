@@ -1202,10 +1202,15 @@ async function handleScan(request, env, cors) {
 
     const token = await getGoogleAccessToken(env);
     const q = `name contains '${itemId}' and mimeType contains 'image/' and trashed=false`;
-    const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=10`;
+    const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink,parents)&pageSize=10`;
     const driveRes = await fetch(driveUrl, { headers: { Authorization: `Bearer ${token}` } });
     const driveData = await driveRes.json();
-    const files = driveData.files || [];
+    const allFiles = driveData.files || [];
+
+    const COMC_FOLDER_ID = '19S73azDgJwYkqfkMsx6c1nlp2XN5pjT0';
+    const isComc = f => (f.parents || []).includes(COMC_FOLDER_ID);
+    const nonComcFiles = allFiles.filter(f => !isComc(f));
+    const files = nonComcFiles.length > 0 ? nonComcFiles : allFiles;
 
     const back = files.find(f => /back/i.test(f.name));
     const front = files.find(f => f !== back) || files[0] || null;
