@@ -56,6 +56,8 @@ export default {
     if (path === '/scan-batch' && request.method === 'POST') return handleScanBatch(request, env, cors);
     if (path === '/card-meta-all' && request.method === 'GET') return handleCardMetaAll(env, cors);
     if (path === '/card-meta' && request.method === 'POST') return handleCardMetaPost(request, env, cors);
+    if (path === '/comc-pulled-all' && request.method === 'GET') return handleComcPulledAll(env, cors);
+    if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1330,6 +1332,51 @@ async function handleCardMetaPost(request, env, cors) {
       await env.CACHE.put(key, JSON.stringify({ tags }), { metadata: { tags } });
     }
     return new Response(JSON.stringify({ itemId, tags }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22e] handleComcPulledAll — bulk list of COMC items already pulled ──────
+async function handleComcPulledAll(env, cors) {
+  try {
+    let pulled = ';';
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix: 'comc-pulled:', cursor });
+      for (const k of page.keys) {
+        pulled += k.name.slice('comc-pulled:'.length) + ';';
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return new Response(pulled, {
+      headers: { ...cors, 'Content-Type': 'text/plain' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22f] handleComcPulledPost — mark one item+side as pulled, permanently ──
+async function handleComcPulledPost(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemId = body.itemId;
+    const side = body.side;
+    if (!itemId || !side) {
+      return new Response(JSON.stringify({ error: 'missing itemId or side' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+    const key = `comc-pulled:${itemId}-${side}`;
+    await env.CACHE.put(key, 'true');
+    return new Response(JSON.stringify({ itemId, side, ok: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch (e) {
