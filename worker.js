@@ -58,6 +58,7 @@ export default {
     if (path === '/card-meta' && request.method === 'POST') return handleCardMetaPost(request, env, cors);
     if (path === '/comc-pulled-all' && request.method === 'GET') return handleComcPulledAll(env, cors);
     if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
+    if (path === '/comc-pulled-invalidate-scans' && request.method === 'GET') return handleComcPulledInvalidateScans(env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1378,7 +1379,42 @@ async function handleComcPulledPost(request, env, cors) {
     }
     const key = `comc-pulled:${itemId}-${side}`;
     await env.CACHE.put(key, 'true');
+    await env.CACHE.delete(`scan:${itemId}`);
     return new Response(JSON.stringify({ itemId, side, ok: true }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22g] handleComcPulledInvalidateScans — one-time bulk cache-bust for
+// every item the automation has ever touched, so the app's normal (cached)
+// scan lookup stops serving stale "no scan" results for cards that got
+// scanned after their cache entry was already set.
+async function handleComcPulledInvalidateScans(env, cors) {
+  try {
+    const itemIds = new Set();
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix: 'comc-pulled:', cursor });
+      for (const k of page.keys) {
+        const suffix = k.name.slice('comc-pulled:'.length);
+        const itemId = suffix.substring(0, suffix.lastIndexOf('-'));
+        itemIds.add(itemId);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+
+    let count = 0;
+    for (const itemId of itemIds) {
+      await env.CACHE.delete(`scan:${itemId}`);
+      count++;
+    }
+
+    return new Response(JSON.stringify({ invalidated: count }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch (e) {
