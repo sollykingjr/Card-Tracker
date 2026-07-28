@@ -1252,10 +1252,12 @@ async function handleScanBatch(request, env, cors) {
 
     const token = await getGoogleAccessToken(env);
 
+    const forceFresh = !!body.fresh;
+
     const results = await Promise.all(itemIds.map(async (itemId) => {
       const cacheKey = `scan:${itemId}`;
       const cached = await env.CACHE.get(cacheKey);
-      if (cached) return [itemId, JSON.parse(cached)];
+      if (cached && !forceFresh) return [itemId, JSON.parse(cached)];
 
       try {
         const q = `name contains '${itemId}' and mimeType contains 'image/' and trashed=false`;
