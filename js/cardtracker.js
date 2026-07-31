@@ -637,10 +637,11 @@ function ctOpenCard(idx) {
   if (!c) return;
   ctOpenCardIdx = idx;
   const date = c.transactionDate || c.datePurchased;
-  document.getElementById('mcontent').innerHTML = `
+  const ctModalHtml = `
     <button class="ct-menu-btn" onclick="ctToggleMenu(event)">⋮</button>
     <div class="ct-menu" id="ct-menu">
       <div class="ct-menu-item" onclick="ctRefreshScans()">Refresh Scans</div>
+      <div class="ct-menu-item" onclick="ctShowEditMetadata(${idx})">Edit Metadata</div>
     </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
     <div class="msub">${[c.year, c.sport].filter(Boolean).join(' ')}${c.grade ? ' · Graded ' + c.grade : ''}</div>
@@ -657,17 +658,106 @@ function ctOpenCard(idx) {
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
   `;
+  _modalMainHtml = ctModalHtml;
+  document.getElementById('mcontent').innerHTML = ctModalHtml;
   document.getElementById('mwrap').classList.add('on');
   ctRenderTags(idx);
   ctRenderPendingBadge(idx);
   if (c.itemId) ctLoadScans(c.itemId);
 }
+function ctShowEditMetadata(idx) {
+  const menu = document.getElementById('ct-menu');
+  if (menu) menu.classList.remove('on');
+  const c = cards[idx];
+  if (!c) return;
+
+  const fieldInput = (label, key) => {
+    const prop = CT_OVERRIDE_FIELD_MAP[key];
+    const val = (c[prop] ?? '').toString();
+    const inputId = `ct-edit-${prop}`;
+    return `
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${label}</div>
+        <input id="${inputId}" value="${val.replace(/"/g,'&quot;')}" autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">
+      </div>
+    `;
+  };
+
+  document.getElementById('mcontent').innerHTML = `
+    <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
+      <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+        style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0">
+        ← Back
+      </button>
+    </div>
+    <div class="section-hdr">Edit Metadata</div>
+    <div style="margin-top:12px">
+      ${fieldInput('Sport', 'Sport')}
+      ${fieldInput('Year', 'Year')}
+      ${fieldInput('Set', 'Set')}
+      ${fieldInput('Variation', 'Variation')}
+      ${fieldInput('Version', 'Version')}
+      ${fieldInput('Card No', 'Card No')}
+      ${fieldInput('Player Name', 'Player Name')}
+      ${fieldInput('Serial No', 'Serial No')}
+      ${fieldInput('Qty Manufactured', 'Qty Manufactured')}
+      ${fieldInput('Purchased From', 'Purchased From')}
+      ${fieldInput('Grade', 'Grade')}
+    </div>
+    <div id="ct-edit-status" style="font-size:12px;color:var(--tx3);margin:4px 0 10px"></div>
+    <button id="ct-edit-save-btn" onclick="ctSaveMetadata(${idx})" style="width:100%;height:42px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Changes</button>
+  `;
+}
+
 function ctRefreshScans() {
   const menu = document.getElementById('ct-menu');
   if (menu) menu.classList.remove('on');
   const c = cards[ctOpenCardIdx];
   if (!c || !c.itemId) return;
   ctLoadScans(c.itemId, true);
+}
+
+async function ctSaveMetadata(idx) {
+  const c = cards[idx];
+  if (!c || !c.itemId) return;
+
+  const status = document.getElementById('ct-edit-status');
+  const saveBtn = document.getElementById('ct-edit-save-btn');
+  const fields = {};
+
+  Object.keys(CT_OVERRIDE_FIELD_MAP).forEach(label => {
+    const prop = CT_OVERRIDE_FIELD_MAP[label];
+    const input = document.getElementById(`ct-edit-${prop}`);
+    if (!input) return;
+    const newVal = input.value.trim();
+    const currentVal = (c[prop] ?? '').toString().trim();
+    if (newVal !== currentVal) fields[label] = newVal;
+  });
+
+  if (!Object.keys(fields).length) {
+    if (status) status.textContent = 'No changes to save.';
+    return;
+  }
+
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+  if (status) status.textContent = '';
+
+  try {
+    const res = await fetch(`${WORKER_URL}/card-override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: c.itemId, fields })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'save failed');
+
+    ctPendingCache[c.itemId] = { fields };
+    document.getElementById('mcontent').innerHTML = _modalMainHtml;
+    ctRenderPendingBadge(idx);
+  } catch (e) {
+    if (status) status.textContent = "Couldn't save changes. Try again.";
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
+  }
 }
 
 async function ctLoadScans(itemId, force) {
