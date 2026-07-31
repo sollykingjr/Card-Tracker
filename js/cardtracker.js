@@ -636,7 +636,6 @@ function ctOpenCard(idx) {
   const c = cards[idx];
   if (!c) return;
   ctOpenCardIdx = idx;
-  const date = c.transactionDate || c.datePurchased;
   const ctModalHtml = `
     <button class="ct-menu-btn" onclick="ctToggleMenu(event)">⋮</button>
     <div class="ct-menu" id="ct-menu">
@@ -648,11 +647,11 @@ function ctOpenCard(idx) {
     <div id="ct-pending-badge"></div>
     <div class="sgrid">
       <div class="scard"><div class="slbl">Item ID</div><div class="sval">${c.itemId || '—'}</div></div>
-      <div class="scard"><div class="slbl">Serial No</div><div class="sval">${c.serialNo || '—'}</div></div>
       <div class="scard"><div class="slbl">Purchase price</div><div class="sval">$${safeNum(c.purchasePrice).toFixed(2)}</div></div>
       <div class="scard"><div class="slbl">Sale price</div><div class="sval">${c.salePrice ? '$'+safeNum(c.salePrice).toFixed(2) : '—'}</div></div>
       <div class="scard"><div class="slbl">Net profit</div><div class="sval"><span class="${safeNum(c.netProfit,true)>=0?'up':'dn'}">${safeNum(c.netProfit,true)>=0?'+':''}$${safeNum(c.netProfit,true).toFixed(2)}</span></div></div>
-      <div class="scard"><div class="slbl">Date</div><div class="sval">${fmtShortDate(date)}</div></div>
+      <div class="scard"><div class="slbl">Purchase Date</div><div class="sval">${fmtShortDate(c.datePurchased)}</div></div>
+      <div class="scard"><div class="slbl">Sale Date</div><div class="sval">${c.salePrice ? fmtShortDate(c.transactionDate) : '—'}</div></div>
     </div>
      <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="width:100%;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">Copy Item ID</button>
     <div id="ct-tags" style="margin-top:14px"></div>
