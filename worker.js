@@ -59,6 +59,7 @@ export default {
     if (path === '/comc-pulled-all' && request.method === 'GET') return handleComcPulledAll(env, cors);
     if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
     if (path === '/comc-pulled-invalidate-scans' && request.method === 'GET') return handleComcPulledInvalidateScans(env, cors);
+    if (path === '/test-sheet-write' && request.method === 'GET') return handleTestSheetWrite(env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1425,6 +1426,71 @@ async function handleComcPulledInvalidateScans(env, cors) {
 }
 
 const cleanSecret = s => (s || '').trim().replace(/^"|"$/g, '').replace(/,$/, '').trim();
+
+// ── [23a] getGoogleAccessTokenForSheets ───────────────────────────────────────
+async function getGoogleAccessTokenForSheets(env) {
+  const cached = await env.CACHE.get('google_access_token_sheets');
+  if (cached) return cached;
+
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
+    iss: cleanSecret(env.GOOGLE_SA_EMAIL),
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
+  })}`;
+
+  const key = await importPrivateKey(cleanSecret(env.GOOGLE_SA_KEY));
+  const signature = await crypto.subtle.sign(
+    { name: 'RSASSA-PKCS1-v1_5' },
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${unsigned}.${sigB64}`
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error('google_auth_failed_sheets: ' + JSON.stringify(data));
+
+  await env.CACHE.put('google_access_token_sheets', data.access_token, { expirationTtl: 3500 });
+  return data.access_token;
+}
+
+// ── [23b] handleTestSheetWrite ─────────────────────────────────────────────────
+async function handleTestSheetWrite(env, cors) {
+  try {
+    const token = await getGoogleAccessTokenForSheets(env);
+    const sheetId = '1W413RgDo5q2H7Zu0edx8r9Jngw2NJ_bPsJGdNQ_Oh-w';
+    const range = encodeURIComponent("'ItemID Overrides'!Z1");
+
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ values: [[`test-write-${new Date().toISOString()}`]] })
+      }
+    );
+    const data = await res.json();
+    return new Response(JSON.stringify({ ok: res.ok, status: res.status, data }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
 
 // ── [23] getGoogleAccessToken ─────────────────────────────────────────────────
 async function getGoogleAccessToken(env) {
