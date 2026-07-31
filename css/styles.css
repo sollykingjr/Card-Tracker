@@ -490,7 +490,7 @@ html, body {
 }
 .ct-menu-item:hover { background: var(--surf2); }
 .mhandle { width: 36px; height: 4px; background: var(--bdr3); border-radius: 2px; margin: 0 auto 18px; }
-.mname { font-size: 22px; font-weight: 700; margin-bottom: 3px; letter-spacing: -.02em; }
+.mname { font-size: 22px; font-weight: 700; margin-bottom: 3px; letter-spacing: -.02em; padding-right: 34px; }
 .msub { font-size: 13px; color: var(--tx2); margin-bottom: 16px; font-weight: 400; }
 
 /* stat grid inside modal */
