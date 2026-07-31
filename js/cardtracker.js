@@ -43,6 +43,14 @@ function ctSetPage(p) {
 let ctScanCache = {};
 let ctTagCache = {};
 let ctTagsLoaded = false;
+let ctPendingCache = {};
+let ctPendingLoaded = false;
+
+const CT_OVERRIDE_FIELD_MAP = {
+  Sport: 'sport', Year: 'year', Set: 'set', Variation: 'variation', Version: 'version',
+  'Card No': 'cardNo', 'Player Name': 'playerDisplay', 'Serial No': 'serialNo',
+  'Qty Manufactured': 'qtyManufactured', 'Purchased From': 'purchasedFrom', Grade: 'grade'
+};
 
 async function ctLoadTags() {
   if (ctTagsLoaded) return;
@@ -55,6 +63,46 @@ async function ctLoadTags() {
   }
   ctRenderBody();
   if (ctOpenCardIdx !== null) ctRenderTags(ctOpenCardIdx);
+}
+
+async function ctLoadPendingOverrides() {
+  if (ctPendingLoaded) return;
+  ctPendingLoaded = true;
+  try {
+    const res = await fetch(`${WORKER_URL}/card-override-pending-all`);
+    ctPendingCache = await res.json() || {};
+  } catch (e) {
+    ctPendingCache = {};
+  }
+  if (ctOpenCardIdx !== null) ctRenderPendingBadge(ctOpenCardIdx);
+}
+
+function ctCheckPendingResolved(c) {
+  const pending = c.itemId ? ctPendingCache[c.itemId] : null;
+  if (!pending || !pending.fields) return null;
+  const stillPending = Object.keys(pending.fields).some(f => {
+    const prop = CT_OVERRIDE_FIELD_MAP[f];
+    if (!prop) return false;
+    return String(c[prop] ?? '').trim() !== String(pending.fields[f] ?? '').trim();
+  });
+  if (stillPending) return true;
+  delete ctPendingCache[c.itemId];
+  fetch(`${WORKER_URL}/card-override-pending-clear`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId: c.itemId })
+  }).catch(() => {});
+  return false;
+}
+
+function ctRenderPendingBadge(idx) {
+  const box = document.getElementById('ct-pending-badge');
+  const c = cards[idx];
+  if (!box || !c) return;
+  const isPending = ctCheckPendingResolved(c);
+  box.innerHTML = isPending
+    ? `<div style="display:inline-block;padding:4px 10px;border-radius:20px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;margin-top:6px">Pending update</div>`
+    : '';
 }
 
 function ctGetTags(c) {
@@ -596,6 +644,7 @@ function ctOpenCard(idx) {
     </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
     <div class="msub">${[c.year, c.sport].filter(Boolean).join(' ')}${c.grade ? ' · Graded ' + c.grade : ''}</div>
+    <div id="ct-pending-badge"></div>
     <div class="sgrid">
       <div class="scard"><div class="slbl">Item ID</div><div class="sval">${c.itemId || '—'}</div></div>
       <div class="scard"><div class="slbl">Serial No</div><div class="sval">${c.serialNo || '—'}</div></div>
@@ -610,6 +659,7 @@ function ctOpenCard(idx) {
   `;
   document.getElementById('mwrap').classList.add('on');
   ctRenderTags(idx);
+  ctRenderPendingBadge(idx);
   if (c.itemId) ctLoadScans(c.itemId);
 }
 function ctRefreshScans() {
@@ -651,6 +701,7 @@ async function ctLoadScans(itemId, force) {
 function renderCardTracker() {
   const root = document.getElementById('cardtracker-root');
   ctLoadTags();
+  ctLoadPendingOverrides();
 
   root.innerHTML = `
     <div class="sr-wrap">
