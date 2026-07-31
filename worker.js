@@ -60,6 +60,8 @@ export default {
     if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
     if (path === '/comc-pulled-invalidate-scans' && request.method === 'GET') return handleComcPulledInvalidateScans(env, cors);
     if (path === '/card-override' && request.method === 'POST') return handleCardOverride(request, env, cors);
+    if (path === '/card-override-pending-all' && request.method === 'GET') return handleCardOverridePendingAll(env, cors);
+    if (path === '/card-override-pending-clear' && request.method === 'POST') return handleCardOverridePendingClear(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1427,6 +1429,51 @@ async function handleComcPulledInvalidateScans(env, cors) {
 
 const cleanSecret = s => (s || '').trim().replace(/^"|"$/g, '').replace(/,$/, '').trim();
 
+// ── [22f] handleCardOverridePendingAll — bulk read of all pending metadata overrides ─
+async function handleCardOverridePendingAll(env, cors) {
+  try {
+    const result = {};
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix: 'pending-override:', cursor });
+      for (const k of page.keys) {
+        const itemId = k.name.slice('pending-override:'.length);
+        const raw = await env.CACHE.get(k.name);
+        if (raw) result[itemId] = JSON.parse(raw);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return new Response(JSON.stringify(result), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22g] handleCardOverridePendingClear — remove pending flag once resolved ─
+async function handleCardOverridePendingClear(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemId = body.itemId;
+    if (!itemId) {
+      return new Response(JSON.stringify({ error: 'missing itemId' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+    await env.CACHE.delete(`pending-override:${itemId}`);
+    return new Response(JSON.stringify({ itemId, cleared: true }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 // ── [23a] getGoogleAccessTokenForSheets ───────────────────────────────────────
 async function getGoogleAccessTokenForSheets(env) {
   const cached = await env.CACHE.get('google_access_token_sheets');
@@ -1518,6 +1565,7 @@ async function handleCardOverride(request, env, cors) {
         }
       );
       const updateData = await updateRes.json();
+      await env.CACHE.put(`pending-override:${itemId}`, JSON.stringify({ fields }));
       return new Response(JSON.stringify({ ok: updateRes.ok, mode: 'update', row: sheetRow, data: updateData }), {
         headers: { ...cors, 'Content-Type': 'application/json' }
       });
@@ -1540,6 +1588,7 @@ async function handleCardOverride(request, env, cors) {
         }
       );
       const appendData = await appendRes.json();
+      await env.CACHE.put(`pending-override:${itemId}`, JSON.stringify({ fields }));
       return new Response(JSON.stringify({ ok: appendRes.ok, mode: 'append', data: appendData }), {
         headers: { ...cors, 'Content-Type': 'application/json' }
       });
