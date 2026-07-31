@@ -59,7 +59,7 @@ export default {
     if (path === '/comc-pulled-all' && request.method === 'GET') return handleComcPulledAll(env, cors);
     if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
     if (path === '/comc-pulled-invalidate-scans' && request.method === 'GET') return handleComcPulledInvalidateScans(env, cors);
-    if (path === '/test-sheet-write' && request.method === 'GET') return handleTestSheetWrite(env, cors);
+    if (path === '/card-override' && request.method === 'POST') return handleCardOverride(request, env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
@@ -1463,28 +1463,87 @@ async function getGoogleAccessTokenForSheets(env) {
   return data.access_token;
 }
 
-// ── [23b] handleTestSheetWrite ─────────────────────────────────────────────────
-async function handleTestSheetWrite(env, cors) {
-  try {
-    const token = await getGoogleAccessTokenForSheets(env);
-    const sheetId = '1W413RgDo5q2H7Zu0edx8r9Jngw2NJ_bPsJGdNQ_Oh-w';
-    const range = encodeURIComponent("'ItemID Overrides'!Z1");
+// ── [23b] handleCardOverride ─────────────────────────────────────────────────
+const OVERRIDE_SHEET_ID = '1W413RgDo5q2H7Zu0edx8r9Jngw2NJ_bPsJGdNQ_Oh-w';
+const OVERRIDE_TAB = "'ItemID Overrides'";
+const OVERRIDE_COLUMNS = {
+  ItemID: 'A', Sport: 'B', Year: 'C', Set: 'D', Variation: 'E', Version: 'F',
+  'Card No': 'G', 'Player Name': 'H', 'Serial No': 'I', 'Qty Manufactured': 'J',
+  'Purchased From': 'R', Grade: 'U'
+};
 
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`,
-      {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ values: [[`test-write-${new Date().toISOString()}`]] })
-      }
+async function handleCardOverride(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemId = body.itemId;
+    const fields = body.fields || {};
+    if (!itemId) {
+      return new Response(JSON.stringify({ error: 'missing itemId' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const allowedFields = Object.keys(fields).filter(f => OVERRIDE_COLUMNS[f] && f !== 'ItemID');
+    if (!allowedFields.length) {
+      return new Response(JSON.stringify({ error: 'no valid fields provided' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const token = await getGoogleAccessTokenForSheets(env);
+
+    // Find existing row for this ItemID
+    const colARes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${OVERRIDE_SHEET_ID}/values/${encodeURIComponent(OVERRIDE_TAB + '!A:A')}`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
     );
-    const data = await res.json();
-    return new Response(JSON.stringify({ ok: res.ok, status: res.status, data }), {
-      headers: { ...cors, 'Content-Type': 'application/json' }
-    });
+    const colAData = await colARes.json();
+    const rows = colAData.values || [];
+    const rowIndex = rows.findIndex(r => String(r[0]).trim() === String(itemId).trim());
+
+    if (rowIndex !== -1) {
+      // Row exists (0-indexed array, +1 for sheet row number)
+      const sheetRow = rowIndex + 1;
+      const data = allowedFields.map(f => ({
+        range: `${OVERRIDE_TAB}!${OVERRIDE_COLUMNS[f]}${sheetRow}`,
+        values: [[fields[f]]]
+      }));
+
+      const updateRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${OVERRIDE_SHEET_ID}/values:batchUpdate`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ valueInputOption: 'RAW', data })
+        }
+      );
+      const updateData = await updateRes.json();
+      return new Response(JSON.stringify({ ok: updateRes.ok, mode: 'update', row: sheetRow, data: updateData }), {
+        headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    } else {
+      // Append new row
+      const newRow = new Array(22).fill('');
+      newRow[0] = itemId;
+      allowedFields.forEach(f => {
+        const colLetter = OVERRIDE_COLUMNS[f];
+        const colIndex = colLetter.charCodeAt(0) - 65;
+        newRow[colIndex] = fields[f];
+      });
+
+      const appendRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${OVERRIDE_SHEET_ID}/values/${encodeURIComponent(OVERRIDE_TAB + '!A:V')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [newRow] })
+        }
+      );
+      const appendData = await appendRes.json();
+      return new Response(JSON.stringify({ ok: appendRes.ok, mode: 'append', data: appendData }), {
+        headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
