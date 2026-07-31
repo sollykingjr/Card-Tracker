@@ -437,6 +437,7 @@ html, body {
 }
 .mwrap.on { display: flex; }
 .modal {
+  position: relative;
   background: var(--bg2);
   width: 100%;
   max-width: 600px;
@@ -448,6 +449,46 @@ html, body {
   border-bottom: none;
   box-shadow: var(--shadow-lg);
 }
+.ct-menu-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--tx2);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  z-index: 5;
+}
+.ct-menu-btn:hover { background: var(--surf2); color: var(--tx); }
+.ct-menu {
+  position: absolute;
+  top: 50px;
+  right: 16px;
+  background: var(--surf);
+  border: 1px solid var(--bdr2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  z-index: 6;
+  min-width: 150px;
+  overflow: hidden;
+  display: none;
+}
+.ct-menu.on { display: block; }
+.ct-menu-item {
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ct-menu-item:hover { background: var(--surf2); }
 .mhandle { width: 36px; height: 4px; background: var(--bdr3); border-radius: 2px; margin: 0 auto 18px; }
 .mname { font-size: 22px; font-weight: 700; margin-bottom: 3px; letter-spacing: -.02em; }
 .msub { font-size: 13px; color: var(--tx2); margin-bottom: 16px; font-weight: 400; }
