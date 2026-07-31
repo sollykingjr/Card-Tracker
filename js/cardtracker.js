@@ -565,6 +565,23 @@ function ctCopyId(id, btn) {
   }).catch(()=>{});
 }
 
+function ctToggleMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('ct-menu');
+  if (!menu) return;
+  const opening = !menu.classList.contains('on');
+  menu.classList.toggle('on', opening);
+  if (opening) {
+    setTimeout(() => {
+      document.addEventListener('click', function closeMenu() {
+        const m = document.getElementById('ct-menu');
+        if (m) m.classList.remove('on');
+        document.removeEventListener('click', closeMenu);
+      }, { once: true });
+    }, 0);
+  }
+}
+
 let ctOpenCardIdx = null;
 
 function ctOpenCard(idx) {
@@ -573,6 +590,10 @@ function ctOpenCard(idx) {
   ctOpenCardIdx = idx;
   const date = c.transactionDate || c.datePurchased;
   document.getElementById('mcontent').innerHTML = `
+    <button class="ct-menu-btn" onclick="ctToggleMenu(event)">⋮</button>
+    <div class="ct-menu" id="ct-menu">
+      <div class="ct-menu-item" onclick="ctRefreshScans()">Refresh Scans</div>
+    </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
     <div class="msub">${[c.year, c.sport].filter(Boolean).join(' ')}${c.grade ? ' · Graded ' + c.grade : ''}</div>
     <div class="sgrid">
@@ -591,15 +612,24 @@ function ctOpenCard(idx) {
   ctRenderTags(idx);
   if (c.itemId) ctLoadScans(c.itemId);
 }
-async function ctLoadScans(itemId) {
+function ctRefreshScans() {
+  const menu = document.getElementById('ct-menu');
+  if (menu) menu.classList.remove('on');
+  const c = cards[ctOpenCardIdx];
+  if (!c || !c.itemId) return;
+  ctLoadScans(c.itemId, true);
+}
+
+async function ctLoadScans(itemId, force) {
   const box = document.getElementById('ct-scans');
   if (!box) return;
-  box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Loading scans...</div>`;
+  box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">${force ? 'Refreshing scans...' : 'Loading scans...'}</div>`;
   try {
-    const res = await fetch(`${WORKER_URL}/scan?id=${encodeURIComponent(itemId)}`);
+    const res = await fetch(`${WORKER_URL}/scan?id=${encodeURIComponent(itemId)}${force ? '&debug=1' : ''}`);
     const data = await res.json();
     if (!document.getElementById('ct-scans')) return;
-    const shots = [data.front, data.back].filter(Boolean);
+    const result = force ? (data.cachedResult || {}) : data;
+    const shots = [result.front, result.back].filter(Boolean);
     if (!shots.length) {
       box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">No scans found</div>`;
       return;
