@@ -492,6 +492,7 @@ html, body {
 .mhandle { width: 36px; height: 4px; background: var(--bdr3); border-radius: 2px; margin: 0 auto 18px; }
 .mname { font-size: 22px; font-weight: 700; margin-bottom: 3px; letter-spacing: -.02em; padding-right: 34px; }
 .msub { font-size: 13px; color: var(--tx2); margin-bottom: 16px; font-weight: 400; }
+.mitemid { font-size: 15px; color: var(--tx2); margin-bottom: 16px; font-weight: 600; font-family: 'DM Mono', monospace; }
 
 /* stat grid inside modal */
 .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
