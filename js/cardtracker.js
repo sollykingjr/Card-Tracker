@@ -643,7 +643,6 @@ function ctOpenCard(idx) {
       <div class="ct-menu-item" onclick="ctShowEditMetadata(${idx})">Edit Metadata</div>
     </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
-    <div class="msub">${[c.year, c.sport].filter(Boolean).join(' ')}${c.grade ? ' · Graded ' + c.grade : ''}</div>
     <div class="mitemid">${c.itemId || '—'}</div>
     <div id="ct-pending-badge"></div>
     <div class="sgrid">
