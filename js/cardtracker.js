@@ -340,11 +340,10 @@ function ctThumbHTML(itemId) {
   const scan = itemId ? ctScanCache[itemId] : null;
   const src = scan?.front?.thumb;
   if (src) {
-    return `<img src="${src}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr2);flex-shrink:0" loading="lazy">`;
+    return `<img src="${src}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr2);flex-shrink:0" loading="lazy">`;
   }
-  return `<div style="width:44px;height:44px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);flex-shrink:0"></div>`;
+  return `<div style="width:64px;height:64px;border-radius:8px;background:var(--surf2);border:1px solid var(--bdr);flex-shrink:0"></div>`;
 }
-
 let ctViewMode = 'list';
 
 function ctSetViewMode(mode) {
