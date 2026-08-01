@@ -45,6 +45,8 @@ let ctTagCache = {};
 let ctTagsLoaded = false;
 let ctPendingCache = {};
 let ctPendingLoaded = false;
+let ctInHandCache = {};
+let ctInHandLoaded = false;
 
 const CT_OVERRIDE_FIELD_MAP = {
   Sport: 'sport', Year: 'year', Set: 'set', Variation: 'variation', Version: 'version',
