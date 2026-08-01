@@ -22,13 +22,15 @@ function setSection(s) {
   const isSR    = s === 'searchresults';
   const isHome  = s === 'home';
   const isCT    = s === 'cardtracker';
-  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome || isCT) ? 'none' : '';
+  const isPort  = s === 'portfolio';
+  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome || isCT || isPort) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? 'block' : 'none';
   document.getElementById('sr-root').style.display = isSR ? 'block' : 'none';
   document.getElementById('home-root').style.display = isHome ? 'block' : 'none';
   document.getElementById('cardtracker-root').style.display = isCT ? 'block' : 'none';
-  document.getElementById('list').style.display = (isSB || isSR || isHome || isCT) ? 'none' : '';
-  document.querySelector('.meta').style.display = (isSB || isSR || isHome || isCT) ? 'none' : '';
+  document.getElementById('portfolio-root').style.display = isPort ? 'block' : 'none';
+  document.getElementById('list').style.display = (isSB || isSR || isHome || isCT || isPort) ? 'none' : '';
+  document.querySelector('.meta').style.display = (isSB || isSR || isHome || isCT || isPort) ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
@@ -52,6 +54,9 @@ function setSection(s) {
   } else if (isCT) {
     document.getElementById('cntlbl').textContent = '';
     renderCardTracker();
+  } else if (isPort) {
+    document.getElementById('cntlbl').textContent = '';
+    renderPortfolio();
   } else {
     render();
   }
