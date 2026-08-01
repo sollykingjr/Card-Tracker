@@ -119,11 +119,19 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+body {
+  padding-top: 43px;
+}
+@media (min-width: 768px) {
+  body { padding-top: 0; }
+}
 
 /* ── Mobile nav (top tabs) ────────────────────────────────────────────────── */
 .top-tabs {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 40;
   display: flex;
   flex-wrap: nowrap;
