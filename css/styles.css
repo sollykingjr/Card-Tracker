@@ -134,6 +134,9 @@ html, body {
   border-bottom: 1px solid var(--bdr);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
 }
 .top-tabs::-webkit-scrollbar { display: none; }
 .top-tab {
