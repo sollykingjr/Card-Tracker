@@ -56,6 +56,7 @@ export default {
     if (path === '/scan-batch' && request.method === 'POST') return handleScanBatch(request, env, cors);
     if (path === '/card-meta-all' && request.method === 'GET') return handleCardMetaAll(env, cors);
     if (path === '/card-meta' && request.method === 'POST') return handleCardMetaPost(request, env, cors);
+    if (path === '/card-meta-inhand-all' && request.method === 'GET') return handleCardMetaInHandAll(env, cors);
     if (path === '/comc-pulled-all' && request.method === 'GET') return handleComcPulledAll(env, cors);
     if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
     if (path === '/comc-pulled-invalidate-scans' && request.method === 'GET') return handleComcPulledInvalidateScans(env, cors);
@@ -1307,6 +1308,29 @@ async function handleCardMetaAll(env, cors) {
         const itemId = k.name.slice('card-meta:'.length);
         const tags = (k.metadata && Array.isArray(k.metadata.tags)) ? k.metadata.tags : [];
         result[itemId] = tags;
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return new Response(JSON.stringify(result), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [22c-2] handleCardMetaInHandAll — bulk read of In Hand status via KV list metadata ─
+async function handleCardMetaInHandAll(env, cors) {
+  try {
+    const result = {};
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix: 'card-meta:', cursor });
+      for (const k of page.keys) {
+        const itemId = k.name.slice('card-meta:'.length);
+        if (k.metadata && k.metadata.inHand) result[itemId] = true;
       }
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
