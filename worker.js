@@ -1332,12 +1332,19 @@ async function handleCardMetaPost(request, env, cors) {
       });
     }
     const key = `card-meta:${itemId}`;
-    if (!tags.length) {
+    let inHand;
+    if (Object.prototype.hasOwnProperty.call(body, 'inHand')) {
+      inHand = !!body.inHand;
+    } else {
+      const existing = await env.CACHE.get(key, { type: 'json' });
+      inHand = existing && existing.inHand ? true : false;
+    }
+    if (!tags.length && !inHand) {
       await env.CACHE.delete(key);
     } else {
-      await env.CACHE.put(key, JSON.stringify({ tags }), { metadata: { tags } });
+      await env.CACHE.put(key, JSON.stringify({ tags, inHand }), { metadata: { tags, inHand } });
     }
-    return new Response(JSON.stringify({ itemId, tags }), {
+    return new Response(JSON.stringify({ itemId, tags, inHand }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch (e) {
