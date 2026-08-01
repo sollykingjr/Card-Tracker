@@ -13,6 +13,7 @@ let ctFilterYears = [];          // OR within category
 let ctFilterSets = [];           // OR within category
 let ctFilterSerial = false;      // checked = only serial-numbered
 let ctFilterGraded = false;      // checked = only graded
+let ctFilterInHand = false;      // checked = only in-hand
 
 function ctOpenSearch(query) {
   ctQuery = query;
@@ -120,11 +121,21 @@ function ctRenderPendingBadge(idx) {
     : '';
 }
 
+function ctIsInHand(c) {
+  if (!c || !c.itemId) return false;
+  if (c.salePrice) return false;
+  return !!ctInHandCache[c.itemId];
+}
+
 function ctRenderInHand(idx) {
   const box = document.getElementById('ct-inhand');
   const c = cards[idx];
   if (!box || !c || !c.itemId) { if (box) box.innerHTML = ''; return; }
-  const isIn = !!ctInHandCache[c.itemId];
+  if (c.salePrice) {
+    box.innerHTML = `<div style="font-size:11px;color:var(--tx3);text-align:center;padding:8px 0">Sold — In Hand not applicable</div>`;
+    return;
+  }
+  const isIn = ctIsInHand(c);
   box.innerHTML = `
     <button onclick="ctToggleInHand(${idx})" style="width:100%;height:40px;border:1px solid ${isIn ? 'var(--acc-bdr)' : 'var(--bdr2)'};border-radius:10px;background:${isIn ? 'var(--acc-bg)' : 'var(--surf2)'};color:${isIn ? 'var(--acc)' : 'var(--tx2)'};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
       ${isIn ? '✓ In Hand' : 'Mark In Hand'}
@@ -353,6 +364,7 @@ function ctViewToggleHTML() {
 function ctFiltersActiveCount() {
   let n = 0;
   if (ctFilterSold !== 'all') n++;
+  if (ctFilterInHand) n++;
   if (ctFilterSerial) n++;
   if (ctFilterGraded) n++;
   if (ctFilterTags.length) n++;
@@ -379,6 +391,11 @@ function ctFilterPanelHTML(scope) {
       <button class="schip${ctFilterSold==='all'?' on':''}" onclick="ctSetFilterSold('all')" style="flex:1;padding:8px;font-size:11px">All</button>
       <button class="schip${ctFilterSold==='exclude'?' on':''}" onclick="ctSetFilterSold('exclude')" style="flex:1;padding:8px;font-size:11px">Exclude Sold</button>
       <button class="schip${ctFilterSold==='only'?' on':''}" onclick="ctSetFilterSold('only')" style="flex:1;padding:8px;font-size:11px">Sold Only</button>
+    </div>
+
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">In Hand</div>
+    <div style="display:flex;gap:6px;margin-bottom:20px">
+      <button class="schip${ctFilterInHand?' on':''}" onclick="ctToggleFilterInHand()" style="flex:1;padding:8px;font-size:11px">In Hand Only</button>
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
@@ -416,12 +433,20 @@ function ctCloseFilters() {
 
 function ctResetFilters() {
   ctFilterSold = 'all';
+  ctFilterInHand = false;
   ctFilterSerial = false;
   ctFilterGraded = false;
   ctFilterTags = [];
   ctFilterSports = [];
   ctFilterYears = [];
   ctFilterSets = [];
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctToggleFilterInHand() {
+  ctFilterInHand = !ctFilterInHand;
   ctPage = 1;
   ctRenderFilterContent();
   ctRenderBody();
@@ -632,6 +657,7 @@ function ctFilterCategoryMatch(c) {
 
   if (ctFilterSerial && !c.serialNo) return false;
   if (ctFilterGraded && !c.grade) return false;
+  if (ctFilterInHand && !ctIsInHand(c)) return false;
 
   if (ctFilterSports.length && !ctFilterSports.includes(c.sport)) return false;
   if (ctFilterYears.length && !ctFilterYears.includes(String(c.year))) return false;
