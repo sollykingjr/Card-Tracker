@@ -126,14 +126,21 @@ html, body {
   top: 0;
   z-index: 40;
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   background: var(--bg2);
   border-bottom: 1px solid var(--bdr);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
+.top-tabs::-webkit-scrollbar { display: none; }
 .top-tab {
-  flex: 1;
-  padding: 14px 4px 12px;
+  flex: 0 0 auto;
+  min-width: 92px;
+  white-space: nowrap;
+  padding: 14px 14px 12px;
   border: none;
   background: transparent;
   color: var(--tx3);
