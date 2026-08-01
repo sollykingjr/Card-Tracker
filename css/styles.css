@@ -817,7 +817,7 @@ html, body {
   }
 
   .top-tabs::before {
-    content: 'Card Tracker';
+    content: 'Card Collection';
     display: block;
     font-size: 15px;
     font-weight: 700;
