@@ -574,7 +574,7 @@ html, body {
 .recent-info .rc-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-info .rc-date { font-size: 11px; color: var(--tx3); margin-top: 1px; }
 
-.cs-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--bdr); cursor: pointer; }
+.cs-row { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--bdr); cursor: pointer; }
 .cs-row:last-child { border-bottom: none; }
 .cs-row-top { display: flex; align-items: center; gap: 8px; }
 .cs-row-prices { display: flex; gap: 16px; justify-content: flex-end; }
