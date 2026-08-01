@@ -852,6 +852,7 @@ html, body {
   #sb-root,
   #cardtracker-root,
   #home-root,
+  #portfolio-root,
   .meta,
   .list {
     margin-left: var(--nav-w);
