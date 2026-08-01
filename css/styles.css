@@ -128,7 +128,7 @@ html, body {
   display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   background: var(--bg2);
   border-bottom: 1px solid var(--bdr);
