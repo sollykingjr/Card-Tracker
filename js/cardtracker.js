@@ -553,16 +553,19 @@ function ctDateLine(c) {
 function ctListRowHTML(c) {
   const dateLine = ctDateLine(c);
   const inHand = ctIsInHand(c);
+  const tags = ctGetTags(c).filter(t => t !== 'Sold');
   return `
     <div class="cs-row" onclick="ctOpenCard(${cards.indexOf(c)})">
       <div class="cs-row-top">
         ${ctThumbHTML(c.itemId)}
         <div class="recent-info">
-          <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px">
+          <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span>${c.fullCard || '—'}</span>
             ${inHand ? '<span class="badge b5">In Hand</span>' : ''}
+            ${c.salePrice ? '<span class="badge" style="background:var(--acc-bg);color:var(--acc)">Sold</span>' : ''}
           </div>
           <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
+          ${tags.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${tags.map(t => `<span style="padding:2px 8px;border-radius:20px;background:var(--surf2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:600">${t}</span>`).join('')}</div>` : ''}
         </div>
       </div>
       <div class="cs-row-prices">
