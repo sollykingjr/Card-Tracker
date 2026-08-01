@@ -552,12 +552,16 @@ function ctDateLine(c) {
 
 function ctListRowHTML(c) {
   const dateLine = ctDateLine(c);
+  const inHand = ctIsInHand(c);
   return `
     <div class="cs-row" onclick="ctOpenCard(${cards.indexOf(c)})">
       <div class="cs-row-top">
         ${ctThumbHTML(c.itemId)}
         <div class="recent-info">
-          <div style="font-size:14px;font-weight:700">${c.fullCard || '—'}</div>
+          <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px">
+            <span>${c.fullCard || '—'}</span>
+            ${inHand ? '<span class="badge b5">In Hand</span>' : ''}
+          </div>
           <div style="font-size:13px;color:var(--tx2);font-weight:500;margin-top:3px">${dateLine}</div>
         </div>
       </div>
