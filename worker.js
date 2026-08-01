@@ -1349,20 +1349,19 @@ async function handleCardMetaPost(request, env, cors) {
   try {
     const body = await request.json();
     const itemId = body.itemId;
-    const tags = Array.isArray(body.tags) ? [...new Set(body.tags.filter(Boolean))] : [];
     if (!itemId) {
       return new Response(JSON.stringify({ error: 'missing itemId' }), {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
       });
     }
     const key = `card-meta:${itemId}`;
-    let inHand;
-    if (Object.prototype.hasOwnProperty.call(body, 'inHand')) {
-      inHand = !!body.inHand;
-    } else {
-      const existing = await env.CACHE.get(key, { type: 'json' });
-      inHand = existing && existing.inHand ? true : false;
-    }
+    const existing = await env.CACHE.get(key, { type: 'json' });
+    const tags = Object.prototype.hasOwnProperty.call(body, 'tags')
+      ? (Array.isArray(body.tags) ? [...new Set(body.tags.filter(Boolean))] : [])
+      : (existing && Array.isArray(existing.tags) ? existing.tags : []);
+    const inHand = Object.prototype.hasOwnProperty.call(body, 'inHand')
+      ? !!body.inHand
+      : (existing && existing.inHand ? true : false);
     if (!tags.length && !inHand) {
       await env.CACHE.delete(key);
     } else {
