@@ -67,6 +67,19 @@ async function ctLoadTags() {
   if (ctOpenCardIdx !== null) ctRenderTags(ctOpenCardIdx);
 }
 
+async function ctLoadInHand() {
+  if (ctInHandLoaded) return;
+  ctInHandLoaded = true;
+  try {
+    const res = await fetch(`${WORKER_URL}/card-meta-inhand-all`);
+    ctInHandCache = await res.json() || {};
+  } catch (e) {
+    ctInHandCache = {};
+  }
+  ctRenderBody();
+  if (ctOpenCardIdx !== null) ctRenderTags(ctOpenCardIdx);
+}
+
 async function ctLoadPendingOverrides() {
   if (ctPendingLoaded) return;
   ctPendingLoaded = true;
@@ -105,6 +118,33 @@ function ctRenderPendingBadge(idx) {
   box.innerHTML = isPending
     ? `<div style="display:inline-block;padding:4px 10px;border-radius:20px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;margin-top:6px">Pending update</div>`
     : '';
+}
+
+function ctRenderInHand(idx) {
+  const box = document.getElementById('ct-inhand');
+  const c = cards[idx];
+  if (!box || !c || !c.itemId) { if (box) box.innerHTML = ''; return; }
+  const isIn = !!ctInHandCache[c.itemId];
+  box.innerHTML = `
+    <button onclick="ctToggleInHand(${idx})" style="width:100%;height:40px;border:1px solid ${isIn ? 'var(--acc-bdr)' : 'var(--bdr2)'};border-radius:10px;background:${isIn ? 'var(--acc-bg)' : 'var(--surf2)'};color:${isIn ? 'var(--acc)' : 'var(--tx2)'};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+      ${isIn ? '✓ In Hand' : 'Mark In Hand'}
+    </button>
+  `;
+}
+
+async function ctToggleInHand(idx) {
+  const c = cards[idx];
+  if (!c || !c.itemId) return;
+  const newVal = !ctInHandCache[c.itemId];
+  ctInHandCache[c.itemId] = newVal;
+  ctRenderInHand(idx);
+  try {
+    await fetch(`${WORKER_URL}/card-meta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: c.itemId, inHand: newVal })
+    });
+  } catch (e) {}
 }
 
 function ctGetTags(c) {
@@ -656,6 +696,7 @@ function ctOpenCard(idx) {
       <div class="scard"><div class="slbl">Sale Date</div><div class="sval">${c.salePrice ? fmtShortDate(c.transactionDate) : '—'}</div></div>
     </div>
      <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="width:100%;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">Copy Item ID</button>
+    <div id="ct-inhand" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
   `;
@@ -664,6 +705,7 @@ function ctOpenCard(idx) {
   document.getElementById('mwrap').classList.add('on');
   ctRenderTags(idx);
   ctRenderPendingBadge(idx);
+  ctRenderInHand(idx);
   if (c.itemId) ctLoadScans(c.itemId);
 }
 function ctShowEditMetadata(idx) {
@@ -792,6 +834,7 @@ async function ctLoadScans(itemId, force) {
 function renderCardTracker() {
   const root = document.getElementById('cardtracker-root');
   ctLoadTags();
+  ctLoadInHand();
   ctLoadPendingOverrides();
 
   root.innerHTML = `
