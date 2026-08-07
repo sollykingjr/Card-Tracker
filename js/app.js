@@ -12,7 +12,27 @@ const matchQ = (name, team) => {
 };
 
 // ── Section switcher ──────────────────────────────────────────────────────────
+function clearInactiveSection(prevSection, newSection) {
+  if (prevSection === newSection) return;
+  const roots = {
+    home: 'home-root',
+    cardtracker: 'cardtracker-root',
+    portfolio: 'portfolio-root',
+    searchresults: 'sr-root',
+    searchbuilder: 'sb-root',
+    prospects: 'list',
+    watchlist: 'list'
+  };
+  const rootId = roots[prevSection];
+  if (rootId) {
+    const el = document.getElementById(rootId);
+    if (el) el.innerHTML = '';
+  }
+}
+
 function setSection(s) {
+  const prevSection = section;
+  clearInactiveSection(prevSection, s);
   section = s;
   document.querySelectorAll('.top-tab').forEach(x => x.classList.remove('on'));
   document.querySelector(`.top-tab[data-s="${s}"]`).classList.add('on');
