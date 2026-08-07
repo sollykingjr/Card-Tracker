@@ -1223,8 +1223,8 @@ async function handleScan(request, env, cors) {
     const front = files.find(f => f !== back) || files[0] || null;
 
     const result = {
-      front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800` } : null,
-      back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800` } : null
+      front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${front.id}&sz=w200` } : null,
+      back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${back.id}&sz=w200` } : null
     };
 
     const body = JSON.stringify(result);
@@ -1275,8 +1275,8 @@ async function handleScanBatch(request, env, cors) {
         const front = files.find(f => f !== back) || files[0] || null;
 
         const result = {
-          front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800` } : null,
-          back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800` } : null
+          front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${front.id}&sz=w200` } : null,
+          back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${back.id}&sz=w200` } : null
         };
 
         await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 604800 });
