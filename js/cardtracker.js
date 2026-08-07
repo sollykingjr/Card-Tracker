@@ -338,7 +338,7 @@ async function ctFetchScansForPage(itemIds) {
 
 function ctThumbHTML(itemId) {
   const scan = itemId ? ctScanCache[itemId] : null;
-  const src = scan?.front?.thumb;
+  const src = scan?.front?.thumbSm || scan?.front?.thumb;
   if (src) {
     return `<img src="${src}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--bdr2);flex-shrink:0" loading="lazy">`;
   }
@@ -583,7 +583,7 @@ function ctListRowHTML(c) {
 function ctCardBoxHTML(c) {
   const dateLine = ctDateLine(c);
   const scan = c.itemId ? ctScanCache[c.itemId] : null;
-  const src = scan?.front?.thumb;
+  const src = scan?.front?.thumbSm || scan?.front?.thumb;
   return `
     <div style="cursor:pointer;border:1px solid var(--bdr);border-radius:12px;overflow:hidden;background:var(--surf)" onclick="ctOpenCard(${cards.indexOf(c)})">
       ${src
