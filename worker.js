@@ -523,7 +523,9 @@ async function checkPlayerSearches(env) {
         date: item.itemCreationDate,
         endDate: item.itemEndDate || null,
         image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
-        seen: false
+        seen: false,
+        searchId: search.id,
+        searchLabel: search.label
       })));
     }
 
@@ -780,7 +782,9 @@ async function checkNightlySearches(env) {
         date: item.itemCreationDate,
         endDate: item.itemEndDate || null,
         image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
-        seen: false
+        seen: false,
+        searchId: search.id,
+        searchLabel: search.label
       })));
     }
 
@@ -1704,7 +1708,9 @@ async function handleRunSearch(request, env, cors) {
         date: item.itemCreationDate,
         endDate: item.itemEndDate || null,
         image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
-        seen: false
+        seen: false,
+        searchId: s.id,
+        searchLabel: s.label
       })));
     }
 
