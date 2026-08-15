@@ -228,7 +228,8 @@ async function initSearchResults() {
     const label = window._pendingDigestLabel || key.replace('_digest', '').replace(/_/g, ' ').trim();
     window._pendingDigest = null;
     window._pendingDigestLabel = null;
-    showDigest(key, label, false);
+    const owner = srData.searches.find(s => s.digestKey === key) || srData.groups.find(g => g.digestKey === key);
+    showDigest(key, label, undefined, owner);
   }
 }
 
@@ -278,27 +279,31 @@ async function renderList() {
       const group = entry.obj;
       const groupSearches = srData.searches.filter(s => s.groupId === group.id);
       html += `
-        <div class="sr-group-card" id="srg-${group.id}">
-          <div class="sr-card-header" style="cursor:pointer" onclick="document.getElementById('sr-group-searches-${group.id}').style.display = document.getElementById('sr-group-searches-${group.id}').style.display === 'none' ? 'block' : 'none'">
-            <div class="sr-group-label">${group.label} <span id="sr-badge-group-${group.id}" class="sr-unseen-badge seen">...</span></div>
-            <div class="sr-header-right">
-              <span class="sr-schedule-badge">${group.schedule || 'hourly'}</span>
-              <div class="sr-menu-wrap">
-                <button class="sr-menu-btn" data-id="${group.id}" data-type="group">···</button>
-                <div class="sr-menu-dropdown" id="srm-${group.id}" style="display:none">
-                  <button class="sr-menu-item sr-menu-edit-group" data-id="${group.id}">Edit</button>
-                  <button class="sr-menu-item sr-menu-add-search-to-group" data-id="${group.id}">Add Search</button>
-                  ${moveHtml}
-                  <button class="sr-menu-item sr-menu-delete sr-menu-delete-group" data-id="${group.id}">Delete Group</button>
-                </div>
+        <div class="sr-tile-card" id="srg-${group.id}">
+          <div class="sr-tile-row">
+            <button class="sr-chevron-btn" data-id="${group.id}">▸</button>
+            <div class="sr-tile-main" data-digestkey="${group.digestKey}" data-label="${group.label}" data-type="group" data-id="${group.id}">
+              <div class="sr-tile-name">${group.label}</div>
+            </div>
+            <span id="sr-badge-group-${group.id}" class="sr-count-badge"></span>
+            <div class="sr-menu-wrap">
+              <button class="sr-menu-btn" data-id="${group.id}" data-type="group">···</button>
+              <div class="sr-menu-dropdown" id="srm-${group.id}" style="display:none">
+                <button class="sr-menu-item sr-menu-run" data-digestkey="${group.digestKey}" data-label="${group.label}">Run</button>
+                <button class="sr-menu-item sr-menu-edit-group" data-id="${group.id}">Edit</button>
+                <button class="sr-menu-item sr-menu-add-search-to-group" data-id="${group.id}">Add Search</button>
+                ${moveHtml}
+                <button class="sr-menu-item sr-menu-delete sr-menu-delete-group" data-id="${group.id}">Delete Group</button>
               </div>
             </div>
           </div>
           <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
             ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
-              <div class="sr-search-row">
-                <div class="sr-search-row-label">🔍 ${s.label}</div>
-                <button class="sr-link sr-link-sm" onclick="showDigest('${group.digestKey}', '${s.label}', true, undefined, '${s.id}')">7-Day →</button>
+              <div class="sr-tile-row sr-tile-row-nested">
+                <div class="sr-tile-main" data-groupdigestkey="${group.digestKey}" data-label="${s.label}" data-searchid="${s.id}">
+                  <div class="sr-tile-name">${s.label}</div>
+                </div>
+                <span id="sr-badge-search-${s.id}" class="sr-count-badge"></span>
                 <div class="sr-menu-wrap">
                   <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
                   <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
@@ -311,35 +316,27 @@ async function renderList() {
               </div>
             `).join('')}
           </div>
-          <div class="sr-card-links">
-            <button class="sr-run-btn" data-digestkey="${group.digestKey}" data-label="${group.label}">▶ Run</button>
-            <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', false)">Today →</button>
-            <button class="sr-link" onclick="showDigest('${group.digestKey}', '${group.label}', true)">7-Day →</button>
-          </div>
         </div>
       `;
     } else {
       const s = entry.obj;
       html += `
-        <div class="sr-card">
-          <div class="sr-card-header" style="cursor:pointer" onclick="document.getElementById('sr-query-${s.id}').style.display = document.getElementById('sr-query-${s.id}').style.display === 'none' ? 'block' : 'none'">
-            <div class="sr-card-label">${s.label} <span id="sr-badge-search-${s.id}" class="sr-unseen-badge seen">...</span></div>
+        <div class="sr-tile-card">
+          <div class="sr-tile-row">
+            <div class="sr-tile-main" data-digestkey="${s.digestKey}" data-label="${s.label}" data-type="search" data-id="${s.id}">
+              <div class="sr-tile-name">${s.label}</div>
+            </div>
+            <span id="sr-badge-search-${s.id}" class="sr-count-badge"></span>
             <div class="sr-menu-wrap">
               <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
               <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
+                <button class="sr-menu-item sr-menu-run" data-digestkey="${s.digestKey}" data-label="${s.label}">Run</button>
                 <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
                 <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
                 ${moveHtml}
                 <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
               </div>
             </div>
-          </div>
-          <div class="sr-card-query" id="sr-query-${s.id}" style="display:none">🔍 ${s.query || ''}</div>
-          <div class="sr-card-keywords">🔔 ${(s.priorityKeywords || []).join(', ')}</div>
-          <div class="sr-card-links">
-            <button class="sr-run-btn" data-digestkey="${s.digestKey}" data-label="${s.label}">▶ Run</button>
-            <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', false)">Today →</button>
-            <button class="sr-link" onclick="showDigest('${s.digestKey}', '${s.label}', true)">7-Day →</button>
           </div>
         </div>
       `;
@@ -353,32 +350,37 @@ async function renderList() {
   list.innerHTML = html;
   wireListEvents();
 
-  // Fetch unseen counts in parallel and update badges
+  // Fetch unseen counts (from the 7-day archive) in parallel and update badges
   const allKeys = [
     ...srData.groups.map(g => ({ id: g.id, key: g.digestKey, type: 'group' })),
     ...srData.searches.filter(s => !s.groupId).map(s => ({ id: s.id, key: s.digestKey, type: 'search' }))
   ];
 
+  const setBadge = (badge, count) => {
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  };
+
   await Promise.all(allKeys.map(async ({ id, key, type }) => {
     try {
-      const [todayRes, archiveRes] = await Promise.all([
-        fetch(`${WORKER}/player-digest-json?key=${key}`),
-        fetch(`${WORKER}/player-digest-json?key=${key}_archive`)
-      ]);
-      const todayData = await todayRes.json();
-      const archiveData = await archiveRes.json();
-      const todayItems = todayData.items || [];
-      const archiveItems = archiveData.items || [];
-      const todayUnseen = todayItems.filter(i => !i.seen).length;
-      const archiveUnseen = archiveItems.filter(i => !i.seen).length;
-      const badge = document.getElementById(`sr-badge-${type}-${id}`);
-      if (!badge) return;
-      if (todayUnseen > 0 || archiveUnseen > 0) {
-        badge.textContent = `${todayUnseen} today · ${archiveUnseen} in 7-day`;
-        badge.className = 'sr-unseen-badge';
-      } else {
-        badge.textContent = `${todayItems.length} today · ${archiveItems.length} in 7-day`;
-        badge.className = 'sr-unseen-badge seen';
+      const res = await fetch(`${WORKER}/player-digest-json?key=${key}_archive`);
+      const data = await res.json();
+      const items = data.items || [];
+      setBadge(document.getElementById(`sr-badge-${type}-${id}`), items.filter(i => !i.seen).length);
+
+      if (type === 'group') {
+        const bySearch = {};
+        items.forEach(i => {
+          if (i.searchId && !i.seen) bySearch[i.searchId] = (bySearch[i.searchId] || 0) + 1;
+        });
+        srData.searches.filter(s => s.groupId === id).forEach(s => {
+          setBadge(document.getElementById(`sr-badge-search-${s.id}`), bySearch[s.id] || 0);
+        });
       }
     } catch(e) {}
   }));
@@ -417,6 +419,35 @@ function wireListEvents() {
       const isOpen = dropdown.style.display === 'block';
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       dropdown.style.display = isOpen ? 'none' : 'block';
+    };
+  });
+
+  // Chevron: expand/collapse a group's individual searches
+  document.querySelectorAll('.sr-chevron-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const panel = document.getElementById(`sr-group-searches-${btn.dataset.id}`);
+      if (!panel) return;
+      const isOpen = panel.style.display !== 'none';
+      panel.style.display = isOpen ? 'none' : 'block';
+      btn.textContent = isOpen ? '▸' : '▾';
+      btn.classList.toggle('open', !isOpen);
+    };
+  });
+
+  // Tile click: open Results (group aggregate, standalone search, or an individual search within a group)
+  document.querySelectorAll('.sr-tile-main').forEach(el => {
+    el.onclick = () => {
+      if (el.dataset.searchid) {
+        const search = srData.searches.find(s => s.id === el.dataset.searchid);
+        showDigest(el.dataset.groupdigestkey, el.dataset.label, el.dataset.searchid, search);
+      } else if (el.dataset.type === 'group') {
+        const group = srData.groups.find(g => g.id === el.dataset.id);
+        showDigest(el.dataset.digestkey, el.dataset.label, undefined, group);
+      } else {
+        const search = srData.searches.find(s => s.id === el.dataset.id);
+        showDigest(el.dataset.digestkey, el.dataset.label, undefined, search);
+      }
     };
   });
 
@@ -469,39 +500,12 @@ function wireListEvents() {
     };
   });
 
-// Duplicate search
+  // Duplicate search
   document.querySelectorAll('.sr-menu-duplicate-search').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       duplicateSearch(btn.dataset.id);
-    };
-  });
-
-  // Run single search within a group
-  document.querySelectorAll('.sr-menu-run-search').forEach(btn => {
-    btn.onclick = async (e) => {
-      e.stopPropagation();
-      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
-      const digestKey = btn.dataset.groupDigestkey;
-      const searchId = btn.dataset.id;
-      const label = btn.dataset.label;
-      const original = btn.textContent;
-      btn.textContent = '⏳ Running...';
-      btn.disabled = true;
-      try {
-        await fetch(`${WORKER}/run-search`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ digestKey, searchId })
-        });
-        btn.textContent = original;
-        btn.disabled = false;
-        showDigest(digestKey, label, true, undefined, searchId);
-      } catch(err) {
-        btn.textContent = original;
-        btn.disabled = false;
-      }
     };
   });
 
@@ -544,11 +548,15 @@ function wireListEvents() {
     };
   });
 
-  // Run buttons
-  document.querySelectorAll('.sr-run-btn').forEach(btn => {
-    btn.onclick = async () => {
+  // Run: group (aggregate, all searches) or standalone search
+  document.querySelectorAll('.sr-menu-run').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       const digestKey = btn.dataset.digestkey;
       const label = btn.dataset.label;
+      const owner = srData.groups.find(g => g.digestKey === digestKey) || srData.searches.find(s => s.digestKey === digestKey);
+      const original = btn.textContent;
       btn.textContent = '⏳ Running...';
       btn.disabled = true;
       try {
@@ -557,11 +565,39 @@ function wireListEvents() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ digestKey })
         });
-        btn.textContent = '▶ Run';
+        btn.textContent = original;
         btn.disabled = false;
-        showDigest(digestKey, label, false);
-      } catch(e) {
-        btn.textContent = '▶ Run';
+        showDigest(digestKey, label, undefined, owner);
+      } catch(err) {
+        btn.textContent = original;
+        btn.disabled = false;
+      }
+    };
+  });
+
+  // Run: a single search within a group (writes into the group's digest, tagged by searchId)
+  document.querySelectorAll('.sr-menu-run-search').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      const digestKey = btn.dataset.groupDigestkey;
+      const searchId = btn.dataset.id;
+      const label = btn.dataset.label;
+      const search = srData.searches.find(x => x.id === searchId);
+      const original = btn.textContent;
+      btn.textContent = '⏳ Running...';
+      btn.disabled = true;
+      try {
+        await fetch(`${WORKER}/run-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ digestKey, searchId })
+        });
+        btn.textContent = original;
+        btn.disabled = false;
+        showDigest(digestKey, label, searchId, search);
+      } catch(err) {
+        btn.textContent = original;
         btn.disabled = false;
       }
     };
@@ -839,25 +875,33 @@ function wireForm() {
 }
 
 // ── Digest View ───────────────────────────────────────────────────────────────
-async function showDigest(digestKey, label, isArchive, overrideKey, searchIdFilter) {
+async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
   const root = document.getElementById('sr-root');
-  const key = overrideKey || (isArchive ? digestKey + '_archive' : digestKey);
-  let sortMode = 'newest';
+  const key = digestKey + '_archive';
+
+  // Default sort: remember the last choice for this search/group, otherwise
+  // auctions default to ending-soonest and everything else to newest-listed.
+  let sortMode = (sortOwner && sortOwner.lastSortMode)
+    || (sortOwner && sortOwner.listingType === 'AUCTION' ? 'ending' : 'newest');
   let filterText = '';
   let showAll = false;
+
+  const initialListedLabel = sortMode === 'oldest' ? 'Listed ↑' : 'Listed ↓';
+  const initialListedVal = sortMode === 'oldest' ? 'oldest' : 'newest';
+  const listedIsOn = sortMode !== 'ending';
 
   root.innerHTML = `
     <div class="sr-wrap">
       <div class="sr-digest-header">
         <button class="sr-back-btn" id="sr-back-btn">← Back</button>
-        <div class="sr-digest-title">${label} — ${isArchive ? '7-Day Archive' : "Today's Listings"}</div>
+        <div class="sr-digest-title">${label}</div>
         <button class="sr-mark-seen-btn" id="sr-mark-seen-btn">Mark Seen</button>
       </div>
       <div class="sr-digest-controls">
         <input class="sr-search-input" id="sr-digest-search" placeholder="Search titles...">
         <div class="sr-chip-row" id="sr-sort-chips">
-          <button class="sr-chip-btn on" data-val="newest" id="sr-date-sort-btn">Listed ↓</button>
-          <button class="sr-chip-btn" data-val="ending">Ending Soon</button>
+          <button class="sr-chip-btn ${listedIsOn ? 'on' : ''}" data-val="${initialListedVal}" id="sr-date-sort-btn">${initialListedLabel}</button>
+          <button class="sr-chip-btn ${listedIsOn ? '' : 'on'}" data-val="ending">Ending Soon</button>
         </div>
         <button class="sr-chip-btn" id="sr-show-all-btn">Show All</button>
       </div>
@@ -890,9 +934,8 @@ async function showDigest(digestKey, label, isArchive, overrideKey, searchIdFilt
       });
     }
 
-    // Sync seen to counterpart key by URL overlap
-    const isArchive = key.endsWith('_archive');
-    const otherKey = isArchive ? key.replace('_archive', '') : key + '_archive';
+    // Sync seen to counterpart Today key by URL overlap
+    const otherKey = key.replace('_archive', '');
     const seenUrls = allItems.map(i => i.url);
     try {
       await fetch(`${WORKER}/mark-seen-urls`, {
@@ -907,7 +950,6 @@ async function showDigest(digestKey, label, isArchive, overrideKey, searchIdFilt
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   };
 
-  wireChips('sr-sort-chips');
   document.getElementById('sr-digest-search').oninput = (e) => {
     filterText = e.target.value.toLowerCase();
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
@@ -930,6 +972,10 @@ async function showDigest(digestKey, label, isArchive, overrideKey, searchIdFilt
         document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(b => b.classList.remove('on'));
         btn.classList.add('on');
         sortMode = btn.dataset.val;
+      }
+      if (sortOwner) {
+        sortOwner.lastSortMode = sortMode;
+        saveData();
       }
       renderDigestItems(allItems, sortMode, filterText, key, showAll);
     };
