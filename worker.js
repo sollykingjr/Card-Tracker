@@ -1622,7 +1622,7 @@ async function handlePlayerDigestJson(request, env, cors) {
 // ── [20] handleRunSearch ──────────────────────────────────────────────────────
 async function handleRunSearch(request, env, cors) {
   try {
-    const { digestKey } = await request.json();
+    const { digestKey, searchId } = await request.json();
     if (!digestKey) return new Response(JSON.stringify({ error: 'missing digestKey' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
     });
@@ -1651,7 +1651,9 @@ async function handleRunSearch(request, env, cors) {
     });
 
     const cutoff = Date.now() - (2 * 60 * 60 * 1000);
-    const searchList = group ? data.searches.filter(s => s.groupId === group.id) : [search];
+    const searchList = group
+      ? data.searches.filter(s => s.groupId === group.id && (!searchId || s.id === searchId))
+      : [search];
     const allItems = [];
 
     for (const s of searchList) {
