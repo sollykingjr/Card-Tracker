@@ -302,6 +302,7 @@ async function renderList() {
                 <div class="sr-menu-wrap">
                   <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
                   <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
+                    <button class="sr-menu-item sr-menu-run-search" data-id="${s.id}" data-group-digestkey="${group.digestKey}" data-label="${s.label}">Run</button>
                     <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
                     <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
                     <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
@@ -468,12 +469,39 @@ function wireListEvents() {
     };
   });
 
-  // Duplicate search
+// Duplicate search
   document.querySelectorAll('.sr-menu-duplicate-search').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
       duplicateSearch(btn.dataset.id);
+    };
+  });
+
+  // Run single search within a group
+  document.querySelectorAll('.sr-menu-run-search').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      const digestKey = btn.dataset.groupDigestkey;
+      const searchId = btn.dataset.id;
+      const label = btn.dataset.label;
+      const original = btn.textContent;
+      btn.textContent = '⏳ Running...';
+      btn.disabled = true;
+      try {
+        await fetch(`${WORKER}/run-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ digestKey, searchId })
+        });
+        btn.textContent = original;
+        btn.disabled = false;
+        showDigest(digestKey, label, true, undefined, searchId);
+      } catch(err) {
+        btn.textContent = original;
+        btn.disabled = false;
+      }
     };
   });
 
