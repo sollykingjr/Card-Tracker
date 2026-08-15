@@ -1,125 +1,6 @@
-
-/
-Claude finished the response
-
-Reconciled sort persistence with existing save mechanism elegantly
-Reconciled sort persistence with existing save mechanism elegantly
-Two files, mostly:
-
-js/ebay-search-results.js — the bulk of it: card markup/rendering, click-to-open behavior, moving Run into the menu, dropping Today, renaming 7-Day → Results, and the sort-mode default/persistence logic.
-css/styles.css — needed for the new simplified card look (removing the old button row styling, styling the unseen count, etc.)
-worker.js — good news, I don't think this needs changes. The existing /search-alerts endpoint already saves whatever's in the groups/searches arrays wholesale (current.groups = groups; current.searches = searches;), and the frontend's saveData() already calls it. So persisting a new lastSortMode field per search is just a matter of setting it on the object and calling the saveData() that already exists — no new endpoint needed.
-
-Want me to start with the card redesign in ebay-search-results.js?
-
-how many changes in ebay search results? smarter for you to just send a full new code copy?
-
-
-Weighed scope of changes against file replacement protocol
-Weighed scope of changes against file replacement protocol
-Realistically 10–12 separate edits, and they're interdependent (the markup, the event-wiring blocks, and showDigest all have to line up together) — so yes, for this one a full file replacement is smarter than a long snippet chain. Fewer chances for me to introduce a broken intermediate state, and fewer round trips for you.
-
-One design question I need answered before I write it, since it affects the whole thing: for group tiles, what does clicking the tile do?
-
-Right now the group header's click toggles expand/collapse (to reveal the individual searches inside). If the tile becomes clickable to "open results" like you described for standalone searches, that conflicts with expand/collapse — you can't have one tap do both. Options:
-
-Tapping the group name/tile opens the group's aggregate Results, and a small chevron/arrow (separate tap target) expands to show individual searches
-Tapping opens/closes the expand list (current behavior), and viewing results moves into the "···" menu for groups specifically (standalone searches still open-on-tap, since they don't have this conflict)
-Which do you want?
-
-Tapping the group name/tile opens the group's aggregate Results, and a small chevron/arrow (separate tap target) expands to show individual searches
-
-Architected complete file restructuring for seamless implementation
-Architected complete file restructuring for seamless implementation
-Applying the previously-confirmed edits first, then building the new redesign on top.
-
-
-Streamlined CSS architecture by consolidating redundant group card styles
-Streamlined CSS architecture by consolidating redundant group card styles
-Leaving .sr-run-btn CSS in place (unused but harmless) since Run buttons no longer render, but menu items reuse existing .sr-menu-item styling — no new CSS needed there. Now the JS rewrite — the core of this.
-
-
-Viewed a file, edited a file
-Viewed a file, edited a file
-Now the core renderList rewrite:
-
-
-Viewing file
-Viewing file
-Now replacing the whole renderList body with the redesigned markup:
-
-
-Rewrite renderList markup: clickable tiles, chevron expand, name+count+menu, Run folded into menu
-Rewrite renderList markup: clickable tiles, chevron expand, name+count+menu, Run folded into menu
-Now the badge-fetching block:
-
-
-Ran a command, viewed a file, edited a file
-Ran a command, viewed a file, edited a file
-Now the chevron toggle, tile-click wiring, and the Run menu handlers in wireListEvents:
-
-
-Viewed a file, edited a file
-Viewed a file, edited a file
-Now the Run button handlers — replace the old .sr-run-btn block, keep the .sr-menu-run-search behavior but update its post-run call, and add the new unified .sr-menu-run:
-
-
-Viewed 2 files, edited a file
-Viewed 2 files, edited a file
-Now the main showDigest rewrite — signature, header, and sort-mode defaulting/persistence:
-
-
-Identifying dead code in onclick handler logic
-Identifying dead code in onclick handler logic
-Now replacing the whole function body (lines 878–985):
-
-
-Ran 2 commands, edited a file
-Ran 2 commands, edited a file
-Clean. Now a syntax sanity check on both files:
-
-
-Ran a command, viewed a file
-Ran a command, viewed a file
-Both files pass syntax checks. Let me do one final full read-through before delivering:
-
-
-Viewing file
-Viewing file
-This all reads correctly. Now delivering both files:
-
-
-Ran a command, read a file
-Ran a command, read a file
-Both files are full replacements — they include every change from this whole conversation (sport aspect fix references aside, that's worker.js only and untouched) plus the new redesign. worker.js needs no changes.
-
-What's different:
-
-Each card is now just name + red unseen count (from the 7-day pool, hidden when 0) + "···". Tapping the card opens results directly.
-Groups get a small ▸ chevron (separate tap target) to expand/collapse their individual searches — tapping the group name itself opens the group's aggregate results.
-Individual searches inside a group now show their own unseen count and open their own filtered results on tap — computed from the same single fetch as the group's count, no extra API calls.
-Today is gone. Everything opens straight into what used to be "7-Day," just relabeled to nothing extra — the digest header just shows the name now.
-Run moved into the "···" menu everywhere (group, standalone, and individual searches in a group).
-Sort now defaults per search: AUCTION → ending soonest, everything else → newest listed — unless you've picked something different before, in which case it remembers that (lastSortMode, saved via the existing search-alerts save call, no new endpoint).
-Schedule badge (hourly/nightly) dropped from the card — it's still set in the Edit modal, just not shown on the tile anymore.
-One thing I didn't touch: Move Up/Move Down already existed in the "···" menu before this — I left it as-is since you hadn't confirmed whether you wanted it replaced with drag-and-drop or just left alone. Let me know if that's still worth revisiting.
-
-
-Ebay search results
-JS 
-
-Styles
-Code · CSS 
-
-
-
-
-
-Claude is AI and can make mistakes. Please double-check responses.
-Styles · CSS
 /* ── Google Fonts ─────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
- 
+
 /* ── Design tokens ────────────────────────────────────────────────────────── */
 :root {
   /* Base palette — deep blue-black with warm undertone */
@@ -131,25 +12,25 @@ Styles · CSS
   --bdr:      rgba(79,142,247,.1);
   --bdr2:     rgba(79,142,247,.18);
   --bdr3:     rgba(79,142,247,.28);
- 
+
   /* Typography */
   --tx:       #ffffff;
   --tx2:      #8da4c4;
   --tx3:      #4a6080;
- 
+
   /* Accent — vivid indigo-blue */
   --acc:      #5b9dff;
   --acc-h:    #85bcff;
   --acc-bg:   rgba(91,157,255,.15);
   --acc-bdr:  rgba(91,157,255,.32);
- 
+
   /* Teal secondary */
   --teal:     #2dd4bf;
   --teal-bg:  rgba(45,212,191,.1);
- 
+
   /* Nav */
   --nav-w: 224px;
- 
+
   /* Buy score tiers */
   --b5-bg:#0d3320;   --b5-tx:#6ee7a0;
   --b45-bg:#0a2e1c;  --b45-tx:#4ade80;
@@ -157,31 +38,31 @@ Styles · CSS
   --b35-bg:#2e1d06;  --b35-tx:#fbbf24;
   --b3-bg:#2a1200;   --b3-tx:#fb923c;
   --b2-bg:#1a2236;   --b2-tx:#5d7a96;
- 
+
   /* Sentiment */
   --up:#4ade80; --dn:#f87171;
- 
+
   /* Sleeper */
   --sl-bg:rgba(45,212,191,.12); --sl-tx:#2dd4bf;
- 
+
   /* Pitcher */
   --pit-bg:rgba(251,191,36,.1); --pit-tx:#fbbf24;
- 
+
   /* Streak */
   --str-bg:rgba(251,191,36,.1); --str-tx:#fbbf24;
- 
+
   /* Investment tiers */
   --inv1-bg:rgba(79,142,247,.14); --inv1-tx:#93c5fd;
   --inv2-bg:rgba(99,102,241,.18); --inv2-tx:#a5b4fc;
   --inv3-bg:#4f8ef7;              --inv3-tx:#fff;
   --inv4-bg:#7c3aed;              --inv4-tx:#fff;
- 
+
   /* Shadows */
   --shadow-sm: 0 2px 8px rgba(0,0,0,.5), 0 1px 3px rgba(0,8,32,.4);
   --shadow-md: 0 6px 24px rgba(0,0,0,.55), 0 2px 8px rgba(0,8,32,.35);
   --shadow-lg: 0 16px 48px rgba(0,0,0,.65), 0 4px 16px rgba(0,8,32,.45);
 }
- 
+
 /* ── Light mode ───────────────────────────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
   :root {
@@ -219,14 +100,14 @@ Styles · CSS
     --shadow-lg: 0 12px 40px rgba(0,0,0,.15), 0 4px 12px rgba(0,0,0,.08);
   }
 }
- 
+
 /* ── Reset ────────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
   margin: 0; padding: 0;
 }
- 
+
 html, body {
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
@@ -244,7 +125,7 @@ body {
 @media (min-width: 768px) {
   body { padding-top: 0; }
 }
- 
+
 /* ── Mobile nav (top tabs) ────────────────────────────────────────────────── */
 .top-tabs {
   position: fixed;
@@ -280,7 +161,7 @@ body {
   transition: color .2s;
 }
 .top-tab.on { color: var(--acc); border-bottom-color: var(--acc); }
- 
+
 /* ── Prospect sub-tabs ────────────────────────────────────────────────────── */
 .tabs {
   position: sticky;
@@ -307,7 +188,7 @@ body {
   transition: color .2s;
 }
 .tab.on { color: var(--acc); border-bottom-color: var(--acc); }
- 
+
 /* ── Search header ────────────────────────────────────────────────────────── */
 .hdr { padding: 12px 14px 8px; background: var(--bg); }
 .si { position: relative; }
@@ -351,7 +232,7 @@ body {
 .qs-dd-item:active { background: var(--acc-bg); }
 .qs-dd-name { font-size: 14px; color: var(--tx); font-weight: 600; }
 .qs-dd-sub { font-size: 11px; color: var(--tx3); margin-top: 2px; }
- 
+
 /* ── Meta / count bar ─────────────────────────────────────────────────────── */
 .meta {
   padding: 5px 14px;
@@ -384,10 +265,10 @@ body {
   transition: all .2s;
 }
 .schip.on { background: var(--acc-bg); color: var(--acc); border-color: var(--acc-bdr); }
- 
+
 /* ── List ─────────────────────────────────────────────────────────────────── */
 .list { padding: 10px 10px 80px; }
- 
+
 /* ── Player card ──────────────────────────────────────────────────────────── */
 .card {
   background: var(--surf);
@@ -414,7 +295,7 @@ body {
 .card:hover { border-color: var(--bdr3); background: var(--surf2); }
 .card:active { opacity: .75; transform: scale(.99); }
 .card.recent-hs { border-left: 3px solid var(--acc); }
- 
+
 /* rank box */
 .rnum {
   flex-shrink: 0;
@@ -436,7 +317,7 @@ body {
 }
 .rnum.pitcher { background: var(--pit-bg); color: var(--pit-tx); border-color: rgba(251,191,36,.2); }
 .rnum.empty { background: var(--surf2); color: var(--tx3); font-size: 10px; border-color: var(--bdr); }
- 
+
 /* price box */
 .pbox {
   flex-shrink: 0;
@@ -457,7 +338,7 @@ body {
   letter-spacing: -.02em;
 }
 .pbox.empty { background: transparent; border-color: var(--bdr); color: var(--tx3); }
- 
+
 .cbody { flex: 1; min-width: 0; }
 .r1 { display: flex; align-items: center; gap: 0; margin-bottom: 3px; }
 .pname {
@@ -471,7 +352,7 @@ body {
   letter-spacing: -.01em;
 }
 .r2 { font-size: 11px; color: var(--tx2); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
- 
+
 /* ── Badges ───────────────────────────────────────────────────────────────── */
 .badge { flex-shrink: 0; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 700; }
 .b5  { background: var(--b5-bg);  color: var(--b5-tx);  }
@@ -480,7 +361,7 @@ body {
 .b35 { background: var(--b35-bg); color: var(--b35-tx); }
 .b3  { background: var(--b3-bg);  color: var(--b3-tx);  }
 .b2  { background: var(--b2-bg);  color: var(--b2-tx);  }
- 
+
 .hs-label {
   flex-shrink: 0;
   padding: 2px 7px;
@@ -495,21 +376,21 @@ body {
 }
 .hs-label.repeat { background: rgba(248,113,113,.1); color: var(--dn); border-color: rgba(248,113,113,.2); }
 .hs-label.sleeper { background: var(--sl-bg); color: var(--sl-tx); border-color: rgba(45,212,191,.2); }
- 
+
 .wk-badge { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 600; background: var(--acc-bg); color: var(--acc); margin-right: 3px; }
 .wk-badge.streak { background: var(--str-bg); color: var(--str-tx); }
- 
+
 .inv-badge { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 700; margin-right: 3px; }
 .inv1 { background: var(--inv1-bg); color: var(--inv1-tx); }
 .inv2 { background: var(--inv2-bg); color: var(--inv2-tx); }
 .inv3 { background: var(--inv3-bg); color: var(--inv3-tx); }
 .inv4 { background: var(--inv4-bg); color: var(--inv4-tx); }
- 
+
 .sold-badge { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 600; background: rgba(74,222,128,.1); color: var(--up); margin-right: 3px; }
- 
+
 .up { color: var(--up); font-weight: 600; }
 .dn { color: var(--dn); font-weight: 600; }
- 
+
 /* ── Empty / spin / error ─────────────────────────────────────────────────── */
 .empty-msg { text-align: center; padding: 60px 20px; color: var(--tx3); font-size: 14px; }
 .spin { text-align: center; padding: 60px 20px; color: var(--tx2); font-size: 14px; }
@@ -532,7 +413,7 @@ body {
   margin: 12px;
   line-height: 1.6;
 }
- 
+
 /* ── Refresh FAB ──────────────────────────────────────────────────────────── */
 .rfab {
   position: fixed;
@@ -554,7 +435,7 @@ body {
 .rfab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(79,142,247,.55), 0 2px 8px rgba(0,0,0,.3); }
 .rfab svg { width: 20px; height: 20px; fill: white; }
 .rfab.spin svg { animation: spin .8s linear infinite; }
- 
+
 /* ── Modal ────────────────────────────────────────────────────────────────── */
 .mwrap {
   position: fixed;
@@ -625,7 +506,7 @@ body {
 .mname { font-size: 22px; font-weight: 700; margin-bottom: 3px; letter-spacing: -.02em; padding-right: 34px; }
 .msub { font-size: 13px; color: var(--tx2); margin-bottom: 16px; font-weight: 400; }
 .mitemid { font-size: 15px; color: var(--tx2); margin-bottom: 16px; font-weight: 600; font-family: 'DM Mono', monospace; }
- 
+
 /* stat grid inside modal */
 .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
 .scard {
@@ -649,7 +530,7 @@ body {
 .s3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; text-align: center; }
 .sc-l { font-size: 9px; color: var(--tx3); text-transform: uppercase; letter-spacing: .05em; }
 .sc-v { font-size: 15px; font-weight: 700; margin-top: 3px; letter-spacing: -.01em; }
- 
+
 .hs-entry {
   background: var(--surf);
   border: 1px solid var(--bdr);
@@ -667,7 +548,7 @@ body {
 .hs-sl { font-size: 9px; color: var(--tx3); text-transform: uppercase; letter-spacing: .05em; }
 .hs-sv { font-size: 13px; font-weight: 600; }
 .hs-notes { font-size: 12px; line-height: 1.65; color: var(--tx2); border-top: 1px solid var(--bdr); padding-top: 9px; margin-top: 6px; }
- 
+
 .close-btn {
   width: 100%;
   height: 46px;
@@ -684,26 +565,26 @@ body {
   letter-spacing: .01em;
 }
 .close-btn:hover { background: var(--surf2); color: var(--tx); }
- 
+
 .notes-toggle { width: 100%; padding: 11px 13px; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; font-family: inherit; }
 .notes-toggle span.lbl { font-size: 9px; color: var(--tx3); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
 .notes-toggle span.arr { font-size: 10px; color: var(--tx3); }
 .notes-body { display: none; padding: 0 13px 11px; }
 .notes-body p { font-size: 13px; line-height: 1.7; margin: 0; color: var(--tx); }
- 
+
 .section-hdr { font-size: 9px; color: var(--tx3); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; margin-bottom: 9px; }
- 
+
 .recent-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--bdr); }
 .recent-row:last-child { border-bottom: none; }
 .recent-info { flex: 1; min-width: 0; }
 .recent-info .rc-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-info .rc-date { font-size: 11px; color: var(--tx3); margin-top: 1px; }
- 
+
 .cs-row { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--bdr); cursor: pointer; }
 .cs-row:last-child { border-bottom: none; }
 .cs-row-top { display: flex; align-items: center; gap: 8px; }
 .cs-row-prices { display: flex; gap: 16px; justify-content: flex-end; }
- 
+
 @media (min-width: 768px) {
   .cs-row { flex-direction: row; align-items: flex-start; gap: 8px; }
   .cs-row-top { align-items: flex-start; }
@@ -713,7 +594,7 @@ body {
 .recent-sale { text-align: right; flex-shrink: 0; }
 .recent-sale .rs-price { font-size: 13px; font-weight: 700; font-family: 'DM Mono', monospace; }
 .recent-sale .rs-net { font-size: 11px; font-weight: 600; }
- 
+
 /* charts */
 .chart-wrap {
   background: var(--surf);
@@ -731,7 +612,7 @@ body {
 .chart-dot-rank { fill: var(--b35-tx); }
 .chart-label { font-size: 9px; fill: var(--tx3); font-family: 'DM Mono', monospace; }
 .chart-val { font-size: 10px; fill: var(--tx); font-weight: 600; font-family: 'DM Mono', monospace; }
- 
+
 /* card tracker entries */
 .ct-entry {
   background: var(--surf);
@@ -750,12 +631,12 @@ body {
 .ct-v { font-size: 13px; font-weight: 600; margin-top: 2px; }
 .ct-serial { font-size: 10px; color: var(--tx3); margin-top: 5px; font-family: 'DM Mono', monospace; }
 .port-player { cursor: pointer; }
- 
+
 /* portfolio rows */
 .pp-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--bdr); }
 .pp-row:last-child { border-bottom: none; }
 .pp-name { font-size: 13px; color: var(--tx); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; font-weight: 500; }
- 
+
 /* ── Hot Sheet list view ───────────────────────────────────────────────────── */
 .hs-section-hdr {
   font-size: 11px;
@@ -835,7 +716,7 @@ body {
 .bs-2 { background: var(--b2-bg); color: var(--tx3); }
 .bs-1 { background: var(--b2-bg); color: var(--tx3); }
 .hs-row-price { font-size: 13px; font-weight: 700; color: var(--tx); min-width: 38px; text-align: right; font-family: 'DM Mono', monospace; }
- 
+
 /* ── Search Builder ───────────────────────────────────────────────────────── */
 .sb-sticky-reset { position: sticky; top: 43px; z-index: 8; background: var(--bg); padding: 8px 14px; border-bottom: 1px solid var(--bdr); }
 .sb-sticky-reset button {
@@ -909,7 +790,7 @@ body {
 .sb-copy { background: var(--surf2); color: var(--tx2); border: 1px solid var(--bdr2); }
 .sb-open-ebay { background: rgba(251,146,60,.15); color: #fb923c; }
 .sb-open-comc { background: var(--inv1-bg); color: var(--inv1-tx); }
- 
+
 /* ── Watchlist ────────────────────────────────────────────────────────────── */
 .wl-card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 14px; padding: 12px 13px; margin-bottom: 8px; box-shadow: var(--shadow-sm); }
 .wl-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
@@ -930,10 +811,10 @@ body {
 .wl-ebay    { background: rgba(251,146,60,.15); color: #fb923c; }
 .wl-id      { background: var(--b4-bg); color: var(--b4-tx); }
 .wl-save    { background: var(--acc); color: #fff; }
- 
+
 /* ── Desktop layout ───────────────────────────────────────────────────────── */
 @media (min-width: 768px) {
- 
+
   .top-tabs {
     position: fixed;
     top: 0; left: 0; bottom: 0;
@@ -947,7 +828,7 @@ body {
     align-items: stretch;
     justify-content: flex-start;
   }
- 
+
   .top-tabs::before {
     content: 'Card Collection';
     display: block;
@@ -959,7 +840,7 @@ body {
     border-bottom: 1px solid var(--bdr);
     margin-bottom: 14px;
   }
- 
+
   .top-tab {
     flex: none;
     padding: 11px 20px;
@@ -979,7 +860,7 @@ body {
     color: var(--acc);
     border-left-color: var(--acc);
   }
- 
+
   #prospects-section,
   #sb-root,
   #cardtracker-root,
@@ -989,25 +870,25 @@ body {
   .list {
     margin-left: var(--nav-w);
   }
- 
+
   .tabs {
     top: 0;
     margin-left: var(--nav-w);
     position: sticky;
   }
- 
+
   .hdr {
     padding: 18px 22px 12px;
     max-width: 960px;
   }
- 
+
   .meta { padding: 6px 22px; }
- 
+
   .list {
     padding: 16px 22px 60px;
     max-width: 1120px;
   }
- 
+
   .list.grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1015,7 +896,7 @@ body {
     align-items: start;
   }
   .list.grid-2 .card { margin-bottom: 0; }
- 
+
   .mwrap { align-items: center; }
   .modal {
     max-width: 700px;
@@ -1024,16 +905,16 @@ body {
     border: 1px solid var(--bdr2);
   }
   .mhandle { display: none; }
- 
+
   .rfab { bottom: 28px; right: 28px; }
- 
+
   .sgrid { grid-template-columns: 1fr 1fr 1fr; }
- 
+
   .sb-sticky-reset { top: 0; }
- 
+
   .hs-filters { margin-bottom: 16px; }
 }
- 
+
 @media (min-width: 1100px) {
   .list { max-width: 1240px; }
   .list.grid-2 { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1060,7 +941,7 @@ body {
   transition: opacity .2s;
 }
 .sr-add-btn:hover { opacity: .85; }
- 
+
 .sr-form {
   background: var(--surf);
   border: 1px solid var(--bdr2);
@@ -1112,7 +993,7 @@ body {
   transition: opacity .2s;
 }
 .sr-save-btn:hover { opacity: .85; }
- 
+
 .sr-tile-card {
   background: var(--surf);
   border: 1px solid var(--bdr);
@@ -1194,7 +1075,7 @@ body {
 .sr-delete-btn:hover { color: var(--dn); }
 .sr-loading { padding: 40px 0; text-align: center; color: var(--tx3); font-size: 14px; }
 .sr-empty { padding: 40px 0; text-align: center; color: var(--tx3); font-size: 14px; }
- 
+
 @media (min-width: 768px) {
   #sr-root { margin-left: var(--nav-w); }
   .sr-wrap { padding: 20px 22px 60px; }
@@ -1224,7 +1105,7 @@ body {
 }
 .sr-back-btn:hover { color: var(--tx); border-color: var(--bdr3); }
 .sr-digest-title { font-size: 15px; font-weight: 700; color: var(--tx); letter-spacing: -.01em; }
- 
+
 .sr-listing-card {
   background: var(--surf);
   border: 1px solid var(--bdr);
@@ -1262,7 +1143,7 @@ body {
   transition: opacity .2s;
 }
 .sr-listing-snipe:hover { opacity: .8; }
- 
+
 .sr-listing-img {
   width: 100%;
   max-height: 180px;
@@ -1412,7 +1293,7 @@ body {
 .sr-menu-item:hover { background: var(--surf2); }
 .sr-menu-delete { color: var(--dn); }
 .sr-menu-delete:hover { background: rgba(248,113,113,.08); }
- 
+
 /* ── Run Button ───────────────────────────────────────────────────────────── */
 .sr-run-btn {
   padding: 5px 12px;
@@ -1428,7 +1309,7 @@ body {
 }
 .sr-run-btn:hover { opacity: .85; }
 .sr-run-btn:disabled { opacity: .5; cursor: default; }
- 
+
 /* ── Reset/Clear Button ───────────────────────────────────────────────────── */
 .sr-reset-btn {
   background: none;
@@ -1444,7 +1325,7 @@ body {
   transition: background .2s;
 }
 .sr-reset-btn:hover { background: rgba(248,113,113,.08); }
- 
+
 /* ── Search Results Groups ────────────────────────────────────────────────── */
 .sr-header-btns { display: flex; gap: 8px; }
 .sr-add-group-btn {
@@ -1460,7 +1341,7 @@ body {
   transition: opacity .2s;
 }
 .sr-add-group-btn:hover { opacity: .85; }
- 
+
 .sr-group-searches {
   border-top: 1px solid var(--bdr);
   margin-top: 2px;
@@ -1487,7 +1368,7 @@ body {
   -webkit-appearance: none;
 }
 .sr-select:focus { outline: none; border-color: var(--acc); }
- 
+
 /* ── Digest Controls ──────────────────────────────────────────────────────── */
 .sr-digest-controls {
   display: flex;
@@ -1511,7 +1392,7 @@ body {
 }
 .sr-search-input:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-bg); }
 .sr-search-input::placeholder { color: var(--tx3); }
- 
+
 /* ── Digest Header Sticky ─────────────────────────────────────────────────── */
 .sr-digest-header {
   position: sticky;
@@ -1522,13 +1403,13 @@ body {
   margin-bottom: 8px;
   border-top: 6px solid var(--bg);
 }
- 
+
 @media (min-width: 768px) {
   .sr-digest-header {
     top: 0;
   }
 }
- 
+
 .sr-mark-seen-btn {
   padding: 5px 12px;
   background: var(--acc);
@@ -1543,7 +1424,7 @@ body {
   flex-shrink: 0;
 }
 .sr-mark-seen-btn:hover { opacity: .85; }
- 
+
 .sr-digest-count {
   position: sticky;
   top: 91px;
@@ -1556,10 +1437,9 @@ body {
   text-transform: uppercase;
   letter-spacing: .06em;
 }
- 
+
 @media (min-width: 768px) {
   .sr-digest-count {
     top: 48px;
   }
 }
- 
