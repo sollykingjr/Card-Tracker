@@ -298,6 +298,7 @@ async function renderList() {
             ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
               <div class="sr-search-row">
                 <div class="sr-search-row-label">🔍 ${s.label}</div>
+                <button class="sr-link sr-link-sm" onclick="showDigest('${group.digestKey}', '${s.label}', true, undefined, '${s.id}')">7-Day →</button>
                 <div class="sr-menu-wrap">
                   <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
                   <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
@@ -810,7 +811,7 @@ function wireForm() {
 }
 
 // ── Digest View ───────────────────────────────────────────────────────────────
-async function showDigest(digestKey, label, isArchive, overrideKey) {
+async function showDigest(digestKey, label, isArchive, overrideKey, searchIdFilter) {
   const root = document.getElementById('sr-root');
   const key = overrideKey || (isArchive ? digestKey + '_archive' : digestKey);
   let sortMode = 'newest';
@@ -847,11 +848,19 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
   };
 
   document.getElementById('sr-mark-seen-btn').onclick = async () => {
-    await fetch(`${WORKER}/mark-seen`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key })
-    });
+    if (searchIdFilter) {
+      await fetch(`${WORKER}/mark-seen-urls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, urls: allItems.map(i => i.url) })
+      });
+    } else {
+      await fetch(`${WORKER}/mark-seen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      });
+    }
 
     // Sync seen to counterpart key by URL overlap
     const isArchive = key.endsWith('_archive');
@@ -903,6 +912,7 @@ async function showDigest(digestKey, label, isArchive, overrideKey) {
     const res = await fetch(`${WORKER}/player-digest-json?key=${key}`);
     const data = await res.json();
     allItems = data.items || [];
+    if (searchIdFilter) allItems = allItems.filter(i => i.searchId === searchIdFilter);
     updateDigestCount(allItems, showAll);
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   } catch(e) {
