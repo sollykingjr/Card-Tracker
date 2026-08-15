@@ -5,7 +5,6 @@ const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/
 // ── [2] Main router ───────────────────────────────────────────────────────────
 export default {
   async scheduled(event, env, ctx) {
-    await checkPromotions(env);
     if (event.cron === '0 10 * * *') {
       await checkNightlySearches(env);
     } else {
@@ -228,101 +227,6 @@ async function refreshAccessToken(refreshToken, env) {
   if (!tokens.access_token) return null;
   await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: 7200 });
   return tokens.access_token;
-}
-
-// ── [8] checkPromotions ───────────────────────────────────────────────────────
-async function checkPromotions(env) {
-  const today = new Date().toLocaleString('en-CA', { timeZone: 'America/New_York' }).split(',')[0];
-  const lastSeenId = await env.CACHE.get('milb_last_transaction_id');
-
-  // Fetch portfolio player names
-  const portfolioRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/12sNofzPwhb8uR68hT_bJNiLD2MrM0rdoQMPXGTlx2_s/values/Card%20Cost%20Tracker%20Final!H:H?key=AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE`
-  );
-  const portfolioData = await portfolioRes.json();
-  const portfolioNames = (portfolioData.values || [])
-    .flat()
-    .map(n => n.trim().toLowerCase())
-    .filter(Boolean);
-
-  // Fetch all prospect names from all tabs
-  const sheetsRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/15pRN3ILeyfbPG2OMRxh0OUtqg6MZCaLMMjwf4yxDV74?key=AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE`
-  );
-  const sheetsData = await sheetsRes.json();
-  const tabNames = sheetsData.sheets.map(s => s.properties.title);
-
-  const prospectNames = new Set();
-  for (const tab of tabNames) {
-    const tabRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/15pRN3ILeyfbPG2OMRxh0OUtqg6MZCaLMMjwf4yxDV74/values/${encodeURIComponent(tab)}!A:Z?key=AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE`
-    );
-    const tabData = await tabRes.json();
-    (tabData.values || []).forEach(row => {
-      row.forEach(cell => {
-        if (cell && cell.trim()) prospectNames.add(cell.trim().toLowerCase());
-      });
-    });
-  }
-
-  // Fetch today's transactions from MLB Stats API
-  const apiUrl = `https://statsapi.mlb.com/api/v1/transactions?startDate=${today}&endDate=${today}&sportId=11`;
-  const apiRes = await fetch(apiUrl);
-  const apiData = await apiRes.json();
-  const transactions = apiData.transactions || [];
-
-  if (transactions.length === 0) return;
-
-  // Save the newest transaction ID
-  const newestId = String(transactions[0].id);
-  if (lastSeenId === newestId) return;
-  await env.CACHE.put('milb_last_transaction_id', newestId);
-
-  // Find only transactions newer than last seen
-  const newTransactions = [];
-  for (const t of transactions) {
-    if (String(t.id) === lastSeenId) break;
-    newTransactions.push(t);
-  }
-
-  for (const t of newTransactions) {
-    const desc = t.description || '';
-    const isPromotion = desc.includes('assigned to') || desc.includes('selected the contract of');
-    if (!isPromotion) continue;
-
-    const playerName = t.person?.fullName || '';
-    if (!playerName) continue;
-    const playerLower = playerName.toLowerCase();
-
-    // Check graduated list
-    const graduated = await env.CACHE.get(`graduated:${playerLower}`);
-    if (graduated) continue;
-
-    // Must be in both portfolio and prospect list
-    if (!portfolioNames.includes(playerLower)) continue;
-    if (!prospectNames.has(playerLower)) continue;
-
-    // Check if first MLB call-up
-    const isCallUp = desc.includes('selected the contract of');
-    if (isCallUp) {
-      await env.CACHE.put(`graduated:${playerLower}`, '1');
-    }
-
-    const message = isCallUp
-      ? `🚨 MLB Call-Up: ${playerName} selected to roster!`
-      : `⬆️ Promotion: ${playerName} assigned up in minors`;
-
-    await fetch('https://api.pushover.net/1/messages.json', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: env.PUSHOVER_TOKEN,
-        user: env.PUSHOVER_USER,
-        message,
-        title: 'Prospect Promotion Alert'
-      })
-    });
-  }
 }
 
 // ── [9] handleSbData ─────────────────────────────────────────────────────────
