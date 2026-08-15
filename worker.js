@@ -1675,7 +1675,13 @@ async function handleRunSearch(request, env, cors) {
       const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
       const apiData = await res.json();
-      let filtered = (apiData.itemSummaries || []).filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      const allSummaries = apiData.itemSummaries || [];
+      let filtered = allSummaries.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      if (filtered.length < 10) {
+        const haveUrls = new Set(filtered.map(i => i.itemWebUrl));
+        const backfill = allSummaries.filter(i => !haveUrls.has(i.itemWebUrl)).slice(0, 10 - filtered.length);
+        filtered = [...filtered, ...backfill];
+      }
 
       if (s.excludeKeywords) {
         const excl = s.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
