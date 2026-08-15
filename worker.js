@@ -1725,6 +1725,15 @@ async function handleRunSearch(request, env, cors) {
     const merged = [...existingItems, ...deduped];
     await env.CACHE.put(targetKey, JSON.stringify(merged));
 
+    // Also merge into 7-day archive, same as scheduled runs
+    const archiveKey = targetKey + '_archive';
+    const existingArchive = await env.CACHE.get(archiveKey);
+    const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
+    const archiveUrls = new Set(archiveItems.map(i => i.url));
+    const archiveDeduped = items.filter(i => !archiveUrls.has(i.url));
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const trimmedArchive = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmedArchive, ...archiveDeduped]));
 
     return new Response(JSON.stringify({ ok: true, count: items.length }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
