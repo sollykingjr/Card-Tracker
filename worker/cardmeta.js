@@ -310,6 +310,73 @@ export async function handleCardOverridePendingClear(request, env, cors) {
   }
 }
 
+// ── [25a] handleEbayQueuePost — save (or update) a card's full eBay listing draft ─
+export async function handleEbayQueuePost(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemId = body.itemId;
+    if (!itemId) {
+      return new Response(JSON.stringify({ error: 'missing itemId' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+    const { itemId: _drop, ...listing } = body;
+    await env.CACHE.put(`ebay-queue:${itemId}`, JSON.stringify(listing));
+    return new Response(JSON.stringify({ itemId, ok: true }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [25b] handleEbayQueueAll — bulk read of every queued listing ────────────
+export async function handleEbayQueueAll(env, cors) {
+  try {
+    const result = {};
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix: 'ebay-queue:', cursor });
+      for (const k of page.keys) {
+        const itemId = k.name.slice('ebay-queue:'.length);
+        const raw = await env.CACHE.get(k.name);
+        if (raw) result[itemId] = JSON.parse(raw);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return new Response(JSON.stringify(result), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ── [25c] handleEbayQueueRemove — drop one card from the queue ──────────────
+export async function handleEbayQueueRemove(request, env, cors) {
+  try {
+    const body = await request.json();
+    const itemId = body.itemId;
+    if (!itemId) {
+      return new Response(JSON.stringify({ error: 'missing itemId' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+    await env.CACHE.delete(`ebay-queue:${itemId}`);
+    return new Response(JSON.stringify({ itemId, removed: true }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 // ── [23a] getGoogleAccessTokenForSheets ───────────────────────────────────────
 export async function getGoogleAccessTokenForSheets(env) {
   const cached = await env.CACHE.get('google_access_token_sheets');
