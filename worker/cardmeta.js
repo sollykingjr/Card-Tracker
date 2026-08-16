@@ -436,6 +436,65 @@ export async function handleCardOverride(request, env, cors) {
   }
 }
 
+// ── [22h] handleCardImage — serves scan bytes at a URL ending in .jpg, for eBay's importer ─
+export async function handleCardImage(request, env, cors) {
+  try {
+    const url = new URL(request.url);
+    const match = url.pathname.match(/^\/card-image\/(.+)-(front|back)\.jpg$/);
+    if (!match) {
+      return new Response('Not found', { status: 404, headers: cors });
+    }
+    const [, itemId, side] = match;
+
+    const cacheKey = `scan:${itemId}`;
+    let scanData;
+    const cached = await env.CACHE.get(cacheKey);
+    if (cached) {
+      scanData = JSON.parse(cached);
+    } else {
+      const token = await getGoogleAccessToken(env);
+      const q = `name contains '${itemId}' and mimeType contains 'image/' and trashed=false`;
+      const driveUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink,parents)&pageSize=10`;
+      const driveRes = await fetch(driveUrl, { headers: { Authorization: `Bearer ${token}` } });
+      const driveData = await driveRes.json();
+      const allFiles = driveData.files || [];
+
+      const COMC_FOLDER_ID = '19S73azDgJwYkqfkMsx6c1nlp2XN5pjT0';
+      const isComc = f => (f.parents || []).includes(COMC_FOLDER_ID);
+      const nonComcFiles = allFiles.filter(f => !isComc(f));
+      const files = nonComcFiles.length > 0 ? nonComcFiles : allFiles;
+
+      const back = files.find(f => /back/i.test(f.name));
+      const front = files.find(f => f !== back) || files[0] || null;
+
+      scanData = {
+        front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${front.id}&sz=w200` } : null,
+        back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${back.id}&sz=w200` } : null
+      };
+      await env.CACHE.put(cacheKey, JSON.stringify(scanData), { expirationTtl: 604800 });
+    }
+
+    const fileInfo = scanData[side];
+    if (!fileInfo || !fileInfo.id) {
+      return new Response('Image not found', { status: 404, headers: cors });
+    }
+
+    const token = await getGoogleAccessToken(env);
+    const imgRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileInfo.id}?alt=media`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!imgRes.ok) {
+      return new Response('Could not fetch image', { status: 502, headers: cors });
+    }
+    const imageBuffer = await imgRes.arrayBuffer();
+    return new Response(imageBuffer, {
+      headers: { ...cors, 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' }
+    });
+  } catch(e) {
+    return new Response(`Error: ${e.message}`, { status: 500, headers: cors });
+  }
+}
+
 // ── [23] getGoogleAccessToken ─────────────────────────────────────────────────
 export async function getGoogleAccessToken(env) {
   const cached = await env.CACHE.get('google_access_token');
