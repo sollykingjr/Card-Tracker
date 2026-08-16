@@ -64,12 +64,6 @@ export default {
       }
     }
 
-    if (path === '/debug-key-check') {
-      return new Response(JSON.stringify({
-        hasKey: !!env.APP_KEY,
-        length: (env.APP_KEY || '').length
-      }), { headers: { ...cors, 'Content-Type': 'application/json' } });
-    }
     if (path === '/auth') return handleAuth(env);
     if (path === '/callback') return handleCallback(request, env);
     if (path === '/watchlist') return handleWatchlist(request, env, cors);
