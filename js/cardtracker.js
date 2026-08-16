@@ -105,7 +105,7 @@ function ctCheckPendingResolved(c) {
   delete ctPendingCache[c.itemId];
   fetch(`${WORKER_URL}/card-override-pending-clear`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
     body: JSON.stringify({ itemId: c.itemId })
   }).catch(() => {});
   return false;
@@ -152,7 +152,7 @@ async function ctToggleInHand(idx) {
   try {
     await fetch(`${WORKER_URL}/card-meta`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemId: c.itemId, inHand: newVal })
     });
   } catch (e) {}
@@ -297,7 +297,7 @@ async function ctAddTag(idx) {
   try {
     await fetch(`${WORKER_URL}/card-meta`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemId: c.itemId, tags: updated })
     });
   } catch (e) {}
@@ -313,7 +313,7 @@ async function ctRemoveTag(idx, tag) {
   try {
     await fetch(`${WORKER_URL}/card-meta`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemId: c.itemId, tags: updated })
     });
   } catch (e) {}
@@ -325,7 +325,7 @@ async function ctFetchScansForPage(itemIds) {
   try {
     const res = await fetch(`${WORKER_URL}/scan-batch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemIds: needed })
     });
     const data = await res.json();
@@ -820,7 +820,7 @@ async function ctSaveMetadata(idx) {
   try {
     const res = await fetch(`${WORKER_URL}/card-override`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemId: c.itemId, fields })
     });
     const data = await res.json();
