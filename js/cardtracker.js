@@ -716,7 +716,7 @@ function ctOpenCard(idx) {
     <div class="ct-menu" id="ct-menu">
       <div class="ct-menu-item" onclick="ctRefreshScans()">Refresh Scans</div>
       <div class="ct-menu-item" onclick="ctShowEditMetadata(${idx})">Edit Metadata</div>
-      <div class="ct-menu-item" onclick="ebayOpenListingForm(c.itemId)">Queue for eBay</div>
+      <div class="ct-menu-item" onclick="ebayOpenListingForm('${(c.itemId||'').replace(/'/g,"\\'")}')">Queue for eBay</div>
     </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
     <div class="mitemid">${c.itemId || '—'}</div>
