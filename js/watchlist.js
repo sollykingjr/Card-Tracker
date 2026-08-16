@@ -104,7 +104,7 @@ async function saveTitle(itemId, title, btn) {
   try {
     const res = await fetch(`${WORKER_URL}/save-title`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemId, title })
     });
     const data = await res.json();
