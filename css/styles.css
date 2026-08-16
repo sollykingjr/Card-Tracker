@@ -1077,8 +1077,9 @@ body {
 .sr-empty { padding: 40px 0; text-align: center; color: var(--tx3); font-size: 14px; }
 
 .sr-section-card {
-  background: transparent;
-  border: none;
+  background: var(--surf2);
+  border: 1px solid var(--bdr2);
+  border-radius: 14px;
   box-shadow: none;
   padding: 0;
   margin-bottom: 4px;
