@@ -59,6 +59,7 @@ async function initSearchResults() {
       <div class="sr-header">
         <h2 class="sr-title">Search Results</h2>
         <div class="sr-header-btns">
+          <button class="sr-add-group-btn" id="sr-add-section-btn">+ Section</button>
           <button class="sr-add-group-btn" id="sr-add-group-btn">+ Group</button>
           <button class="sr-add-btn" id="sr-add-btn">+ Search</button>
         </div>
@@ -72,6 +73,12 @@ async function initSearchResults() {
             <div class="sr-form-label">Group</div>
             <select class="sr-select" id="sr-group-select">
               <option value="">Standalone</option>
+            </select>
+          </div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">Section</div>
+            <select class="sr-select" id="sr-section-select">
+              <option value="">No Section</option>
             </select>
           </div>
           <input class="sr-input" id="sr-query" placeholder="eBay search query (e.g. scott brosius)">
@@ -185,6 +192,12 @@ async function initSearchResults() {
           <div class="sr-form-title" id="sr-group-form-title">New Group</div>
           <input class="sr-input" id="sr-group-label" placeholder="Group name (e.g. DC Sports Baseball)">
           <div class="sr-form-row">
+            <div class="sr-form-label">Section</div>
+            <select class="sr-select" id="sr-group-section-select">
+              <option value="">No Section</option>
+            </select>
+          </div>
+          <div class="sr-form-row">
             <div class="sr-form-label">Schedule</div>
             <div class="sr-chip-row" id="sr-group-schedule-chips">
               <button class="sr-chip-btn on" data-val="hourly">Hourly</button>
@@ -216,6 +229,19 @@ async function initSearchResults() {
 
   document.getElementById('sr-add-btn').onclick = () => openSearchForm();
   document.getElementById('sr-add-group-btn').onclick = () => openGroupForm();
+  document.getElementById('sr-add-section-btn').onclick = async () => {
+    const label = prompt('Section name');
+    if (!label || !label.trim()) return;
+    const maxOrder = Math.max(0, ...getContainerItems(null).map(it => it.obj.order ?? 0));
+    srData.sections.push({
+      id: 'sec_' + Date.now(),
+      label: label.trim(),
+      order: maxOrder + 1,
+      expanded: true
+    });
+    await saveData();
+    renderList();
+  };
   document.getElementById('sr-cancel-btn').onclick = () => closeSearchForm();
   document.getElementById('sr-group-cancel-btn').onclick = () => closeGroupForm();
   document.getElementById('sr-save-btn').onclick = saveSearch;
@@ -258,93 +284,140 @@ async function saveData() {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
-async function renderList() {
-  const list = document.getElementById('sr-list');
-  if (!list) return;
-  let html = '';
+function getContainerItems(sectionId) {
+  if (sectionId === null) {
+    return [
+      ...srData.sections.map(sec => ({ type: 'section', obj: sec })),
+      ...srData.groups.filter(g => !g.sectionId).map(g => ({ type: 'group', obj: g })),
+      ...srData.searches.filter(s => !s.groupId && !s.sectionId).map(s => ({ type: 'search', obj: s }))
+    ].sort((a, b) => (a.obj.order ?? 0) - (b.obj.order ?? 0));
+  }
+  return [
+    ...srData.groups.filter(g => g.sectionId === sectionId).map(g => ({ type: 'group', obj: g })),
+    ...srData.searches.filter(s => !s.groupId && s.sectionId === sectionId).map(s => ({ type: 'search', obj: s }))
+  ].sort((a, b) => (a.obj.order ?? 0) - (b.obj.order ?? 0));
+}
 
-  const standalone = srData.searches.filter(s => !s.groupId);
-  const topItems = [
-    ...srData.groups.map(g => ({ type: 'group', obj: g })),
-    ...standalone.map(s => ({ type: 'search', obj: s }))
-  ];
-  topItems.sort((a, b) => (a.obj.order ?? 0) - (b.obj.order ?? 0));
-
-  topItems.forEach((entry, idx) => {
-    const moveHtml = `
-      <button class="sr-menu-item sr-menu-move-up" data-toptype="${entry.type}" data-id="${entry.obj.id}" ${idx === 0 ? 'disabled' : ''}>Move Up</button>
-      <button class="sr-menu-item sr-menu-move-down" data-toptype="${entry.type}" data-id="${entry.obj.id}" ${idx === topItems.length - 1 ? 'disabled' : ''}>Move Down</button>
-    `;
-
-    if (entry.type === 'group') {
-      const group = entry.obj;
-      const groupSearches = srData.searches.filter(s => s.groupId === group.id);
-      html += `
-        <div class="sr-tile-card" id="srg-${group.id}">
-          <div class="sr-tile-row">
-            <button class="sr-chevron-btn" data-id="${group.id}">▸</button>
-            <div class="sr-tile-main" data-digestkey="${group.digestKey}" data-label="${group.label}" data-type="group" data-id="${group.id}">
-              <div class="sr-tile-name">${group.label}</div>
-            </div>
-            <span id="sr-badge-group-${group.id}" class="sr-count-badge"></span>
-            <div class="sr-menu-wrap">
-              <button class="sr-menu-btn" data-id="${group.id}" data-type="group">···</button>
-              <div class="sr-menu-dropdown" id="srm-${group.id}" style="display:none">
-                <button class="sr-menu-item sr-menu-run" data-digestkey="${group.digestKey}" data-label="${group.label}">Run</button>
-                <button class="sr-menu-item sr-menu-edit-group" data-id="${group.id}">Edit</button>
-                <button class="sr-menu-item sr-menu-add-search-to-group" data-id="${group.id}">Add Search</button>
-                ${moveHtml}
-                <button class="sr-menu-item sr-menu-delete sr-menu-delete-group" data-id="${group.id}">Delete Group</button>
-              </div>
-            </div>
-          </div>
-          <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
-            ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
-              <div class="sr-tile-row sr-tile-row-nested">
-                <div class="sr-tile-main" data-groupdigestkey="${group.digestKey}" data-label="${s.label}" data-searchid="${s.id}">
-                  <div class="sr-tile-name">${s.label}</div>
-                </div>
-                <span id="sr-badge-search-${s.id}" class="sr-count-badge"></span>
-                <div class="sr-menu-wrap">
-                  <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
-                  <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
-                    <button class="sr-menu-item sr-menu-run-search" data-id="${s.id}" data-group-digestkey="${group.digestKey}" data-label="${s.label}">Run</button>
-                    <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
-                    <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
-                    <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
-                  </div>
-                </div>
-              </div>
-            `).join('')}
+function renderGroupTile(group, idx, len, containerId) {
+  const groupSearches = srData.searches.filter(s => s.groupId === group.id);
+  const moveHtml = `
+    <button class="sr-menu-item sr-menu-move-up" data-toptype="group" data-id="${group.id}" data-container="${containerId}" ${idx === 0 ? 'disabled' : ''}>Move Up</button>
+    <button class="sr-menu-item sr-menu-move-down" data-toptype="group" data-id="${group.id}" data-container="${containerId}" ${idx === len - 1 ? 'disabled' : ''}>Move Down</button>
+  `;
+  return `
+    <div class="sr-tile-card" id="srg-${group.id}">
+      <div class="sr-tile-row">
+        <button class="sr-chevron-btn" data-id="${group.id}">▸</button>
+        <div class="sr-tile-main" data-digestkey="${group.digestKey}" data-label="${group.label}" data-type="group" data-id="${group.id}">
+          <div class="sr-tile-name">${group.label}</div>
+        </div>
+        <span id="sr-badge-group-${group.id}" class="sr-count-badge"></span>
+        <div class="sr-menu-wrap">
+          <button class="sr-menu-btn" data-id="${group.id}" data-type="group">···</button>
+          <div class="sr-menu-dropdown" id="srm-${group.id}" style="display:none">
+            <button class="sr-menu-item sr-menu-run" data-digestkey="${group.digestKey}" data-label="${group.label}">Run</button>
+            <button class="sr-menu-item sr-menu-edit-group" data-id="${group.id}">Edit</button>
+            <button class="sr-menu-item sr-menu-add-search-to-group" data-id="${group.id}">Add Search</button>
+            ${moveHtml}
+            <button class="sr-menu-item sr-menu-delete sr-menu-delete-group" data-id="${group.id}">Delete Group</button>
           </div>
         </div>
-      `;
-    } else {
-      const s = entry.obj;
-      html += `
-        <div class="sr-tile-card">
-          <div class="sr-tile-row">
-            <div class="sr-tile-main" data-digestkey="${s.digestKey}" data-label="${s.label}" data-type="search" data-id="${s.id}">
+      </div>
+      <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
+        ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
+          <div class="sr-tile-row sr-tile-row-nested">
+            <div class="sr-tile-main" data-groupdigestkey="${group.digestKey}" data-label="${s.label}" data-searchid="${s.id}">
               <div class="sr-tile-name">${s.label}</div>
             </div>
             <span id="sr-badge-search-${s.id}" class="sr-count-badge"></span>
             <div class="sr-menu-wrap">
-              <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
+              <button class="sr-menu-btn sr-menu-btn-sm" data-id="${s.id}" data-type="search">···</button>
               <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
-                <button class="sr-menu-item sr-menu-run" data-digestkey="${s.digestKey}" data-label="${s.label}">Run</button>
+                <button class="sr-menu-item sr-menu-run-search" data-id="${s.id}" data-group-digestkey="${group.digestKey}" data-label="${s.label}">Run</button>
                 <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
                 <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
-                ${moveHtml}
                 <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
               </div>
             </div>
           </div>
-        </div>
-      `;
-    }
-  });
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
 
-  if (srData.groups.length === 0 && standalone.length === 0) {
+function renderSearchTile(s, idx, len, containerId) {
+  const moveHtml = `
+    <button class="sr-menu-item sr-menu-move-up" data-toptype="search" data-id="${s.id}" data-container="${containerId}" ${idx === 0 ? 'disabled' : ''}>Move Up</button>
+    <button class="sr-menu-item sr-menu-move-down" data-toptype="search" data-id="${s.id}" data-container="${containerId}" ${idx === len - 1 ? 'disabled' : ''}>Move Down</button>
+  `;
+  return `
+    <div class="sr-tile-card">
+      <div class="sr-tile-row">
+        <div class="sr-tile-main" data-digestkey="${s.digestKey}" data-label="${s.label}" data-type="search" data-id="${s.id}">
+          <div class="sr-tile-name">${s.label}</div>
+        </div>
+        <span id="sr-badge-search-${s.id}" class="sr-count-badge"></span>
+        <div class="sr-menu-wrap">
+          <button class="sr-menu-btn" data-id="${s.id}" data-type="search">···</button>
+          <div class="sr-menu-dropdown" id="srm-${s.id}" style="display:none">
+            <button class="sr-menu-item sr-menu-run" data-digestkey="${s.digestKey}" data-label="${s.label}">Run</button>
+            <button class="sr-menu-item sr-menu-edit-search" data-id="${s.id}">Edit</button>
+            <button class="sr-menu-item sr-menu-duplicate-search" data-id="${s.id}">Duplicate</button>
+            ${moveHtml}
+            <button class="sr-menu-item sr-menu-delete sr-menu-delete-search" data-id="${s.id}">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSectionTile(section, idx, len) {
+  const moveHtml = `
+    <button class="sr-menu-item sr-menu-move-up" data-toptype="section" data-id="${section.id}" data-container="top" ${idx === 0 ? 'disabled' : ''}>Move Up</button>
+    <button class="sr-menu-item sr-menu-move-down" data-toptype="section" data-id="${section.id}" data-container="top" ${idx === len - 1 ? 'disabled' : ''}>Move Down</button>
+  `;
+  const items = getContainerItems(section.id);
+  const inner = items.length === 0
+    ? '<div class="sr-empty-group">No searches or groups in this section yet</div>'
+    : items.map((entry, i) => entry.type === 'group'
+        ? renderGroupTile(entry.obj, i, items.length, section.id)
+        : renderSearchTile(entry.obj, i, items.length, section.id)
+      ).join('');
+  return `
+    <div class="sr-tile-card sr-section-card" id="srsec-${section.id}">
+      <div class="sr-tile-row">
+        <button class="sr-section-chevron ${section.expanded ? 'open' : ''}" data-section-id="${section.id}">${section.expanded ? '▾' : '▸'}</button>
+        <div class="sr-tile-name sr-section-name">${section.label}</div>
+        <div class="sr-menu-wrap">
+          <button class="sr-menu-btn" data-id="${section.id}" data-type="section">···</button>
+          <div class="sr-menu-dropdown" id="srm-${section.id}" style="display:none">
+            <button class="sr-menu-item sr-menu-rename-section" data-id="${section.id}">Rename</button>
+            ${moveHtml}
+            <button class="sr-menu-item sr-menu-delete sr-menu-delete-section" data-id="${section.id}">Delete Section</button>
+          </div>
+        </div>
+      </div>
+      <div class="sr-group-searches" id="sr-section-items-${section.id}" style="display:${section.expanded ? 'block' : 'none'}">
+        ${inner}
+      </div>
+    </div>
+  `;
+}
+
+async function renderList() {
+  const list = document.getElementById('sr-list');
+  if (!list) return;
+
+  const topItems = getContainerItems(null);
+  let html = topItems.map((entry, idx) => {
+    if (entry.type === 'section') return renderSectionTile(entry.obj, idx, topItems.length);
+    if (entry.type === 'group') return renderGroupTile(entry.obj, idx, topItems.length, 'top');
+    return renderSearchTile(entry.obj, idx, topItems.length, 'top');
+  }).join('');
+
+  if (topItems.length === 0) {
     html = '<div class="sr-empty">No searches yet. Add a group or standalone search above.</div>';
   }
 
@@ -387,7 +460,18 @@ async function renderList() {
   }));
 }
 
-function moveTopLevel(type, id, direction) {
+function moveWithinContainer(type, id, direction, containerId) {
+  const sectionId = containerId === 'top' ? null : containerId;
+  const items = getContainerItems(sectionId);
+  items.forEach((it, i) => { it.obj.order = i; });
+  const idx = items.findIndex(it => it.type === type && it.obj.id === id);
+  if (idx === -1) return;
+  const swapIdx = idx + direction;
+  if (swapIdx < 0 || swapIdx >= items.length) return;
+  const tmp = items[idx].obj.order;
+  items[idx].obj.order = items[swapIdx].obj.order;
+  items[swapIdx].obj.order = tmp;
+}
   const items = [
     ...srData.groups.map(g => ({ type: 'group', obj: g })),
     ...srData.searches.filter(s => !s.groupId).map(s => ({ type: 'search', obj: s }))
@@ -510,13 +594,58 @@ function wireListEvents() {
     };
   });
 
-// Move up/down (top-level groups + standalone searches only)
+// Section chevron: expand/collapse, persisted per section
+  document.querySelectorAll('.sr-section-chevron').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const section = srData.sections.find(sec => sec.id === btn.dataset.sectionId);
+      if (!section) return;
+      section.expanded = !section.expanded;
+      const panel = document.getElementById(`sr-section-items-${section.id}`);
+      if (panel) panel.style.display = section.expanded ? 'block' : 'none';
+      btn.textContent = section.expanded ? '▾' : '▸';
+      btn.classList.toggle('open', section.expanded);
+      await saveData();
+    };
+  });
+
+  // Rename section
+  document.querySelectorAll('.sr-menu-rename-section').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
+      const section = srData.sections.find(sec => sec.id === btn.dataset.id);
+      if (!section) return;
+      const newLabel = prompt('Section name', section.label);
+      if (!newLabel || !newLabel.trim()) return;
+      section.label = newLabel.trim();
+      await saveData();
+      renderList();
+    };
+  });
+
+  // Delete section (unassigns its groups/searches back to the top level, doesn't delete them)
+  document.querySelectorAll('.sr-menu-delete-section').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const section = srData.sections.find(sec => sec.id === btn.dataset.id);
+      if (!section) return;
+      if (!confirm(`Delete section "${section.label}"? Its groups/searches will move back to the main list.`)) return;
+      srData.groups.forEach(g => { if (g.sectionId === section.id) g.sectionId = null; });
+      srData.searches.forEach(s => { if (s.sectionId === section.id) s.sectionId = null; });
+      srData.sections = srData.sections.filter(sec => sec.id !== section.id);
+      await saveData();
+      renderList();
+    };
+  });
+
+  // Move up/down (groups, standalone searches, and sections — scoped to whichever container they're in)
   document.querySelectorAll('.sr-menu-move-up').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
       if (btn.disabled) return;
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
-      moveTopLevel(btn.dataset.toptype, btn.dataset.id, -1);
+      moveWithinContainer(btn.dataset.toptype, btn.dataset.id, -1, btn.dataset.container);
       await saveData();
       renderList();
     };
@@ -526,7 +655,7 @@ function wireListEvents() {
       e.stopPropagation();
       if (btn.disabled) return;
       document.querySelectorAll('.sr-menu-dropdown').forEach(d => d.style.display = 'none');
-      moveTopLevel(btn.dataset.toptype, btn.dataset.id, 1);
+      moveWithinContainer(btn.dataset.toptype, btn.dataset.id, 1, btn.dataset.container);
       await saveData();
       renderList();
     };
@@ -606,12 +735,21 @@ function wireListEvents() {
 }
 
 // ── Group Form ────────────────────────────────────────────────────────────────
+function populateSectionSelect(selectId, currentValue) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">No Section</option>' +
+    srData.sections.map(sec => `<option value="${sec.id}">${sec.label}</option>`).join('');
+  sel.value = currentValue || '';
+}
+
 function openGroupForm(group) {
   const wrap = document.getElementById('sr-group-form-wrap');
   wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;';
   document.getElementById('sr-form-wrap').style.display = 'none';
   document.getElementById('sr-group-form-title').textContent = group ? 'Edit Group' : 'New Group';
   wireChips('sr-group-schedule-chips');
+  populateSectionSelect('sr-group-section-select', group ? group.sectionId : '');
 
   if (group) {
     document.getElementById('sr-group-label').value = group.label || '';
@@ -620,6 +758,7 @@ function openGroupForm(group) {
     document.getElementById('sr-group-daily-digest').checked = group.dailyDigest || false;
     document.getElementById('sr-group-save-btn').onclick = async () => {
       group.label = document.getElementById('sr-group-label').value.trim();
+      group.sectionId = document.getElementById('sr-group-section-select').value || null;
       group.schedule = getChipVal('sr-group-schedule-chips') || 'hourly';
       group.notify = document.getElementById('sr-group-notify').checked;
       group.dailyDigest = document.getElementById('sr-group-daily-digest').checked;
@@ -648,6 +787,7 @@ async function saveGroup() {
   const digestKey = label.toLowerCase().replace(/\s+/g, '_') + '_digest';
   srData.groups.push({
     id, label, digestKey,
+    sectionId: document.getElementById('sr-group-section-select').value || null,
     schedule: getChipVal('sr-group-schedule-chips') || 'hourly',
     notify: document.getElementById('sr-group-notify').checked,
     dailyDigest: document.getElementById('sr-group-daily-digest').checked
@@ -691,7 +831,7 @@ function openSearchForm(search, presetGroupId) {
     });
   });
 
-  // Populate group dropdown
+// Populate group dropdown
   const sel = document.getElementById('sr-group-select');
   sel.innerHTML = '<option value="">Standalone</option>';
   srData.groups.forEach(g => {
@@ -700,6 +840,7 @@ function openSearchForm(search, presetGroupId) {
     opt.textContent = g.label;
     sel.appendChild(opt);
   });
+  populateSectionSelect('sr-section-select', search ? search.sectionId : '');
 
   if (search) {
     document.getElementById('sr-label').value = search.label || '';
@@ -732,6 +873,7 @@ function openSearchForm(search, presetGroupId) {
       search.query = document.getElementById('sr-query').value.trim();
       search.seller = document.getElementById('sr-seller').value.trim();
       search.groupId = document.getElementById('sr-group-select').value || null;
+      search.sectionId = document.getElementById('sr-section-select').value || null;
       search.sellerMode = getChipVal('sr-seller-mode-chips') || 'exclude';
       search.sport = getChipVal('sr-sport-chips');
       search.condition = getChipVal('sr-condition-chips');
@@ -793,6 +935,7 @@ function clearSearchForm() {
   document.getElementById('sr-daily-digest').checked = false;
   document.getElementById('sr-show-on-home').checked = false;
   document.getElementById('sr-group-select').value = '';
+  document.getElementById('sr-section-select').value = '';
   document.querySelectorAll('#sr-seller-mode-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-sport-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-condition-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
@@ -811,12 +954,13 @@ async function saveSearch() {
   if (!label || (!query && !seller)) return;
 
   const groupId = document.getElementById('sr-group-select').value || null;
+  const sectionId = document.getElementById('sr-section-select').value || null;
   const id = 'src_' + Date.now();
   const digestKey = label.toLowerCase().replace(/\s+/g, '_') + '_digest';
   const keywords = document.getElementById('sr-keywords').value.trim();
 
   srData.searches.push({
-    id, label, query, seller, groupId, digestKey,
+    id, label, query, seller, groupId, sectionId, digestKey,
     sellerMode: getChipVal('sr-seller-mode-chips') || 'exclude',
     sport: getChipVal('sr-sport-chips'),
     condition: getChipVal('sr-condition-chips'),
