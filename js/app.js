@@ -140,4 +140,3 @@ if (digestParam) {
   setSection('home');
 }
 loadCardData();
-ctLoadTags();
