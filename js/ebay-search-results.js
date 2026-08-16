@@ -277,7 +277,7 @@ async function loadData() {
 async function saveData() {
   const res = await fetch(`${WORKER}/search-alerts`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
     body: JSON.stringify({ groups: srData.groups, searches: srData.searches, sections: srData.sections })
   });
   const result = await res.json();
@@ -553,7 +553,7 @@ function wireListEvents() {
       srData.searches = srData.searches.filter(s => s.groupId !== group.id);
       await fetch(`${WORKER}/search-alerts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
         body: JSON.stringify({ groups: srData.groups, searches: srData.searches, deleteKeys })
       });
       renderList();
@@ -657,7 +657,7 @@ function wireListEvents() {
       srData.searches = srData.searches.filter(s => s.id !== search.id);
       await fetch(`${WORKER}/search-alerts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
         body: JSON.stringify({ groups: srData.groups, searches: srData.searches, deleteKeys })
       });
       renderList();
@@ -678,7 +678,7 @@ function wireListEvents() {
       try {
         await fetch(`${WORKER}/run-search`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
           body: JSON.stringify({ digestKey })
         });
         btn.textContent = original;
@@ -706,7 +706,7 @@ function wireListEvents() {
       try {
         await fetch(`${WORKER}/run-search`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
           body: JSON.stringify({ digestKey, searchId })
         });
         btn.textContent = original;
@@ -1054,13 +1054,13 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
     if (searchIdFilter) {
       await fetch(`${WORKER}/mark-seen-urls`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
         body: JSON.stringify({ key, urls: allItems.map(i => i.url) })
       });
     } else {
       await fetch(`${WORKER}/mark-seen`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
         body: JSON.stringify({ key })
       });
     }
@@ -1071,7 +1071,7 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
     try {
       await fetch(`${WORKER}/mark-seen-urls`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
         body: JSON.stringify({ key: otherKey, urls: seenUrls })
       });
     } catch(e) {}
