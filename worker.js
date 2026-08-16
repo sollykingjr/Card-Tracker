@@ -41,7 +41,7 @@ export default {
 
     if (path === '/auth') return handleAuth(env);
     if (path === '/callback') return handleCallback(request, env);
-    if (path === '/watchlist') return handleWatchlist(env, cors);
+    if (path === '/watchlist') return handleWatchlist(request, env, cors);
     if (path === '/save-title') return handleSaveTitle(request, env, cors);
     if (path === '/test-promotions') return handleTestPromotions(env, cors);
     if (path === '/daily-stats') return handleDailyStats(env, cors);  
@@ -108,21 +108,20 @@ async function handleCallback(request, env) {
 }
 
 // ── [5] handleWatchlist ───────────────────────────────────────────────────────
-async function handleWatchlist(env, cors) {
+const WATCHLIST_CACHE_KEY = 'watchlist-cache';
+const WATCHLIST_CACHE_TTL = 1200; // 20 min — slightly longer than the 15-min cron, so a missed run falls back to live rather than serving stale data indefinitely
+
+async function fetchWatchlistFromEbay(env) {
   let accessToken = await env.CACHE.get('ebay_access_token');
 
   if (!accessToken) {
     const refreshToken = await env.CACHE.get('ebay_refresh_token');
     if (!refreshToken) {
-      return new Response(JSON.stringify({ error: 'not_authenticated', authUrl: '/auth' }), {
-        status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+      return { error: 'not_authenticated', authUrl: '/auth' };
     }
     accessToken = await refreshAccessToken(refreshToken, env);
     if (!accessToken) {
-      return new Response(JSON.stringify({ error: 'refresh_failed', authUrl: '/auth' }), {
-        status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+      return { error: 'refresh_failed', authUrl: '/auth' };
     }
   }
 
@@ -191,7 +190,35 @@ async function handleWatchlist(env, cors) {
     return new Date(a.endTime) - new Date(b.endTime);
   });
 
-  return new Response(JSON.stringify({ items, count: items.length }), {
+  return { items, count: items.length };
+}
+
+async function refreshWatchlistCache(env) {
+  const data = await fetchWatchlistFromEbay(env);
+  if (data.error) return; // don't overwrite a good cache with an auth failure
+  await env.CACHE.put(WATCHLIST_CACHE_KEY, JSON.stringify(data), { expirationTtl: WATCHLIST_CACHE_TTL });
+}
+
+async function handleWatchlist(request, env, cors) {
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.get('refresh') === '1';
+
+  if (!forceRefresh) {
+    const cached = await env.CACHE.get(WATCHLIST_CACHE_KEY);
+    if (cached) {
+      return new Response(cached, { headers: { ...cors, 'Content-Type': 'application/json' } });
+    }
+  }
+
+  const data = await fetchWatchlistFromEbay(env);
+  if (data.error) {
+    return new Response(JSON.stringify(data), {
+      status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+
+  await env.CACHE.put(WATCHLIST_CACHE_KEY, JSON.stringify(data), { expirationTtl: WATCHLIST_CACHE_TTL });
+  return new Response(JSON.stringify(data), {
     headers: { ...cors, 'Content-Type': 'application/json' }
   });
 }
