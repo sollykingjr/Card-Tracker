@@ -9,7 +9,8 @@ import {
 import {
   handleScan, handleScanBatch, handleCardMetaAll, handleCardMetaPost, handleCardMetaInHandAll,
   handleComcPulledAll, handleComcPulledPost, handleComcPulledInvalidateScans,
-  handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear
+  handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear,
+  handleCardImage
 } from './worker/cardmeta.js';
 
 // ── Main router ───────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ export default {
       }
     }
 
+    if (path.startsWith('/card-image/')) return handleCardImage(request, env, cors);
     if (path === '/auth') return handleAuth(env);
     if (path === '/callback') return handleCallback(request, env);
     if (path === '/watchlist') return handleWatchlist(request, env, cors);
