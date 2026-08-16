@@ -328,6 +328,7 @@ async function ctFetchScansForPage(itemIds) {
       headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemIds: needed })
     });
+    if (!res.ok) throw new Error(`scan-batch: HTTP ${res.status}`);
     const data = await res.json();
     Object.assign(ctScanCache, data);
   } catch (e) {
