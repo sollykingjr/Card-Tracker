@@ -184,24 +184,16 @@ async function fetchRange(rng) {
   return (await r.json()).values||[];
 }
 
-async function loadAll() {
+let prospectDataLoaded = false;
+
+async function loadCardData() {
   document.getElementById('cntlbl').textContent='Loading...';
   document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
-    const [pR,h2,p1,oh2,op1,hsR,cR,bsR,pmR] = await Promise.all([
-      fetchRange("'Players All'!A2:P2000"),
-      fetchRange("'Top 200 Hitters Updated'!A2:I2000"),
-      fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
-      fetchRange("'200 Hitters Original'!A2:G2000"),
-      fetchRange("'100 Pitchers Original'!A2:G2000"),
-      fetchRange("'Hot Sheet'!A2:AE10000"),
-      fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
-        .then(r=>r.ok?r.json().then(d=>d.values||[]):[]),
-    fetchRange("'Buy Score'!A2:J10000"),
-    fetchRange("'Parallel Multiplier'!A2:G500"),
-    ]);
+    const cR = await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
+      .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
 
     players = pR.filter(r=>r[3]).map(r=>({
       date:cl(r[0]),team:cl(r[1])||'',pos:cl(r[2])||'',name:cl(r[3])||'',
