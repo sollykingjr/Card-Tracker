@@ -195,6 +195,57 @@ async function loadCardData() {
     const cR = await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
       .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
 
+    cards = cR.filter(r=>r[7]).map(r=>({
+      itemId:cl(r[0]),
+      sport:cl(r[1]),
+      year:cl(r[2]),
+      set:cl(r[3]),
+      variation:cl(r[4]),
+      version:cl(r[5]),
+      cardNo:cl(r[6]),
+      player:(cl(r[7])||'').toLowerCase(),
+      playerDisplay:cl(r[7])||'',
+      serialNo:cl(r[8]),
+      qtyManufactured:cl(r[9]),
+      purchasePrice:cl(r[10]),salePrice:cl(r[11]),saleFees:cl(r[12]),
+      netProfit:cl(r[13]),profitPct:cl(r[14]),
+      datePurchased:cl(r[15]),transactionDate:cl(r[16]),
+      purchasedFrom:cl(r[17]),purchasedBy:cl(r[18]),
+      daysOwned:cl(r[19]),
+      grade:cl(r[20]),
+      fullCard:cl(r[21])||[cl(r[2]),cl(r[3]),cl(r[4]),cl(r[7])].filter(Boolean).join(' ')
+    }));
+
+    buildCache();
+
+    if (section === 'home') { renderHome(); }
+    else if (section === 'cardtracker') { renderCardTracker(); }
+    else if (section === 'portfolio') { renderPortfolio(); }
+  } catch(e) {
+    document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
+    document.getElementById('cntlbl').textContent='Error';
+  }
+  document.getElementById('rfab').classList.remove('spin');
+}
+
+async function loadProspectData() {
+  if (prospectDataLoaded) return;
+  prospectDataLoaded = true;
+  document.getElementById('cntlbl').textContent='Loading...';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
+  document.getElementById('rfab').classList.add('spin');
+  try {
+    const [pR,h2,p1,oh2,op1,hsR,bsR,pmR] = await Promise.all([
+      fetchRange("'Players All'!A2:P2000"),
+      fetchRange("'Top 200 Hitters Updated'!A2:I2000"),
+      fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
+      fetchRange("'200 Hitters Original'!A2:G2000"),
+      fetchRange("'100 Pitchers Original'!A2:G2000"),
+      fetchRange("'Hot Sheet'!A2:AE10000"),
+      fetchRange("'Buy Score'!A2:J10000"),
+      fetchRange("'Parallel Multiplier'!A2:G500"),
+    ]);
+
     players = pR.filter(r=>r[3]).map(r=>({
       date:cl(r[0]),team:cl(r[1])||'',pos:cl(r[2])||'',name:cl(r[3])||'',
       age:cl(r[4]),price:cl(r[5]),mlb:cl(r[6]),dd:cl(r[7]),roto:cl(r[8]),
@@ -218,35 +269,14 @@ async function loadCardData() {
       date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',price:cl(r[6])
     }));
 
-      hotsheet = hsR.filter(r=>r[4]).map(r=>({
+    hotsheet = hsR.filter(r=>r[4]).map(r=>({
       date:cl(r[0]),week:cl(r[1]),pos:cl(r[2]),level:cl(r[3]),
       name:cl(r[4])||'',age:cl(r[5]),aff:cl(r[6]),
       auto:cl(r[7]),hobby:cl(r[8]),buyScore:cl(r[9]),
       notes:cl(r[10])
     }));
 
-    cards = cR.filter(r=>r[7]).map(r=>({
-      itemId:cl(r[0]),
-      sport:cl(r[1]),
-      year:cl(r[2]),
-      set:cl(r[3]),
-      variation:cl(r[4]),
-      version:cl(r[5]),
-      cardNo:cl(r[6]),
-      player:(cl(r[7])||'').toLowerCase(),
-      playerDisplay:cl(r[7])||'',
-      serialNo:cl(r[8]),
-      qtyManufactured:cl(r[9]),
-      purchasePrice:cl(r[10]),salePrice:cl(r[11]),saleFees:cl(r[12]),
-      netProfit:cl(r[13]),profitPct:cl(r[14]),
-      datePurchased:cl(r[15]),transactionDate:cl(r[16]),
-      purchasedFrom:cl(r[17]),purchasedBy:cl(r[18]),
-      daysOwned:cl(r[19]),
-      grade:cl(r[20]),
-      fullCard:cl(r[21])||[cl(r[2]),cl(r[3]),cl(r[4]),cl(r[7])].filter(Boolean).join(' ')
-    }));
-
-buyScores = bsR.filter(r=>r[3]).map(r=>({
+    buyScores = bsR.filter(r=>r[3]).map(r=>({
       date:cl(r[0]), pos:cl(r[1]), rank:cl(r[2]), name:cl(r[3])||'',
       team:cl(r[4])||'', age:cl(r[5]), price:cl(r[6]),
       score:cl(r[7]), notes:cl(r[8]), expectedValue:cl(r[9])
@@ -256,7 +286,7 @@ buyScores = bsR.filter(r=>r[3]).map(r=>({
       parallel:cl(r[0])||'', printRun:cl(r[1]), low:cl(r[2]), high:cl(r[3]),
       multiplier:cl(r[4]), totalSales:cl(r[5]), confidence:cl(r[6])
     }));
-    
+
     buildCache();
 
     // Inject players from rankings/hotsheet not in Players All
@@ -281,9 +311,7 @@ buyScores = bsR.filter(r=>r[3]).map(r=>({
       });
     });
 
-   if (section === 'home') { renderHome(); }
-    else if (section === 'cardtracker') { renderCardTracker(); }
-    else { render(); }
+    if (section === 'prospects') { render(); }
   } catch(e) {
     document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
     document.getElementById('cntlbl').textContent='Error';
