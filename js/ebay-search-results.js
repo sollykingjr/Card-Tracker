@@ -472,20 +472,6 @@ function moveWithinContainer(type, id, direction, containerId) {
   items[idx].obj.order = items[swapIdx].obj.order;
   items[swapIdx].obj.order = tmp;
 }
-  const items = [
-    ...srData.groups.map(g => ({ type: 'group', obj: g })),
-    ...srData.searches.filter(s => !s.groupId).map(s => ({ type: 'search', obj: s }))
-  ];
-  items.sort((a, b) => (a.obj.order ?? 0) - (b.obj.order ?? 0));
-  items.forEach((it, i) => { it.obj.order = i; });
-  const idx = items.findIndex(it => it.type === type && it.obj.id === id);
-  if (idx === -1) return;
-  const swapIdx = idx + direction;
-  if (swapIdx < 0 || swapIdx >= items.length) return;
-  const tmp = items[idx].obj.order;
-  items[idx].obj.order = items[swapIdx].obj.order;
-  items[swapIdx].obj.order = tmp;
-}
 
 function wireListEvents() {
   // Close menus on outside click
