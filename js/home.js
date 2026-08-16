@@ -1,6 +1,8 @@
 // ── Home ──────────────────────────────────────────────────────────────────────
 let homeQuery = '';
 let homeCountdownInterval = null;
+let homeClosingSoonLoaded = false;
+let homeClosingSoonItems = [];
 
 function homeOpenSearchById(id) {
   const search = srData.searches.find(s => s.id === id);
@@ -106,6 +108,12 @@ async function homeLoadQuickLinks() {
 async function homeLoadClosingSoon() {
   const container = document.getElementById('home-closing-soon');
   if (!container) return;
+
+  if (homeClosingSoonLoaded) {
+    homeRenderClosingSoon();
+    return;
+  }
+
   try {
     const res = await fetch(`${WORKER_URL}/watchlist`);
     const data = await res.json();
@@ -115,37 +123,46 @@ async function homeLoadClosingSoon() {
     }
     const items = data.items || [];
     const withEnd = items.filter(i => i.endTime && new Date(i.endTime).getTime() > Date.now());
-    const soon = withEnd.sort((a,b) => new Date(a.endTime) - new Date(b.endTime)).slice(0, 5);
-    if (!soon.length) {
-      container.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:4px 0">Nothing closing soon</div>';
-      return;
-    }
-    container.innerHTML = soon.map(item => {
-      const { text, cls } = getCountdown(item.endTime);
-      const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
-      const rawTitle = item.savedTitle || item.title || '';
-      const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-      const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
-      const player = resolveItemPlayer(safeTitle);
-      const playerPrice = player ? safeNum(getResolved(player.name).price) : 0;
-      const playerPriceHtml = playerPrice > 0 ? ` · Player: $${playerPrice.toFixed(2)}` : '';
-      return `
-        <div class="recent-row" style="align-items:flex-start">
-          <div class="recent-info">
-            <div class="rc-name">${safeTitle.slice(0,70)}${safeTitle.length>70?'…':''}</div>
-            <div class="rc-date"><span class="wl-countdown ${cls}" data-end="${item.endTime}">${text}</span>${price ? ' · ' + price : ''}${playerPriceHtml}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-            <a href="${ebayUrl}" target="_blank" style="padding:6px 10px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;text-decoration:none;text-align:center">View</a>
-            <button class="sr-listing-snipe" onclick="openSnipeModal('${item.itemId}')" style="padding:6px 10px;font-size:11px">Snipe</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-    startHomeCountdownTick();
+    homeClosingSoonItems = withEnd.sort((a,b) => new Date(a.endTime) - new Date(b.endTime)).slice(0, 5);
+    homeClosingSoonLoaded = true;
+    homeRenderClosingSoon();
   } catch(e) {
     container.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:4px 0">Could not load watchlist</div>';
   }
+}
+
+function homeRenderClosingSoon() {
+  const container = document.getElementById('home-closing-soon');
+  if (!container) return;
+
+  const soon = homeClosingSoonItems;
+  if (!soon.length) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:4px 0">Nothing closing soon</div>';
+    return;
+  }
+  container.innerHTML = soon.map(item => {
+    const { text, cls } = getCountdown(item.endTime);
+    const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
+    const rawTitle = item.savedTitle || item.title || '';
+    const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
+    const player = resolveItemPlayer(safeTitle);
+    const playerPrice = player ? safeNum(getResolved(player.name).price) : 0;
+    const playerPriceHtml = playerPrice > 0 ? ` · Player: $${playerPrice.toFixed(2)}` : '';
+    return `
+      <div class="recent-row" style="align-items:flex-start">
+        <div class="recent-info">
+          <div class="rc-name">${safeTitle.slice(0,70)}${safeTitle.length>70?'…':''}</div>
+          <div class="rc-date"><span class="wl-countdown ${cls}" data-end="${item.endTime}">${text}</span>${price ? ' · ' + price : ''}${playerPriceHtml}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <a href="${ebayUrl}" target="_blank" style="padding:6px 10px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;text-decoration:none;text-align:center">View</a>
+          <button class="sr-listing-snipe" onclick="openSnipeModal('${item.itemId}')" style="padding:6px 10px;font-size:11px">Snipe</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  startHomeCountdownTick();
 }
 
 function startHomeCountdownTick() {
