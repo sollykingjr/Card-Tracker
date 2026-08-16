@@ -184,6 +184,15 @@ async function fetchRange(rng) {
   return (await r.json()).values||[];
 }
 
+async function fetchBatch(ranges) {
+  const params = ranges.map(rng => 'ranges='+encodeURIComponent(rng)).join('&');
+  const url = BASE.replace(/values\/$/, 'values:batchGet') + '?' + params + '&key=' + KEY;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error(`batchGet: HTTP ${r.status}`);
+  const data = await r.json();
+  return (data.valueRanges||[]).map(vr => vr.values||[]);
+}
+
 let prospectDataLoaded = false;
 
 async function loadCardData() {
@@ -235,15 +244,15 @@ async function loadProspectData() {
   document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
   document.getElementById('rfab').classList.add('spin');
   try {
-    const [pR,h2,p1,oh2,op1,hsR,bsR,pmR] = await Promise.all([
-      fetchRange("'Players All'!A2:P2000"),
-      fetchRange("'Top 200 Hitters Updated'!A2:I2000"),
-      fetchRange("'Top 100 Pitchers Updated'!A2:I2000"),
-      fetchRange("'200 Hitters Original'!A2:G2000"),
-      fetchRange("'100 Pitchers Original'!A2:G2000"),
-      fetchRange("'Hot Sheet'!A2:AE10000"),
-      fetchRange("'Buy Score'!A2:J10000"),
-      fetchRange("'Parallel Multiplier'!A2:G500"),
+    const [pR,h2,p1,oh2,op1,hsR,bsR,pmR] = await fetchBatch([
+      "'Players All'!A2:P2000",
+      "'Top 200 Hitters Updated'!A2:I2000",
+      "'Top 100 Pitchers Updated'!A2:I2000",
+      "'200 Hitters Original'!A2:G2000",
+      "'100 Pitchers Original'!A2:G2000",
+      "'Hot Sheet'!A2:AE10000",
+      "'Buy Score'!A2:J10000",
+      "'Parallel Multiplier'!A2:G500",
     ]);
 
     players = pR.filter(r=>r[3]).map(r=>({
