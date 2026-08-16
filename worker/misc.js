@@ -53,7 +53,7 @@ export async function handleSbDataPost(request, env, cors) {
 }
 
 // ── [10] handleTestPromotions ─────────────────────────────────────────────────
-  async function handleTestPromotions(env, cors) {
+  export async function handleTestPromotions(env, cors) {
   const today = new Date().toLocaleString('en-CA', { timeZone: 'America/New_York' }).split(',')[0];
   const results = { date: today, transactions: [], matches: [] };
 
