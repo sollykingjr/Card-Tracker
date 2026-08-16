@@ -1003,8 +1003,9 @@ async function clearPlayerDigests(env) {
 async function handleSearchAlertsGet(env, cors) {
   try {
     const saved = await env.CACHE.get('player_search_alerts');
-    let data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
-    if (Array.isArray(data)) data = { groups: [], searches: data };
+    let data = saved ? JSON.parse(saved) : { groups: [], searches: [], sections: [] };
+    if (Array.isArray(data)) data = { groups: [], searches: data, sections: [] };
+    if (!data.sections) data.sections = [];
     return new Response(JSON.stringify(data), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
@@ -1017,12 +1018,13 @@ async function handleSearchAlertsGet(env, cors) {
 
 async function handleSearchAlertsPost(request, env, cors) {
   try {
-    const { groups, searches, deleteKeys } = await request.json();
+    const { groups, searches, sections, deleteKeys } = await request.json();
     const saved = await env.CACHE.get('player_search_alerts');
-    let current = saved ? JSON.parse(saved) : { groups: [], searches: [] };
-    if (Array.isArray(current)) current = { groups: [], searches: current };
+    let current = saved ? JSON.parse(saved) : { groups: [], searches: [], sections: [] };
+    if (Array.isArray(current)) current = { groups: [], searches: current, sections: [] };
     if (groups !== undefined) current.groups = groups;
     if (searches !== undefined) current.searches = searches;
+    if (sections !== undefined) current.sections = sections;
     await env.CACHE.put('player_search_alerts', JSON.stringify(current));
     if (deleteKeys && Array.isArray(deleteKeys)) {
       for (const key of deleteKeys) {
