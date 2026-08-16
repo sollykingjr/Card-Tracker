@@ -257,10 +257,23 @@ function ebayRenderQueueListHtml() {
         </div>
       </div>`;
   }).join('');
+
+  const SHIPPING_OPTIONS = [
+    'PWE - Not Flat Rate - (ID: 254806132017)',
+    'Calculated Bubble Mailers - (ID: 239080494017)',
+    'PWE Free Shipping - (ID: 251924633017)'
+  ];
+  const lastShipping = localStorage.getItem('ebayShippingPolicy') || SHIPPING_OPTIONS[0];
+  const shippingOptionsHtml = SHIPPING_OPTIONS.map(o => `<option value="${o}" ${o === lastShipping ? 'selected' : ''}>${o}</option>`).join('');
+
   return `
     <div class="section-hdr">eBay Queue (${entries.length})</div>
     <div style="margin-top:12px">${rows}</div>
-    <button onclick="ebayExportQueue()" style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:16px">Export Queue</button>
+    <div style="margin-top:16px">
+      <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Shipping Policy (this export)</div>
+      <select id="el-export-shipping" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">${shippingOptionsHtml}</select>
+    </div>
+    <button id="ebay-export-btn" onclick="ebayExportQueue()" style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px">Export Queue</button>
   `;
 }
 
@@ -282,6 +295,145 @@ async function ebayRemoveFromQueueUI(itemId) {
   document.getElementById('mcontent').innerHTML = _modalMainHtml;
 }
 
-function ebayExportQueue() {
-  alert('Export is coming in the next step — not built yet.');
+const EBAY_GRADER_MAP = {
+  PSA: 'Professional Sports Authenticator (PSA) - (ID: 275010)',
+  BCCG: 'Beckett Collectors Club Grading (BCCG) - (ID: 275011)',
+  BVG: 'Beckett Vintage Grading (BVG) - (ID: 275012)',
+  BGS: 'Beckett Grading Services (BGS) - (ID: 275013)',
+  CSG: 'Certified Sports Guaranty (CSG) - (ID: 275014)',
+  CGC: 'Certified Guaranty Company (CGC) - (ID: 275015)',
+  SGC: 'Sportscard Guaranty Corporation (SGC) - (ID: 275016)',
+  KSA: 'K Sportscard Authentication (KSA) - (ID: 275017)',
+  GMA: 'Gem Mint Authentication (GMA) - (ID: 275018)',
+  HGA: 'Hybrid Grading Approach (HGA) - (ID: 275019)',
+};
+const EBAY_GRADE_MAP = {
+  '10': '10 - (ID: 275020)', '9.5': '9.5 - (ID: 275021)', '9': '9 - (ID: 275022)',
+  '8.5': '8.5 - (ID: 275023)', '8': '8 - (ID: 275024)', '7.5': '7.5 - (ID: 275025)',
+  '7': '7 - (ID: 275026)', '6.5': '6.5 - (ID: 275027)', '6': '6 - (ID: 275028)',
+  '5.5': '5.5 - (ID: 275029)', '5': '5 - (ID: 2750210)', '4.5': '4.5 - (ID: 2750211)',
+  '4': '4 - (ID: 2750212)', '3.5': '3.5 - (ID: 2750213)', '3': '3 - (ID: 2750214)',
+  '2.5': '2.5 - (ID: 2750215)', '2': '2 - (ID: 2750216)', '1.5': '1.5 - (ID: 2750217)',
+  '1': '1 - (ID: 2750218)', 'Authentic': 'Authentic - (ID: 2750219)'
+};
+const EBAY_CONDITION_MAP = {
+  'Near mint or better': 'Near mint or better - (ID: 400010)',
+  'Excellent': 'Excellent - (ID: 400011)',
+  'Very good': 'Very good - (ID: 400012)',
+  'Poor': 'Poor - (ID: 400013)'
+};
+
+function ebayColIdx(col) {
+  let idx = 0;
+  for (let i = 0; i < col.length; i++) idx = idx * 26 + (col.charCodeAt(i) - 64);
+  return idx;
+}
+
+function ebayEscapeXml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function ebayBuildRowValues(itemId, l, shippingPolicy) {
+  const values = {};
+  const set = (col, kind, val) => { if (val !== '' && val !== undefined && val !== null) values[col] = [kind, val]; };
+
+  set('A', 'str', l.action === 'live' ? 'Add' : 'Draft');
+  set('B', 'str', itemId);
+  set('C', 'num', 261328);
+  set('E', 'str', '/Sports Mem, Cards & Fan Shop/Sports Trading Cards/Trading Card Singles');
+  set('F', 'str', l.title);
+  set('K', 'num', l.price);
+  set('L', 'num', l.quantity || 1);
+  set('M', 'str', `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg|https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`);
+  set('O', 'num', l.isGraded ? 2750 : 4000);
+  if (l.isGraded) {
+    set('P', 'str', EBAY_GRADER_MAP[(l.grader || '').toUpperCase()] || l.grader);
+    set('Q', 'str', EBAY_GRADE_MAP[l.grade] || l.grade);
+  } else {
+    set('S', 'str', EBAY_CONDITION_MAP[l.condition] || l.condition);
+  }
+  set('T', 'str', l.description);
+  set('U', 'str', l.format);
+  set('V', 'str', l.format === 'Auction' ? '7' : 'GTC');
+  if (l.action === 'live' && l.schedule) set('H', 'str', l.schedule);
+  if (l.format === 'FixedPrice' && l.allowOffers) {
+    set('X', 'str', 'true');
+    set('Y', 'num', l.offerAuto);
+    set('Z', 'num', l.offerMin);
+  }
+  set('AB', 'str', '10022');
+  set('AI', 'num', 1);
+  set('AN', 'str', shippingPolicy);
+  set('AO', 'str', 'Mascot - No returns accepted - (ID: 238602691017)');
+  set('AP', 'str', 'eBay Managed Payments BIN - (ID: 239080495017)');
+  set('AQ', 'str', l.sport);
+  set('AR', 'str', l.player);
+  set('AS', 'str', l.manufacturer);
+  set('AT', 'str', l.season);
+  set('AU', 'str', l.parallel);
+  if (l.printRun) set('AV', 'str', 'Serial Numbered');
+  set('AW', 'str', l.set);
+  set('AX', 'str', l.team);
+  set('AY', 'str', l.league);
+  set('AZ', 'str', l.autographed);
+  set('BB', 'str', l.cardNo);
+  set('BD', 'str', l.season);
+  set('BT', 'str', l.printRun);
+
+  return values;
+}
+
+async function ebayExportQueue() {
+  const entries = Object.entries(ebayQueueCache);
+  if (!entries.length) { alert('Queue is empty.'); return; }
+
+  const shippingPolicy = document.getElementById('el-export-shipping')?.value;
+  if (shippingPolicy) localStorage.setItem('ebayShippingPolicy', shippingPolicy);
+
+  const btn = document.getElementById('ebay-export-btn');
+  if (btn) { btn.textContent = 'Building file...'; btn.disabled = true; }
+
+  try {
+    const templateRes = await fetch('assets/ebay-template.xlsm');
+    const templateBuf = await templateRes.arrayBuffer();
+    const zip = await JSZip.loadAsync(templateBuf);
+
+    const sheetPath = 'xl/worksheets/sheet20.xml';
+    let sheetXml = await zip.file(sheetPath).async('string');
+
+    let rowNum = 5;
+    let newRowsXml = '';
+    for (const [itemId, l] of entries) {
+      const values = ebayBuildRowValues(itemId, l, shippingPolicy);
+      const sortedCols = Object.keys(values).sort((a, b) => ebayColIdx(a) - ebayColIdx(b));
+      const cellsXml = sortedCols.map(col => {
+        const [kind, val] = values[col];
+        if (kind === 'num') return `<c r="${col}${rowNum}"><v>${val}</v></c>`;
+        return `<c r="${col}${rowNum}" t="inlineStr"><is><t xml:space="preserve">${ebayEscapeXml(val)}</t></is></c>`;
+      }).join('');
+      newRowsXml += `<row r="${rowNum}">${cellsXml}</row>`;
+      rowNum++;
+    }
+
+    const finalRow = rowNum - 1;
+    sheetXml = sheetXml.replace(/<dimension ref="A1:CS4"\s*\/>/, `<dimension ref="A1:CS${finalRow}"/>`);
+    sheetXml = sheetXml.replace('</sheetData>', newRowsXml + '</sheetData>');
+
+    zip.file(sheetPath, sheetXml);
+
+    const outBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-excel.sheet.macroEnabled.12' });
+
+    const url = URL.createObjectURL(outBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ebay-listings-${new Date().toISOString().slice(0, 10)}.xlsm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+  } finally {
+    if (btn) { btn.textContent = 'Export Queue'; btn.disabled = false; }
+  }
 }
