@@ -20,8 +20,26 @@ const PROTECTED_ROUTES = new Set([
   'GET:/comc-pulled-invalidate-scans',
 ]);
 
+async function notifyCronFailure(env, jobName, message) {
+  const throttleKey = `cron-failure-alert:${jobName}`;
+  const alreadyAlerted = await env.CACHE.get(throttleKey);
+  if (alreadyAlerted) return;
+  await env.CACHE.put(throttleKey, '1', { expirationTtl: 21600 }); // 6 hours
+  await fetch('https://api.pushover.net/1/messages.json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token: env.PUSHOVER_TOKEN,
+      user: env.PUSHOVER_USER,
+      title: `⚠️ Cron failure: ${jobName}`,
+      message: message || 'Check Cloudflare Worker logs for details.',
+    })
+  });
+}
+
 export default {
   async scheduled(event, env, ctx) {
+   try {
     if (event.cron === '*/15 * * * *') {
       await refreshWatchlistCache(env);
       return;
@@ -40,6 +58,9 @@ export default {
     if (event.cron === '0 5 * * *') {
       await clearPlayerDigests(env);
     }
+   } catch (e) {
+     await notifyCronFailure(env, event.cron, e.message);
+   }
   },
 
   async fetch(request, env, ctx) {
@@ -220,7 +241,12 @@ async function fetchWatchlistFromEbay(env) {
 
 async function refreshWatchlistCache(env) {
   const data = await fetchWatchlistFromEbay(env);
-  if (data.error) return; // don't overwrite a good cache with an auth failure
+  if (data.error) {
+    if (data.error === 'refresh_failed') {
+      await notifyCronFailure(env, 'watchlist-auth', 'Your eBay connection expired — tap Connect eBay in the app to reconnect.');
+    }
+    return; // don't overwrite a good cache with an auth failure
+  }
   await env.CACHE.put(WATCHLIST_CACHE_KEY, JSON.stringify(data), { expirationTtl: WATCHLIST_CACHE_TTL });
 }
 
@@ -537,7 +563,10 @@ async function checkPlayerSearches(env) {
     body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
   });
   const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) return;
+  if (!tokenData.access_token) {
+    await notifyCronFailure(env, 'checkPlayerSearches-token', 'eBay client-credentials auth failed — hourly search alerts are not running.');
+    return;
+  }
 
   const now = Date.now();
   const lastRun = await env.CACHE.get('player_search_last_run');
@@ -736,7 +765,10 @@ async function checkNightlySearches(env) {
     body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
   });
   const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) return;
+  if (!tokenData.access_token) {
+    await notifyCronFailure(env, 'checkNightlySearches-token', 'eBay client-credentials auth failed — nightly search alerts are not running.');
+    return;
+  }
 
   const now = Date.now();
   const cutoff = now - (24 * 60 * 60 * 1000);
