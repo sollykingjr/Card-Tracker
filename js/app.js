@@ -124,7 +124,7 @@ document.getElementById('mwrap').addEventListener('click', e => {
 document.getElementById('rfab').addEventListener('click', () => {
   if (section === 'watchlist') {
     watchlistLoaded = false;
-    loadWatchlist();
+    loadWatchlist(true);
   } else if (section === 'home') {
     homeClosingSoonLoaded = false;
     homeLoadClosingSoon();
