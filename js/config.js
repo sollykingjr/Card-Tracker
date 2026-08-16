@@ -38,16 +38,25 @@ function searchBarHTML(idPrefix, placeholder) {
   `;
 }
 
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
 function wireSearchBar(idPrefix, getQuery, setQuery, onChange, onEnter) {
   const input = document.getElementById(`${idPrefix}-search`);
   const clearBtn = document.getElementById(`${idPrefix}-clear`);
   input.value = getQuery();
   clearBtn.classList.toggle('on', getQuery().length > 0);
+  const debouncedOnChange = debounce(onChange, 150);
 
   input.addEventListener('input', e => {
     setQuery(e.target.value);
     clearBtn.classList.toggle('on', e.target.value.length > 0);
-    onChange();
+    debouncedOnChange();
   });
   if (onEnter) {
     input.addEventListener('keydown', e => {
