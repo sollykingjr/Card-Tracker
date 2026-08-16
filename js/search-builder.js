@@ -379,7 +379,7 @@ async function sbSaveToKV() {
   try {
     await fetch(`${SB_WORKER}/sb-data`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ savedSearches: SB.savedSearches, favSellers: SB.ebayFavSellers })
     });
   } catch(e) {}
