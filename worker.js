@@ -551,32 +551,15 @@ async function checkPlayerSearches(env) {
 
     const groupMapped = [];
     for (const search of groupSearches) {
-      const filters = [];
-      if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
-      if (search.seller) {
-        if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
-        else filters.push(`excludeSellers:{${search.seller}}`);
-      }
-      if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
-      if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
-      if (search.usOnly) filters.push('itemLocationCountry:US');
-      if (search.minPrice || search.maxPrice) {
-        filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
-        filters.push('priceCurrency:USD');
-      }
-      let q = search.query || '';
-      if (!q && !search.seller) continue;
-      const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
-      const aspects = [];
-      if (search.sport) aspects.push(`Sport:{${search.sport}}`);
-      const aspectFilter = aspects.length ? `&aspect_filter=${encodeURIComponent(`categoryId:212,${aspects.join(',')}`)}` : '';
+      if (!search.query && !search.seller) continue;
       let items = [];
       let page = 1;
       const maxPages = 5;
       let keepPaging = true;
       while (keepPaging && page <= maxPages) {
         const offset = (page - 1) * 200;
-        const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200&offset=${offset}`;const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+        const url = buildEbaySearchUrl(search, offset);
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
         const apiData = await res.json();
         const pageItems = (apiData.itemSummaries || []);
         const newInWindow = pageItems.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
