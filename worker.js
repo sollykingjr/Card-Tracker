@@ -13,6 +13,7 @@ import {
   handleCardImage
 } from './worker/cardmeta.js';
 
+
 // ── Main router ───────────────────────────────────────────────────────────────
 const PROTECTED_ROUTES = new Set([
   'POST:/save-title',
