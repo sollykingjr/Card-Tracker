@@ -194,6 +194,27 @@ async function fetchBatch(ranges) {
 }
 
 let prospectDataLoaded = false;
+const CARDS_CACHE_KEY = 'ctCardsCache';
+
+function hydrateCardsFromCache() {
+  try {
+    const raw = localStorage.getItem(CARDS_CACHE_KEY);
+    if (!raw) return false;
+    cards = JSON.parse(raw);
+    buildCache();
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function saveCardsToCache() {
+  try {
+    localStorage.setItem(CARDS_CACHE_KEY, JSON.stringify(cards));
+  } catch(e) {
+    // localStorage full or unavailable — silently skip caching
+  }
+}
 
 async function loadCardData() {
   document.getElementById('cntlbl').textContent='Loading...';
@@ -226,6 +247,9 @@ async function loadCardData() {
     }));
 
     buildCache();
+
+    buildCache();
+    saveCardsToCache();
 
     if (section === 'home') { renderHome(); }
     else if (section === 'cardtracker') { renderCardTracker(); }
