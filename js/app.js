@@ -138,6 +138,7 @@ document.getElementById('rfab').addEventListener('click', () => {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+hydrateCardsFromCache();
 const urlParams = new URLSearchParams(window.location.search);
 const digestParam = urlParams.get('digest');
 if (digestParam) {
