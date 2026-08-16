@@ -125,8 +125,15 @@ document.getElementById('rfab').addEventListener('click', () => {
   if (section === 'watchlist') {
     watchlistLoaded = false;
     loadWatchlist();
+  } else if (section === 'home') {
+    homeClosingSoonLoaded = false;
+    homeLoadClosingSoon();
   } else {
-    loadAll();
+    loadCardData();
+    if (prospectDataLoaded) {
+      prospectDataLoaded = false;
+      loadProspectData();
+    }
   }
 });
 
