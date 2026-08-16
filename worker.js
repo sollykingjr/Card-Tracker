@@ -492,7 +492,34 @@ async function sendDailyStatsNotification(env) {
     })
   });
 }
-// ── [13] checkPlayerSearches ──────────────────────────────────────────────────
+// ── [13] buildEbaySearchUrl ────────────────────────────────────────────────────
+function buildEbaySearchUrl(search, offset) {
+  const filters = [];
+  if (search.listingType && search.listingType !== 'BOTH') filters.push(`buyingOptions:{${search.listingType}}`);
+  if (search.seller) {
+    if (search.sellerMode === 'include') filters.push(`sellers:{${search.seller}}`);
+    else filters.push(`excludeSellers:{${search.seller}}`);
+  }
+  if (search.condition === 'Graded') filters.push('conditionIds:{2750}');
+  if (search.condition === 'Ungraded') filters.push('conditionIds:{4000}');
+  if (search.usOnly) filters.push('itemLocationCountry:US');
+  if (search.minPrice || search.maxPrice) {
+    filters.push(`price:[${search.minPrice || '0'}..${search.maxPrice || ''}]`);
+    filters.push('priceCurrency:USD');
+  }
+  const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
+
+  const aspects = [];
+  if (search.serial) aspects.push('Features:{Serial Numbered}');
+  if (search.sport) aspects.push(`Sport:{${search.sport}}`);
+  const aspectFilter = aspects.length ? `&aspect_filter=${encodeURIComponent(`categoryId:212,${aspects.join(',')}`)}` : '';
+
+  const q = search.query || '';
+  const offsetStr = offset !== undefined ? `&offset=${offset}` : '';
+  return `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=212&sort=newlyListed${filterStr}${aspectFilter}&limit=200${offsetStr}`;
+}
+
+// ── [14] checkPlayerSearches ──────────────────────────────────────────────────
 async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
