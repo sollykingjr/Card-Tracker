@@ -108,10 +108,11 @@ document.getElementById('sortchips').addEventListener('click', e => {
   const c = e.target.closest('.schip'); if (!c) return;
   sortBy = c.dataset.s; render();
 });
+const debouncedRender = debounce(render, 150);
 document.getElementById('search').addEventListener('input', e => {
   q = e.target.value.trim();
   document.getElementById('clear').classList.toggle('on', q.length > 0);
-  render();
+  debouncedRender();
 });
 document.getElementById('clear').addEventListener('click', () => {
   document.getElementById('search').value = ''; q = '';
