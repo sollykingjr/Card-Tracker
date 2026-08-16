@@ -12,13 +12,13 @@ const searchUrl = {
 };
 
 // ── Fetch watchlist from Worker ───────────────────────────────────────────────
-async function loadWatchlist() {
+async function loadWatchlist(force = false) {
   document.getElementById('list').innerHTML = '<div class="spin"><div class="spin-ring"></div>Loading watchlist...</div>';
   document.getElementById('cntlbl').textContent = 'Loading...';
   document.getElementById('rfab').classList.add('spin');
 
   try {
-    const res = await fetch(`${WORKER_URL}/watchlist`);
+    const res = await fetch(`${WORKER_URL}/watchlist${force ? '?refresh=1' : ''}`);
     const data = await res.json();
 
     if (data.error === 'not_authenticated' || data.error === 'refresh_failed') {
