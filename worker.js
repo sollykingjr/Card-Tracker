@@ -1,16 +1,16 @@
 // ── worker.js — entry point: router + imports
-import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost } from './misc.js';
-import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, refreshWatchlistCache } from './ebay-watchlist.js';
+import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost } from './worker/misc.js';
+import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, refreshWatchlistCache } from './worker/ebay-watchlist.js';
 import {
   checkPlayerSearches, checkNightlySearches, sendPlayerDigestNotification, clearPlayerDigests,
   handlePlayerDigest, handlePlayerDigestJson, handleSearchAlertsGet, handleSearchAlertsPost,
   handleMarkSeen, handleMarkSeenUrls, handleRunSearch
-} from './search-alerts.js';
+} from './worker/search-alerts.js';
 import {
   handleScan, handleScanBatch, handleCardMetaAll, handleCardMetaPost, handleCardMetaInHandAll,
   handleComcPulledAll, handleComcPulledPost, handleComcPulledInvalidateScans,
   handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear
-} from './cardmeta.js';
+} from './worker/cardmeta.js';
 
 // ── Main router ───────────────────────────────────────────────────────────────
 const PROTECTED_ROUTES = new Set([
