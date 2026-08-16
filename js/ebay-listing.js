@@ -48,6 +48,7 @@ function ebayBuildDefaultListing(c) {
     league: '',
     autographed: autographed ? 'Yes' : 'No',
     cardNo: c.cardNo || '',
+    printRun: c.serialNo || '',
     grader: isGraded ? grader : '',
     grade: isGraded ? grade : '',
     country: 'United States',
@@ -158,6 +159,7 @@ async function ebayOpenListingForm(itemId) {
       ${ebayField('League', 'el-league', l.league)}
       ${ebayField('Autographed', 'el-autographed', l.autographed, { type: 'select', options: ['No', 'Yes'] })}
       ${ebayField('Card Number', 'el-cardNo', l.cardNo)}
+      ${ebayField('Print Run (serial /X)', 'el-printRun', l.printRun)}
       ${l.isGraded ? ebayField('Grader', 'el-grader', l.grader) : ''}
       ${l.isGraded ? ebayField('Grade', 'el-grade', l.grade) : ''}
       ${ebayField('Country of Origin', 'el-country', l.country)}
@@ -200,6 +202,7 @@ async function ebaySaveListing(itemId) {
     league: val('el-league'),
     autographed: val('el-autographed'),
     cardNo: val('el-cardNo'),
+    printRun: val('el-printRun'),
     grader: isGraded ? val('el-grader') : '',
     grade: isGraded ? val('el-grade') : '',
     country: val('el-country'),
