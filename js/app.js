@@ -78,7 +78,12 @@ function setSection(s) {
     document.getElementById('cntlbl').textContent = '';
     renderPortfolio();
   } else {
-    render();
+    document.getElementById('cntlbl').textContent = '';
+    if (!prospectDataLoaded) {
+      loadProspectData();
+    } else {
+      render();
+    }
   }
 }
 
@@ -134,5 +139,5 @@ if (digestParam) {
 } else {
   setSection('home');
 }
-loadAll();
+loadCardData();
 ctLoadTags();
