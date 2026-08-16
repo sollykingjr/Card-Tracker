@@ -232,3 +232,56 @@ async function ebayRemoveFromQueue(itemId) {
     delete ebayQueueCache[itemId];
   } catch (e) {}
 }
+
+function ebayRenderQueueListHtml() {
+  const entries = Object.entries(ebayQueueCache);
+  if (!entries.length) {
+    return `
+      <div class="section-hdr">eBay Queue</div>
+      <div class="empty-msg" style="margin-top:12px">No cards queued yet.</div>
+    `;
+  }
+  const rows = entries.map(([itemId, l]) => {
+    const c = cards.find(x => x.itemId === itemId);
+    const title = l.title || (c ? c.fullCard : itemId);
+    const price = l.price ? `$${parseFloat(l.price).toFixed(2)}` : '—';
+    return `
+      <div class="recent-row" style="align-items:center">
+        <div class="recent-info">
+          <div class="rc-name">${title}</div>
+          <div class="rc-date">${price} · ${l.format || 'FixedPrice'}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button onclick="ebayEditFromQueue('${itemId.replace(/'/g, "\\'")}')" style="padding:6px 10px;font-size:11px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-weight:700;cursor:pointer;font-family:inherit">Edit</button>
+          <button onclick="ebayRemoveFromQueueUI('${itemId.replace(/'/g, "\\'")}')" style="padding:6px 10px;font-size:11px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-weight:700;cursor:pointer;font-family:inherit">Remove</button>
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="section-hdr">eBay Queue (${entries.length})</div>
+    <div style="margin-top:12px">${rows}</div>
+    <button onclick="ebayExportQueue()" style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:16px">Export Queue</button>
+  `;
+}
+
+async function ebayOpenQueueModal() {
+  await ebayLoadQueue();
+  _modalMainHtml = ebayRenderQueueListHtml();
+  document.getElementById('mcontent').innerHTML = _modalMainHtml;
+  document.getElementById('mwrap').classList.add('on');
+}
+
+function ebayEditFromQueue(itemId) {
+  _modalMainHtml = ebayRenderQueueListHtml();
+  ebayOpenListingForm(itemId);
+}
+
+async function ebayRemoveFromQueueUI(itemId) {
+  await ebayRemoveFromQueue(itemId);
+  _modalMainHtml = ebayRenderQueueListHtml();
+  document.getElementById('mcontent').innerHTML = _modalMainHtml;
+}
+
+function ebayExportQueue() {
+  alert('Export is coming in the next step — not built yet.');
+}
