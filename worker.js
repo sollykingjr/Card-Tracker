@@ -5,6 +5,10 @@ const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/
 // ── [2] Main router ───────────────────────────────────────────────────────────
 export default {
   async scheduled(event, env, ctx) {
+    if (event.cron === '*/15 * * * *') {
+      await refreshWatchlistCache(env);
+      return;
+    }
     if (event.cron === '0 10 * * *') {
       await checkNightlySearches(env);
     } else {
