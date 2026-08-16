@@ -1,7 +1,7 @@
 // ── Search Results ────────────────────────────────────────────────────────────
 const WORKER = 'https://card-app.maxcsolomon.workers.dev';
 
-let srData = { groups: [], searches: [] };
+let srData = { groups: [], searches: [], sections: [] };
 
 // ── Buy Score auto-managed searches ────────────────────────────────────────────
 const BUY_SCORE_THRESHOLD = 5;
@@ -240,6 +240,7 @@ async function loadData() {
     srData = await res.json();
     if (!srData.groups) srData.groups = [];
     if (!srData.searches) srData.searches = [];
+    if (!srData.sections) srData.sections = [];
     await syncBuyScoreSearches();
     renderList();
   } catch(e) {
@@ -251,7 +252,7 @@ async function saveData() {
   const res = await fetch(`${WORKER}/search-alerts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groups: srData.groups, searches: srData.searches })
+    body: JSON.stringify({ groups: srData.groups, searches: srData.searches, sections: srData.sections })
   });
   const result = await res.json();
 }
