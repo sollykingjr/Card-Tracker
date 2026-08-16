@@ -658,7 +658,6 @@ async function checkPlayerSearches(env) {
     }
   }
 
- for (const search of searches) {
 for (const search of searches) {
     // Skip nightly searches on hourly runs
     if (search.schedule === 'nightly') continue;
