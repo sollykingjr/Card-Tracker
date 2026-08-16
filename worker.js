@@ -3,6 +3,23 @@ const RUNAME = 'Max_Solomon-MaxSolom-MCSTra-anhpmrm';
 const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory.readonly https://api.ebay.com/oauth/api_scope/commerce.identity.readonly';
 
 // ── [2] Main router ───────────────────────────────────────────────────────────
+const PROTECTED_ROUTES = new Set([
+  'POST:/save-title',
+  'POST:/run-search',
+  'POST:/search-alerts',
+  'POST:/sb-data',
+  'POST:/mark-seen',
+  'POST:/mark-seen-urls',
+  'POST:/set-snipe',
+  'POST:/scan-batch',
+  'POST:/card-meta',
+  'POST:/comc-pulled',
+  'POST:/card-override',
+  'POST:/card-override-pending-clear',
+  'GET:/test-promotions',
+  'GET:/comc-pulled-invalidate-scans',
+]);
+
 export default {
   async scheduled(event, env, ctx) {
     if (event.cron === '*/15 * * * *') {
@@ -32,11 +49,19 @@ export default {
     const cors = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, X-App-Key',
     };
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: cors });
+    }
+
+    if (PROTECTED_ROUTES.has(`${request.method}:${path}`)) {
+      if (request.headers.get('X-App-Key') !== env.APP_KEY) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (path === '/auth') return handleAuth(env);
