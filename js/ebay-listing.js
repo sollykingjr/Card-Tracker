@@ -48,7 +48,7 @@ function ebayBuildDefaultListing(c) {
     league: '',
     autographed: autographed ? 'Yes' : 'No',
     cardNo: c.cardNo || '',
-    printRun: c.serialNo || '',
+    printRun: c.qtyManufactured || '',
     grader: isGraded ? grader : '',
     grade: isGraded ? grade : '',
     country: 'United States',
