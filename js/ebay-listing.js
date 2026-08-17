@@ -355,7 +355,10 @@ function ebayBuildRowValues(itemId, l, shippingPolicy) {
   set('T', 'str', l.description);
   set('U', 'str', l.format);
   set('V', 'str', l.format === 'Auction' ? '7' : 'GTC');
-  if (l.action === 'live' && l.schedule) set('H', 'str', l.schedule);
+  if (l.action === 'live' && l.schedule) {
+    const scheduleDate = new Date(l.schedule);
+    if (!isNaN(scheduleDate.getTime())) set('H', 'str', scheduleDate.toISOString());
+  }
   if (l.format === 'FixedPrice' && l.allowOffers) {
     set('X', 'str', 'true');
     set('Y', 'num', l.offerAuto);
