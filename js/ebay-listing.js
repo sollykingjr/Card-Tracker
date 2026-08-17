@@ -22,11 +22,15 @@ function ebayGuessGraderGrade(gradeText) {
   return { grader: '', grade: t };
 }
 
+const EBAY_TCG_GAMES = ['Pokémon', 'Yu-Gi-Oh!', 'Magic: The Gathering', 'Lorcana', 'One Piece', 'Other'];
+
 function ebayBuildDefaultListing(c) {
   const isGraded = !!(c.grade && c.grade.trim());
   const { grader, grade } = ebayGuessGraderGrade(c.grade);
   const autographed = /auto/i.test(c.variation || '') || /auto/i.test(c.version || '');
   return {
+    cardType: 'sports',
+    game: EBAY_TCG_GAMES[0],
     title: c.fullCard || c.playerDisplay || '',
     team: '',
     price: '',
@@ -134,6 +138,11 @@ async function ebayOpenListingForm(itemId) {
     </div>
     <div class="section-hdr">List on eBay</div>
     <div style="margin-top:12px">
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button type="button" id="el-type-sports" onclick="ebaySetCardType('sports')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--bdr2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:${(l.cardType || 'sports') === 'sports' ? 'var(--acc-bg)' : 'var(--surf2)'};color:${(l.cardType || 'sports') === 'sports' ? 'var(--acc)' : 'var(--tx2)'}">Sports Card</button>
+        <button type="button" id="el-type-tcg" onclick="ebaySetCardType('tcg')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--bdr2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:${l.cardType === 'tcg' ? 'var(--acc-bg)' : 'var(--surf2)'};color:${l.cardType === 'tcg' ? 'var(--acc)' : 'var(--tx2)'}">TCG Card</button>
+      </div>
+      <input type="hidden" id="el-cardType" value="${l.cardType || 'sports'}">
       ${ebayField('Title', 'el-title', l.title)}
       ${ebayField('Price', 'el-price', l.price, { type: 'number' })}
       ${ebayField('Quantity', 'el-quantity', l.quantity, { type: 'number' })}
@@ -149,15 +158,20 @@ async function ebayOpenListingForm(itemId) {
       ${ebayField('Schedule (optional)', 'el-schedule', l.schedule, { type: 'datetime-local' })}
       ${ebayField('Description', 'el-description', l.description, { type: 'textarea' })}
       ${!l.isGraded ? ebayField('Card Condition', 'el-condition', l.condition, { type: 'select', options: ['Near mint or better', 'Excellent', 'Very good', 'Poor'] }) : ''}
-      ${ebayField('Sport', 'el-sport', l.sport)}
-      ${ebayField('Player', 'el-player', l.player)}
+      <div id="el-sports-fields" style="display:${(l.cardType || 'sports') === 'sports' ? 'block' : 'none'}">
+        ${ebayField('Sport', 'el-sport', l.sport)}
+        ${ebayField('Player', 'el-player', l.player)}
+        ${ebayField('League', 'el-league', l.league)}
+        ${ebayField('Autographed', 'el-autographed', l.autographed, { type: 'select', options: ['No', 'Yes'] })}
+      </div>
+      <div id="el-tcg-fields" style="display:${l.cardType === 'tcg' ? 'block' : 'none'}">
+        ${ebayField('Game', 'el-game', l.game || EBAY_TCG_GAMES[0], { type: 'select', options: EBAY_TCG_GAMES })}
+      </div>
       ${ebayField('Team', 'el-team', l.team)}
       ${ebayField('Manufacturer', 'el-manufacturer', l.manufacturer)}
       ${ebayField('Season / Year', 'el-season', l.season)}
       ${ebayField('Parallel / Variety', 'el-parallel', l.parallel)}
       ${ebayField('Set', 'el-set', l.set)}
-      ${ebayField('League', 'el-league', l.league)}
-      ${ebayField('Autographed', 'el-autographed', l.autographed, { type: 'select', options: ['No', 'Yes'] })}
       ${ebayField('Card Number', 'el-cardNo', l.cardNo)}
       ${ebayField('Print Run (serial /X)', 'el-printRun', l.printRun)}
       ${l.isGraded ? ebayField('Grader', 'el-grader', l.grader) : ''}
@@ -174,13 +188,29 @@ async function ebayOpenListingForm(itemId) {
   document.getElementById('mcontent').innerHTML = html;
 }
 
+function ebaySetCardType(type) {
+  document.getElementById('el-cardType').value = type;
+  document.getElementById('el-sports-fields').style.display = type === 'sports' ? 'block' : 'none';
+  document.getElementById('el-tcg-fields').style.display = type === 'tcg' ? 'block' : 'none';
+  const sportsBtn = document.getElementById('el-type-sports');
+  const tcgBtn = document.getElementById('el-type-tcg');
+  sportsBtn.style.background = type === 'sports' ? 'var(--acc-bg)' : 'var(--surf2)';
+  sportsBtn.style.color = type === 'sports' ? 'var(--acc)' : 'var(--tx2)';
+  tcgBtn.style.background = type === 'tcg' ? 'var(--acc-bg)' : 'var(--surf2)';
+  tcgBtn.style.color = type === 'tcg' ? 'var(--acc)' : 'var(--tx2)';
+}
+
 async function ebaySaveListing(itemId) {
   const val = id => document.getElementById(id)?.value ?? '';
   const checked = id => document.getElementById(id)?.checked ?? false;
   const isGraded = val('el-isGraded') === '1';
 
+  const cardType = val('el-cardType') || 'sports';
+
   const listing = {
     itemId,
+    cardType,
+    game: cardType === 'tcg' ? val('el-game') : '',
     title: val('el-title'),
     price: val('el-price'),
     quantity: val('el-quantity') || 1,
@@ -192,15 +222,15 @@ async function ebaySaveListing(itemId) {
     schedule: val('el-schedule'),
     description: val('el-description'),
     condition: isGraded ? '' : val('el-condition'),
-    sport: val('el-sport'),
-    player: val('el-player'),
+    sport: cardType === 'sports' ? val('el-sport') : '',
+    player: cardType === 'sports' ? val('el-player') : '',
     team: val('el-team'),
     manufacturer: val('el-manufacturer'),
     season: val('el-season'),
     parallel: val('el-parallel'),
     set: val('el-set'),
-    league: val('el-league'),
-    autographed: val('el-autographed'),
+    league: cardType === 'sports' ? val('el-league') : '',
+    autographed: cardType === 'sports' ? val('el-autographed') : '',
     cardNo: val('el-cardNo'),
     printRun: val('el-printRun'),
     grader: isGraded ? val('el-grader') : '',
