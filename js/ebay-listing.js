@@ -335,8 +335,8 @@ const EBAY_CONDITION_MAP = {
 };
 
 const EBAY_MANUAL_SHIPPING_COSTS = {
-  'PWE - Not Flat Rate - (ID: 254806132017)': '1.25',
-  'Calculated Bubble Mailers - (ID: 239080494017)': '5.85'
+  'PWE - Not Flat Rate - (ID: 254806132017)': { cost: '1.25', service: 'US_eBayStandardEnvelope' },
+  'Calculated Bubble Mailers - (ID: 239080494017)': { cost: '5.85', service: 'USPSParcel' }
 };
 
 function ebayCsvEscape(val) {
@@ -397,11 +397,11 @@ function ebayBuildCsvRowMap(itemId, l, shippingChoice) {
   set('*Location', '10022');
   set('*DispatchTimeMax', '1');
 
-  const manualCost = EBAY_MANUAL_SHIPPING_COSTS[shippingChoice];
-  if (manualCost !== undefined) {
+  const manualShip = EBAY_MANUAL_SHIPPING_COSTS[shippingChoice];
+  if (manualShip) {
     set('ShippingType', 'Flat');
-    set('ShippingService-1:Option', 'USPSGroundAdvantage');
-    set('ShippingService-1:Cost', manualCost);
+    set('ShippingService-1:Option', manualShip.service);
+    set('ShippingService-1:Cost', manualShip.cost);
   } else {
     set('ShippingProfileName', shippingChoice);
   }
