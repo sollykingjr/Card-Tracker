@@ -161,13 +161,13 @@ async function ebayOpenListingForm(itemId) {
       <div id="el-sports-fields" style="display:${(l.cardType || 'sports') === 'sports' ? 'block' : 'none'}">
         ${ebayField('Sport', 'el-sport', l.sport)}
         ${ebayField('Player', 'el-player', l.player)}
+        ${ebayField('Team', 'el-team', l.team)}
         ${ebayField('League', 'el-league', l.league)}
         ${ebayField('Autographed', 'el-autographed', l.autographed, { type: 'select', options: ['No', 'Yes'] })}
       </div>
       <div id="el-tcg-fields" style="display:${l.cardType === 'tcg' ? 'block' : 'none'}">
         ${ebayField('Game', 'el-game', l.game || EBAY_TCG_GAMES[0], { type: 'select', options: EBAY_TCG_GAMES })}
       </div>
-      ${ebayField('Team', 'el-team', l.team)}
       ${ebayField('Manufacturer', 'el-manufacturer', l.manufacturer)}
       ${ebayField('Season / Year', 'el-season', l.season)}
       ${ebayField('Parallel / Variety', 'el-parallel', l.parallel)}
@@ -224,7 +224,7 @@ async function ebaySaveListing(itemId) {
     condition: isGraded ? '' : val('el-condition'),
     sport: cardType === 'sports' ? val('el-sport') : '',
     player: cardType === 'sports' ? val('el-player') : '',
-    team: val('el-team'),
+    team: cardType === 'sports' ? val('el-team') : '',
     manufacturer: val('el-manufacturer'),
     season: val('el-season'),
     parallel: val('el-parallel'),
