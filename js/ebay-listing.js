@@ -325,27 +325,8 @@ async function ebayRemoveFromQueueUI(itemId) {
   document.getElementById('mcontent').innerHTML = _modalMainHtml;
 }
 
-const EBAY_GRADER_MAP = {
-  PSA: 'Professional Sports Authenticator (PSA) - (ID: 275010)',
-  BCCG: 'Beckett Collectors Club Grading (BCCG) - (ID: 275011)',
-  BVG: 'Beckett Vintage Grading (BVG) - (ID: 275012)',
-  BGS: 'Beckett Grading Services (BGS) - (ID: 275013)',
-  CSG: 'Certified Sports Guaranty (CSG) - (ID: 275014)',
-  CGC: 'Certified Guaranty Company (CGC) - (ID: 275015)',
-  SGC: 'Sportscard Guaranty Corporation (SGC) - (ID: 275016)',
-  KSA: 'K Sportscard Authentication (KSA) - (ID: 275017)',
-  GMA: 'Gem Mint Authentication (GMA) - (ID: 275018)',
-  HGA: 'Hybrid Grading Approach (HGA) - (ID: 275019)',
-};
-const EBAY_GRADE_MAP = {
-  '10': '10 - (ID: 275020)', '9.5': '9.5 - (ID: 275021)', '9': '9 - (ID: 275022)',
-  '8.5': '8.5 - (ID: 275023)', '8': '8 - (ID: 275024)', '7.5': '7.5 - (ID: 275025)',
-  '7': '7 - (ID: 275026)', '6.5': '6.5 - (ID: 275027)', '6': '6 - (ID: 275028)',
-  '5.5': '5.5 - (ID: 275029)', '5': '5 - (ID: 2750210)', '4.5': '4.5 - (ID: 2750211)',
-  '4': '4 - (ID: 2750212)', '3.5': '3.5 - (ID: 2750213)', '3': '3 - (ID: 2750214)',
-  '2.5': '2.5 - (ID: 2750215)', '2': '2 - (ID: 2750216)', '1.5': '1.5 - (ID: 2750217)',
-  '1': '1 - (ID: 2750218)', 'Authentic': 'Authentic - (ID: 2750219)'
-};
+const EBAY_CSV_HEADERS = ["*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)","CustomLabel","*Category","StoreCategory","*Title","Subtitle","Relationship","RelationshipDetails","ScheduleTime","*ConditionID","CD:Professional Grader - (ID: 27501)","CD:Grade - (ID: 27502)","CDA:Certification Number - (ID: 27503)","CD:Card Condition - (ID: 40001)","*C:Sport","C:Player/Athlete","C:Manufacturer","C:Season","C:Parallel/Variety","C:Features","C:Set","C:Team","C:League","C:Autographed","C:Card Name","C:Card Number","C:Type","C:Year Manufactured","C:Signed By","C:Autograph Authentication","C:Card Size","C:Country of Origin","C:Material","C:Event/Tournament","C:Autograph Format","C:Vintage","C:Language","C:Original/Licensed Reprint","C:Autograph Authentication Number","C:California Prop 65 Warning","C:Card Thickness","C:Customized","C:Insert Set","C:Print Run","*C:Game","C:Character","C:Card Type","C:Age Level","C:Speciality","C:Rarity","C:Finish","C:Attribute/MTG:Color","C:Creature/Monster Type","C:Stage","C:Convention/Event","C:Franchise","C:Illustrator","C:HP","C:Attack/Power","C:Defense/Toughness","C:Cost","PicURL","GalleryType","VideoID","*Description","*Format","*Duration","*StartPrice","BuyItNowPrice","BestOfferEnabled","BestOfferAutoAcceptPrice","MinimumBestOfferPrice","*Quantity","ImmediatePayRequired","*Location","ShippingType","ShippingService-1:Option","ShippingService-1:Cost","ShippingService-2:Option","ShippingService-2:Cost","*DispatchTimeMax","PromotionalShippingDiscount","ShippingDiscountProfileID","*ReturnsAcceptedOption","ReturnsWithinOption","RefundOption","ShippingCostPaidByOption","AdditionalDetails","ShippingProfileName","ReturnProfileName","PaymentProfileName","Product Safety Pictograms","Product Safety Statements","Product Safety Component","Regulatory Document Ids","Manufacturer Name","Manufacturer AddressLine1","Manufacturer AddressLine2","Manufacturer City","Manufacturer Country","Manufacturer PostalCode","Manufacturer StateOrProvince","Manufacturer Phone","Manufacturer Email","Manufacturer ContactURL","Responsible Person 1","Responsible Person 1 Type","Responsible Person 1 AddressLine1","Responsible Person 1 AddressLine2","Responsible Person 1 City","Responsible Person 1 Country","Responsible Person 1 PostalCode","Responsible Person 1 StateOrProvince","Responsible Person 1 Phone","Responsible Person 1 Email","Responsible Person 1 ContactURL"];
+
 const EBAY_CONDITION_MAP = {
   'Near mint or better': 'Near mint or better - (ID: 400010)',
   'Excellent': 'Excellent - (ID: 400011)',
@@ -353,113 +334,112 @@ const EBAY_CONDITION_MAP = {
   'Poor': 'Poor - (ID: 400013)'
 };
 
-function ebayColIdx(col) {
-  let idx = 0;
-  for (let i = 0; i < col.length; i++) idx = idx * 26 + (col.charCodeAt(i) - 64);
-  return idx;
+const EBAY_MANUAL_SHIPPING_COSTS = {
+  'PWE - Not Flat Rate - (ID: 254806132017)': '1.25',
+  'Calculated Bubble Mailers - (ID: 239080494017)': '5.85'
+};
+
+function ebayCsvEscape(val) {
+  const s = String(val ?? '');
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
 }
 
-function ebayEscapeXml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-}
+function ebayBuildCsvRowMap(itemId, l, shippingChoice) {
+  const isSports = (l.cardType || 'sports') === 'sports';
+  const map = {};
+  const set = (header, val) => { if (val !== '' && val !== undefined && val !== null) map[header] = val; };
 
-function ebayBuildRowValues(itemId, l, shippingPolicy) {
-  const values = {};
-  const set = (col, kind, val) => { if (val !== '' && val !== undefined && val !== null) values[col] = [kind, val]; };
-
-  set('A', 'str', l.action === 'live' ? 'Add' : 'Draft');
-  set('B', 'str', itemId);
-  set('C', 'num', 261328);
-  set('E', 'str', '/Sports Mem, Cards & Fan Shop/Sports Trading Cards/Trading Card Singles');
-  set('F', 'str', l.title);
-  set('K', 'num', l.price);
-  set('L', 'num', l.quantity || 1);
-  set('M', 'str', `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg|https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`);
-  set('O', 'num', l.isGraded ? 2750 : 4000);
-  if (l.isGraded) {
-    set('P', 'str', EBAY_GRADER_MAP[(l.grader || '').toUpperCase()] || l.grader);
-    set('Q', 'str', EBAY_GRADE_MAP[l.grade] || l.grade);
-  } else {
-    set('S', 'str', EBAY_CONDITION_MAP[l.condition] || l.condition);
-  }
-  set('T', 'str', l.description);
-  set('U', 'str', l.format);
-  set('V', 'str', l.format === 'Auction' ? '7' : 'GTC');
+  set('*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)', l.action === 'live' ? 'Add' : 'Draft');
+  set('CustomLabel', itemId);
+  set('*Category', isSports ? '261328' : '183454');
+  set('*Title', l.title);
   if (l.action === 'live' && l.schedule) {
-    const scheduleDate = new Date(l.schedule);
-    if (!isNaN(scheduleDate.getTime())) set('H', 'str', scheduleDate.toISOString());
+    const d = new Date(l.schedule);
+    if (!isNaN(d.getTime())) set('ScheduleTime', d.toISOString());
   }
+  set('*ConditionID', l.isGraded ? '2750' : '4000');
+  if (l.isGraded) {
+    set('CD:Professional Grader - (ID: 27501)', l.grader);
+    set('CD:Grade - (ID: 27502)', l.grade);
+  } else {
+    set('CD:Card Condition - (ID: 40001)', EBAY_CONDITION_MAP[l.condition] || l.condition);
+  }
+  if (isSports) {
+    set('*C:Sport', l.sport);
+    set('C:Player/Athlete', l.player);
+    set('C:Team', l.team);
+    set('C:League', l.league);
+    set('C:Autographed', l.autographed);
+  } else {
+    set('*C:Game', l.game);
+  }
+  set('C:Manufacturer', l.manufacturer);
+  set('C:Season', l.season);
+  set('C:Parallel/Variety', l.parallel);
+  if (l.printRun) set('C:Features', 'Serial Numbered');
+  set('C:Set', l.set);
+  set('C:Card Number', l.cardNo);
+  set('C:Year Manufactured', l.season);
+  set('C:Country of Origin', l.country);
+  set('C:Print Run', l.printRun);
+  set('PicURL', `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg|https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`);
+  set('*Description', l.description);
+  set('*Format', l.format);
+  set('*Duration', l.format === 'Auction' ? '7' : 'GTC');
+  set('*StartPrice', l.price);
   if (l.format === 'FixedPrice' && l.allowOffers) {
-    set('X', 'str', 'true');
-    set('Y', 'num', l.offerAuto);
-    set('Z', 'num', l.offerMin);
+    set('BestOfferEnabled', 'true');
+    set('BestOfferAutoAcceptPrice', l.offerAuto);
+    set('MinimumBestOfferPrice', l.offerMin);
   }
-  set('AB', 'str', '10022');
-  set('AI', 'num', 1);
-  set('AN', 'str', shippingPolicy);
-  set('AO', 'str', 'Mascot - No returns accepted - (ID: 238602691017)');
-  set('AP', 'str', 'eBay Managed Payments BIN - (ID: 239080495017)');
-  set('AQ', 'str', l.sport);
-  set('AR', 'str', l.player);
-  set('AS', 'str', l.manufacturer);
-  set('AT', 'str', l.season);
-  set('AU', 'str', l.parallel);
-  if (l.printRun) set('AV', 'str', 'Serial Numbered');
-  set('AW', 'str', l.set);
-  set('AX', 'str', l.team);
-  set('AY', 'str', l.league);
-  set('AZ', 'str', l.autographed);
-  set('BB', 'str', l.cardNo);
-  set('BD', 'str', l.season);
-  set('BT', 'str', l.printRun);
+  set('*Quantity', l.quantity || 1);
+  set('*Location', '10022');
+  set('*DispatchTimeMax', '1');
 
-  return values;
+  const manualCost = EBAY_MANUAL_SHIPPING_COSTS[shippingChoice];
+  if (manualCost !== undefined) {
+    set('ShippingType', 'Flat');
+    set('ShippingService-1:Option', 'USPSGroundAdvantage');
+    set('ShippingService-1:Cost', manualCost);
+  } else {
+    set('ShippingProfileName', shippingChoice);
+  }
+  set('ReturnProfileName', 'Mascot - No returns accepted - (ID: 238602691017)');
+  set('PaymentProfileName', 'eBay Managed Payments BIN - (ID: 239080495017)');
+
+  return map;
+}
+
+function ebayBuildCsvLine(map) {
+  return EBAY_CSV_HEADERS.map(h => ebayCsvEscape(map[h] || '')).join(',');
 }
 
 async function ebayExportQueue() {
   const entries = Object.entries(ebayQueueCache);
   if (!entries.length) { alert('Queue is empty.'); return; }
 
-  const shippingPolicy = document.getElementById('el-export-shipping')?.value;
-  if (shippingPolicy) localStorage.setItem('ebayShippingPolicy', shippingPolicy);
+  const shippingChoice = document.getElementById('el-export-shipping')?.value;
+  if (shippingChoice) localStorage.setItem('ebayShippingPolicy', shippingChoice);
 
   const btn = document.getElementById('ebay-export-btn');
   if (btn) { btn.textContent = 'Building file...'; btn.disabled = true; }
 
   try {
-    const templateRes = await fetch('assets/ebay-template.xlsm');
-    const templateBuf = await templateRes.arrayBuffer();
-    const zip = await JSZip.loadAsync(templateBuf);
-
-    const sheetPath = 'xl/worksheets/sheet20.xml';
-    let sheetXml = await zip.file(sheetPath).async('string');
-
-    let rowNum = 5;
-    let newRowsXml = '';
+    const lines = [];
+    lines.push('Info,Version=1.0.0,Template=fx_category_template_EBAY_US');
+    lines.push(EBAY_CSV_HEADERS.map(ebayCsvEscape).join(','));
     for (const [itemId, l] of entries) {
-      const values = ebayBuildRowValues(itemId, l, shippingPolicy);
-      const sortedCols = Object.keys(values).sort((a, b) => ebayColIdx(a) - ebayColIdx(b));
-      const cellsXml = sortedCols.map(col => {
-        const [kind, val] = values[col];
-        if (kind === 'num') return `<c r="${col}${rowNum}"><v>${val}</v></c>`;
-        return `<c r="${col}${rowNum}" t="inlineStr"><is><t xml:space="preserve">${ebayEscapeXml(val)}</t></is></c>`;
-      }).join('');
-      newRowsXml += `<row r="${rowNum}">${cellsXml}</row>`;
-      rowNum++;
+      const map = ebayBuildCsvRowMap(itemId, l, shippingChoice);
+      lines.push(ebayBuildCsvLine(map));
     }
+    const csvText = lines.join('\r\n');
 
-    const finalRow = rowNum - 1;
-    sheetXml = sheetXml.replace(/<dimension ref="A1:CS4"\s*\/>/, `<dimension ref="A1:CS${finalRow}"/>`);
-    sheetXml = sheetXml.replace('</sheetData>', newRowsXml + '</sheetData>');
-
-    zip.file(sheetPath, sheetXml);
-
-    const outBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-excel.sheet.macroEnabled.12' });
-
-    const url = URL.createObjectURL(outBlob);
+    const blob = new Blob(['\uFEFF' + csvText], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ebay-listings-${new Date().toISOString().slice(0, 10)}.xlsm`;
+    a.download = `ebay-listings-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
