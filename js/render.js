@@ -715,10 +715,11 @@ function renderProspectPortfolio() {
       </div>`;
     }).join('')}`:'<div class="empty-msg" style="padding:20px 0">No prospect cards found</div>';
 
-  const perfHtml = buildPricePerformance(playerList);
+    const perfHtml = buildPricePerformance(playerList);
   const valueGapHtml = buildValueGaps();
+  document.getElementById('list').classList.remove('grid-2');
   document.getElementById('list').innerHTML=summaryHtml+perfHtml+valueGapHtml+recentHtml+holdingsHtml;
-  document.getElementById('cntlbl').textContent=`${playerList.length} player${playerList.length===1?'':'s'}`;
+	document.getElementById('cntlbl').textContent=`${playerList.length} player${playerList.length===1?'':'s'}`;
 }
 
 function openPlayerFromPortfolio(nameLower) {
