@@ -204,7 +204,7 @@ function render() {
   const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
   const showChips=!isHS&&!isPort&&!isWatch;
   renderSortChips();
-  if(isPort){ renderPortfolio(); return; }
+    if(isPort){ renderProspectPortfolio(); return; }
   if(isWatch){ renderWatchlist(); return; }
   if(isHS){ renderHotSheet(); return; }
 
@@ -646,7 +646,7 @@ function showBuyNotesSubview() {
 
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
-function renderPortfolio() {
+function renderProspectPortfolio() {
   const prospectNames = new Set([
     ...players,...top200,...top100,...origTop200,...origTop100,...hotsheet
   ].map(p=>normName(p.name)));
