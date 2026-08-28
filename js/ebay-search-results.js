@@ -100,6 +100,7 @@ async function initSearchResults() {
               <button class="sr-chip-btn" data-val="Basketball">Basketball</button>
               <button class="sr-chip-btn" data-val="Football">Football</button>
               <button class="sr-chip-btn" data-val="Hockey">Hockey</button>
+              <button class="sr-chip-btn" data-val="Soccer">Soccer</button>
             </div>
           </div>
           <div class="sr-form-row">
