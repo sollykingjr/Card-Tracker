@@ -1,5 +1,5 @@
 // ── worker.js — entry point: router + imports
-import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost } from './worker/misc.js';
+import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost, handleRateLimitCheck } from './worker/misc.js';
 import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, refreshWatchlistCache } from './worker/ebay-watchlist.js';
 import {
   checkPlayerSearches, checkNightlySearches, sendPlayerDigestNotification, clearPlayerDigests,
