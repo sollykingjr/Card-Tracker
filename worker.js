@@ -114,6 +114,7 @@ export default {
     if (path === '/ebay-queue' && request.method === 'POST') return handleEbayQueuePost(request, env, cors);
     if (path === '/ebay-queue-all' && request.method === 'GET') return handleEbayQueueAll(env, cors);
     if (path === '/ebay-queue-remove' && request.method === 'POST') return handleEbayQueueRemove(request, env, cors);
+    if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
