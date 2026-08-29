@@ -1,5 +1,5 @@
 // ── worker.js — entry point: router + imports
-import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost, handleRateLimitCheck } from './worker/misc.js';
+import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost, handleRateLimitCheck, handleMarketplaceInsightsTest } from './worker/misc.js';
 import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, refreshWatchlistCache } from './worker/ebay-watchlist.js';
 import {
   checkPlayerSearches, checkNightlySearches, sendPlayerDigestNotification, clearPlayerDigests,
@@ -115,6 +115,7 @@ export default {
     if (path === '/ebay-queue-all' && request.method === 'GET') return handleEbayQueueAll(env, cors);
     if (path === '/ebay-queue-remove' && request.method === 'POST') return handleEbayQueueRemove(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
+    if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
 };
