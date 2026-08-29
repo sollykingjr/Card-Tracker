@@ -937,7 +937,7 @@ function clearSearchForm() {
   document.getElementById('sr-group-select').value = '';
   document.getElementById('sr-section-select').value = '';
   document.querySelectorAll('#sr-seller-mode-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
-  document.querySelectorAll('#sr-category-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.querySelectorAll('#sr-category-chips .sr-chip-btn').forEach(b => b.classList.toggle('on', b.dataset.val === 'sports'));
   document.querySelectorAll('#sr-sport-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.getElementById('sr-sport-row').style.display = '';
 	document.querySelectorAll('#sr-condition-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
