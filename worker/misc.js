@@ -1,5 +1,34 @@
 // ── misc.js — cron alerting, daily stats, promotions test, search-builder data
 
+export async function handleMarketplaceInsightsTest(env, cors) {
+  const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
+  const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fbuy.marketplace.insights'
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) {
+    return new Response(JSON.stringify({ step: 'token', error: tokenData }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+
+  const searchRes = await fetch('https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search?q=topps%20chrome&category_ids=212&limit=5', {
+    headers: {
+      'Authorization': `Bearer ${tokenData.access_token}`,
+      'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country=US,zip=53703'
+    }
+  });
+  const searchData = await searchRes.json();
+  return new Response(JSON.stringify({ status: searchRes.status, data: searchData }, null, 2), {
+    headers: { ...cors, 'Content-Type': 'application/json' }
+  });
+}
+
 export async function handleRateLimitCheck(env, cors) {
   const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
   const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
