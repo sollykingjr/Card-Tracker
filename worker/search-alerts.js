@@ -17,17 +17,19 @@ export function buildEbaySearchUrl(search, offset) {
   }
   const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
 
-    const categoryMap = { sports: '212', gaming: '183454', nonsport: '183050' };
-  const categoryId = categoryMap[search.categoryType] || '212';
+  const categoryMap = { sports: '212', gaming: '183454', nonsport: '183050' };
+  const categoryId = categoryMap[search.categoryType] || null;
 
   const aspects = [];
   if (search.serial && categoryId !== '183454') aspects.push('Features:{Serial Numbered}');
   if (search.sport && categoryId === '212') aspects.push(`Sport:{${search.sport}}`);
-  const aspectFilter = aspects.length ? `&aspect_filter=${encodeURIComponent(`categoryId:${categoryId},${aspects.join(',')}`)}` : '';
+  const aspectPrefix = categoryId ? `categoryId:${categoryId},` : '';
+  const aspectFilter = aspects.length ? `&aspect_filter=${encodeURIComponent(`${aspectPrefix}${aspects.join(',')}`)}` : '';
 
   const q = search.query || '';
   const offsetStr = offset !== undefined ? `&offset=${offset}` : '';
-  return `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&category_ids=${categoryId}&sort=newlyListed${filterStr}${aspectFilter}&limit=200${offsetStr}`;
+  const categoryParam = categoryId ? `&category_ids=${categoryId}` : '';
+  return `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&sort=newlyListed${categoryParam}${filterStr}${aspectFilter}&limit=200${offsetStr}`;
 }
 
 // ── [14] checkPlayerSearches ──────────────────────────────────────────────────
