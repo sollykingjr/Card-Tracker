@@ -91,8 +91,16 @@ async function initSearchResults() {
             <input class="sr-input sr-input-inline" id="sr-seller" placeholder="Seller username (optional)">
           <div class="sr-chip-row" id="sr-fav-sellers-chips"></div>
           </div>
-          <div class="sr-form-section">Filters</div>
+                    <div class="sr-form-section">Filters</div>
           <div class="sr-form-row">
+            <div class="sr-form-label">Category</div>
+            <div class="sr-chip-row" id="sr-category-chips">
+              <button class="sr-chip-btn on" data-val="sports">Sports</button>
+              <button class="sr-chip-btn" data-val="gaming">Gaming</button>
+              <button class="sr-chip-btn" data-val="nonsport">Non-Sport</button>
+            </div>
+          </div>
+          <div class="sr-form-row" id="sr-sport-row">
             <div class="sr-form-label">Sport</div>
             <div class="sr-chip-row" id="sr-sport-chips">
               <button class="sr-chip-btn on" data-val="">All</button>
@@ -846,7 +854,9 @@ function openSearchForm(search, presetGroupId) {
     document.getElementById('sr-show-on-home').checked = search.showOnHome || false;
     sel.value = search.groupId || '';
     setChip('sr-seller-mode-chips', search.sellerMode || 'exclude');
+    setChip('sr-category-chips', search.categoryType || 'sports');
     setChip('sr-sport-chips', search.sport || '');
+    document.getElementById('sr-sport-row').style.display = (search.categoryType || 'sports') === 'sports' ? '' : 'none';
     setChip('sr-condition-chips', search.condition || '');
     setChip('sr-type-chips', search.listingType || 'BOTH');
     setChip('sr-schedule-chips', search.schedule || 'hourly');
@@ -862,7 +872,9 @@ function openSearchForm(search, presetGroupId) {
       search.groupId = document.getElementById('sr-group-select').value || null;
       search.sectionId = document.getElementById('sr-section-select').value || null;
       search.sellerMode = getChipVal('sr-seller-mode-chips') || 'exclude';
+      search.categoryType = getChipVal('sr-category-chips') || 'sports';
       search.sport = getChipVal('sr-sport-chips');
+
       search.condition = getChipVal('sr-condition-chips');
       search.serial = document.getElementById('sr-serial').checked;
       search.usOnly = document.getElementById('sr-us-only').checked;
@@ -924,8 +936,10 @@ function clearSearchForm() {
   document.getElementById('sr-group-select').value = '';
   document.getElementById('sr-section-select').value = '';
   document.querySelectorAll('#sr-seller-mode-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.querySelectorAll('#sr-category-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-sport-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
-  document.querySelectorAll('#sr-condition-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('sr-sport-row').style.display = '';
+	document.querySelectorAll('#sr-condition-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-type-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-schedule-chips .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
   document.querySelectorAll('#sr-include-logic .sr-chip-btn').forEach((b,i) => b.classList.toggle('on', i===0));
@@ -949,6 +963,7 @@ async function saveSearch() {
   srData.searches.push({
     id, label, query, seller, groupId, sectionId, digestKey,
     sellerMode: getChipVal('sr-seller-mode-chips') || 'exclude',
+    categoryType: getChipVal('sr-category-chips') || 'sports',
     sport: getChipVal('sr-sport-chips'),
     condition: getChipVal('sr-condition-chips'),
     serial: document.getElementById('sr-serial').checked,
@@ -993,7 +1008,13 @@ function setChip(groupId, val) {
 
 function wireForm() {
   wireChips('sr-seller-mode-chips');
+  wireChips('sr-category-chips');
   wireChips('sr-sport-chips');
+  document.querySelectorAll('#sr-category-chips .sr-chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('sr-sport-row').style.display = btn.dataset.val === 'sports' ? '' : 'none';
+    });
+  });
   wireChips('sr-condition-chips');
   wireChips('sr-type-chips');
   wireChips('sr-include-logic');
