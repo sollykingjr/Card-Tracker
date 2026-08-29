@@ -1,6 +1,33 @@
 // ── misc.js — cron alerting, daily stats, promotions test, search-builder data
 
+export async function handleRateLimitCheck(env, cors) {
+  const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
+  const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) {
+    return new Response(JSON.stringify({ error: 'token fetch failed', detail: tokenData }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+
+  const rateRes = await fetch('https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy', {
+    headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+  });
+  const rateData = await rateRes.json();
+  return new Response(JSON.stringify(rateData, null, 2), {
+    headers: { ...cors, 'Content-Type': 'application/json' }
+  });
+}
+
 export async function notifyCronFailure(env, jobName, message) {
+
   const throttleKey = `cron-failure-alert:${jobName}`;
   const alreadyAlerted = await env.CACHE.get(throttleKey);
   if (alreadyAlerted) return;
