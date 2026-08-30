@@ -810,6 +810,10 @@ body {
 .wl-card { position: relative; transition: border-color .15s, box-shadow .15s; }
 .wl-card.wl-selected { border-color: var(--acc); box-shadow: 0 0 0 2px var(--acc-bg); }
 
+#list.wl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#list.wl-grid .wl-card { margin-bottom: 0; }
+#list.wl-grid .wl-btns { flex-direction: column; }
+#list.wl-grid .wl-btn { flex: none; width: 100%; }
 
 /* ── Desktop layout ───────────────────────────────────────────────────────── */
 @media (min-width: 768px) {
