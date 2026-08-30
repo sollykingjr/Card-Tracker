@@ -902,12 +902,16 @@ function renderWatchlist() {
       ? `onclick="toggleWatchlistItemSelected('${item.itemId}', this)"`
       : '';
 
+    const rawTitle = item.savedTitle || item.title || '';
+    const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+
     return `<div class="wl-card${isSelected ? ' wl-selected' : ''}" ${cardClickAttr}>
       ${item.image ? `<img class="wl-img" src="${item.image}" alt="">` : ''}
       <div class="wl-top">
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}
       </div>
+      <div class="wl-title-display">${safeTitle}</div>
       <div class="wl-btns">
         <button class="wl-btn" onclick="event.stopPropagation();openEditNameModal('${item.itemId}', ${i})">Edit Name</button>
         <button class="wl-btn" onclick="event.stopPropagation();openSearchOptionsModal('${item.itemId}', ${i})">Search Options</button>
