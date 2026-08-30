@@ -28,6 +28,9 @@ function clearInactiveSection(prevSection, newSection) {
     const el = document.getElementById(rootId);
     if (el) el.innerHTML = '';
   }
+  if (prevSection === 'watchlist') {
+    document.getElementById('list').classList.remove('wl-grid');
+  }
 }
 
 function setSection(s) {
