@@ -90,8 +90,8 @@ export async function fetchWatchlistFromEbay(env) {
   const rawItems = [];
   for (const match of itemMatches) {
     const block = match[1];
-    const get = (tag) => {
-      const m = block.match(new RegExp(`<${tag}>(.*?)<\/${tag}>`));
+        const get = (tag) => {
+      const m = block.match(new RegExp(`<${tag}[^>]*>(.*?)<\/${tag}>`));
       return m ? m[1] : null;
     };
 
