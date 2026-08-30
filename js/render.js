@@ -889,10 +889,12 @@ function renderWatchlist() {
 
   cnt.textContent = `${watchlistItems.length} item${watchlistItems.length===1?'':'s'}`;
 
-  const selectToggleHtml = `
-    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-      <button class="wl-btn" onclick="toggleWatchlistSelectMode()">${watchlistSelectMode ? 'Cancel' : 'Select'}</button>
-    </div>`;
+  document.getElementById('wl-toolbar')?.remove();
+  const toolbar = document.createElement('div');
+  toolbar.id = 'wl-toolbar';
+  toolbar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:10px';
+  toolbar.innerHTML = `<button class="wl-btn" style="flex:none;width:auto;padding:7px 16px" onclick="toggleWatchlistSelectMode()">${watchlistSelectMode ? 'Cancel' : 'Select'}</button>`;
+  list.parentNode.insertBefore(toolbar, list);
 
   const cardsHtml = watchlistItems.map((item, i) => {
     const { text: cdText, cls: cdCls } = getCountdown(item.endTime);
@@ -929,7 +931,7 @@ function renderWatchlist() {
     </div>`;
 
   list.classList.add('wl-grid');
-  list.innerHTML = selectToggleHtml + cardsHtml + actionBarHtml;
+  list.innerHTML = cardsHtml + actionBarHtml;
 
   startCountdownTick();
 }
