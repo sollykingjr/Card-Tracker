@@ -772,9 +772,8 @@ function openEditNameModal(itemId, i) {
   const item = watchlistItems[i];
   const rawTitle = item.savedTitle || item.title || '';
   const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-  const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
 
-    return `<div class="wl-card${isSelected ? ' wl-selected' : ''}" ${cardClickAttr}>
+  const modal = document.createElement('div');
   modal.id = 'editname-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
   modal.innerHTML = `
