@@ -928,6 +928,7 @@ function renderWatchlist() {
         style="padding:10px 16px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Remove Selected</button>
     </div>`;
 
+  list.classList.add('wl-grid');
   list.innerHTML = selectToggleHtml + cardsHtml + actionBarHtml;
 
   startCountdownTick();
