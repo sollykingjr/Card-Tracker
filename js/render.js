@@ -792,6 +792,7 @@ function openEditNameModal(itemId, i) {
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
+
 // ── Search Options modal ───────────────────────────────────────────────────────
 function openSearchOptionsModal(itemId, i) {
   const existing = document.getElementById('searchopts-modal');
