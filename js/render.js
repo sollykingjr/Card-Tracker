@@ -764,6 +764,118 @@ async function submitSnipe(itemId, btn) {
   }, 800);
 }
 
+// ── Edit Name modal ────────────────────────────────────────────────────────────
+function openEditNameModal(itemId, i) {
+  const existing = document.getElementById('editname-modal');
+  if (existing) existing.remove();
+
+  const item = watchlistItems[i];
+  const rawTitle = item.savedTitle || item.title || '';
+  const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+
+  const modal = document.createElement('div');
+  modal.id = 'editname-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:var(--surf);border-radius:14px;padding:20px;width:100%;max-width:360px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:10px">Edit Name</div>
+      <textarea class="wl-title" id="wlt-modal-${i}" rows="4" style="width:100%;margin-bottom:12px">${safeTitle}</textarea>
+      <div style="display:flex;gap:8px">
+        <button onclick="copyText(document.getElementById('wlt-modal-${i}').value, this)"
+          style="flex:1;padding:10px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx2);font-size:14px;cursor:pointer;font-family:inherit">Copy</button>
+        <button onclick="saveTitle('${itemId}', document.getElementById('wlt-modal-${i}').value, this)"
+          style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--acc);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+// ── Search Options modal ───────────────────────────────────────────────────────
+function openSearchOptionsModal(itemId, i) {
+  const existing = document.getElementById('searchopts-modal');
+  if (existing) existing.remove();
+
+  const item = watchlistItems[i];
+  const rawTitle = item.savedTitle || item.title || '';
+  const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+
+  const modal = document.createElement('div');
+  modal.id = 'searchopts-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:var(--surf);border-radius:14px;padding:20px;width:100%;max-width:320px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:14px">Search Options</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="window.open(searchUrl.cardladder('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
+          style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">Card Ladder</button>
+        <button onclick="window.open(searchUrl.comc('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
+          style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">COMC</button>
+        <button onclick="window.open(searchUrl.ebay('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
+          style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">eBay Search</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+// ── Multi-select controls ──────────────────────────────────────────────────────
+function toggleWatchlistSelectMode() {
+  watchlistSelectMode = !watchlistSelectMode;
+  watchlistSelected.clear();
+  renderWatchlist();
+}
+
+function toggleWatchlistItemSelected(itemId, cardEl) {
+  if (watchlistSelected.has(itemId)) {
+    watchlistSelected.delete(itemId);
+    cardEl.classList.remove('wl-selected');
+  } else {
+    watchlistSelected.add(itemId);
+    cardEl.classList.add('wl-selected');
+  }
+  updateWatchlistActionBar();
+}
+
+function updateWatchlistActionBar() {
+  const bar = document.getElementById('wl-action-bar');
+  if (!bar) return;
+  const n = watchlistSelected.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  const countEl = document.getElementById('wl-selected-count');
+  if (countEl) countEl.textContent = `${n} selected`;
+}
+
+async function removeSelectedFromWatchlist() {
+  if (watchlistSelected.size === 0) return;
+  const ids = Array.from(watchlistSelected);
+  if (!confirm(`Remove ${ids.length} item${ids.length===1?'':'s'} from your watchlist?`)) return;
+
+  const btn = document.getElementById('wl-remove-btn');
+  btn.disabled = true;
+  btn.textContent = 'Removing...';
+
+  try {
+    const data = await removeFromWatch(ids);
+    if (data.ok) {
+      watchlistItems = watchlistItems.filter(item => !watchlistSelected.has(item.itemId));
+      watchlistSelected.clear();
+      watchlistSelectMode = false;
+      renderWatchlist();
+    } else {
+      alert(`Failed: ${data.ack || data.error || 'unknown error'}`);
+      btn.disabled = false;
+      btn.textContent = 'Remove Selected';
+    }
+  } catch(e) {
+    alert(`Error: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = 'Remove Selected';
+  }
+}
+
 // ── Watchlist render ──────────────────────────────────────────────────────────
 function renderWatchlist() {
   const list = document.getElementById('list');
@@ -777,31 +889,43 @@ function renderWatchlist() {
 
   cnt.textContent = `${watchlistItems.length} item${watchlistItems.length===1?'':'s'}`;
 
-  list.innerHTML = watchlistItems.map((item, i) => {
+  const selectToggleHtml = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="wl-btn" onclick="toggleWatchlistSelectMode()">${watchlistSelectMode ? 'Cancel' : 'Select'}</button>
+    </div>`;
+
+  const cardsHtml = watchlistItems.map((item, i) => {
     const { text: cdText, cls: cdCls } = getCountdown(item.endTime);
     const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
-    const rawTitle = item.savedTitle || item.title || '';
-    const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-    const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
+    const isSelected = watchlistSelected.has(item.itemId);
+    const cardClickAttr = watchlistSelectMode
+      ? `onclick="toggleWatchlistItemSelected('${item.itemId}', this)"`
+      : '';
 
-    return `<div class="wl-card">
+    return `<div class="wl-card${isSelected ? ' wl-selected' : ''}" ${cardClickAttr}>
+      ${item.image ? `<img class="wl-img" src="${item.image}" alt="">` : ''}
       <div class="wl-top">
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}
       </div>
-      <textarea class="wl-title" id="wlt-${i}" rows="3">${safeTitle}</textarea>
       <div class="wl-btns">
-        <button class="wl-btn wl-listing" onclick="window.open('${ebayUrl}','_blank')">Listing</button>
-        <button class="wl-btn wl-copy" onclick="copyText(document.getElementById('wlt-${i}').value, this)">Copy</button>
-        <button class="wl-btn wl-cl" onclick="window.open(searchUrl.cardladder(document.getElementById('wlt-${i}').value),'_blank')">Card Ladder</button>
-        <button class="wl-btn wl-comc" onclick="window.open(searchUrl.comc(document.getElementById('wlt-${i}').value),'_blank')">COMC</button>
-        <button class="wl-btn wl-ebay" onclick="window.open(searchUrl.ebay(document.getElementById('wlt-${i}').value),'_blank')">eBay Search</button>
-        <button class="wl-btn wl-id" onclick="copyText('${item.itemId}', this)">Copy ID</button>
-        <button class="wl-btn wl-save" onclick="saveTitle('${item.itemId}', document.getElementById('wlt-${i}').value, this)">Save</button>
-        <button class="wl-btn wl-snipe" onclick="openSnipeModal('${item.itemId}')">Snipe</button>
+        <button class="wl-btn" onclick="event.stopPropagation();openEditNameModal('${item.itemId}', ${i})">Edit Name</button>
+        <button class="wl-btn" onclick="event.stopPropagation();openSearchOptionsModal('${item.itemId}', ${i})">Search Options</button>
+        <button class="wl-btn wl-id" onclick="event.stopPropagation();copyText('${item.itemId}', this)">Copy ID</button>
+        <button class="wl-btn wl-snipe" onclick="event.stopPropagation();openSnipeModal('${item.itemId}')">Snipe</button>
       </div>
     </div>`;
   }).join('');
 
+  const actionBarHtml = `
+    <div id="wl-action-bar" style="display:none;position:sticky;bottom:0;background:var(--surf);border-top:.5px solid var(--bdr2);padding:12px;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
+      <span id="wl-selected-count" style="font-size:13px;color:var(--tx2)">0 selected</span>
+      <button id="wl-remove-btn" onclick="removeSelectedFromWatchlist()"
+        style="padding:10px 16px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Remove Selected</button>
+    </div>`;
+
+  list.innerHTML = selectToggleHtml + cardsHtml + actionBarHtml;
+
   startCountdownTick();
 }
+
