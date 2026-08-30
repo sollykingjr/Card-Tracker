@@ -912,6 +912,7 @@ function renderWatchlist() {
       <div class="wl-top">
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}
+        <button class="wl-remove-x" onclick="event.stopPropagation();removeSingleFromWatchlist('${item.itemId}', this)" title="Remove">✕</button>
       </div>
       <div class="wl-title-display">${safeTitle}</div>
       <div class="wl-btns">
