@@ -3,6 +3,8 @@ const WORKER_URL = 'https://card-app.maxcsolomon.workers.dev';
 let watchlistItems = [];
 let watchlistLoaded = false;
 let countdownInterval = null;
+let watchlistSelectMode = false;
+let watchlistSelected = new Set();
 
 // ── Search URLs ───────────────────────────────────────────────────────────────
 const searchUrl = {
@@ -33,6 +35,7 @@ async function loadWatchlist(force = false) {
 
     watchlistItems = data.items || [];
     watchlistLoaded = true;
+    watchlistSelected.clear();
     renderWatchlist();
   } catch(e) {
     document.getElementById('list').innerHTML = `<div class="err"><strong>Could not load watchlist</strong><br>${e.message}</div>`;
@@ -126,4 +129,14 @@ async function saveTitle(itemId, title, btn) {
     btn.textContent = 'Error';
     btn.disabled = false;
   }
+}
+
+// ── Remove from watchlist ─────────────────────────────────────────────────────
+async function removeFromWatch(itemIds) {
+  const res = await fetch(`${WORKER_URL}/watch-remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+    body: JSON.stringify({ itemIds })
+  });
+  return res.json();
 }
