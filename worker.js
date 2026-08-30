@@ -12,6 +12,8 @@ import {
   handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear,
   handleCardImage, handleEbayQueuePost, handleEbayQueueAll, handleEbayQueueRemove
 } from './worker/cardmeta.js';
+import { handleDebugToken } from './worker/debug.js';
+
 
 
 
