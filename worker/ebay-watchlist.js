@@ -80,11 +80,6 @@ export async function fetchWatchlistFromEbay(env) {
           </Pagination>
         </WatchList>
         <DetailLevel>ReturnAll</DetailLevel>
-        <OutputSelector>Item.ItemID</OutputSelector>
-        <OutputSelector>Item.Title</OutputSelector>
-        <OutputSelector>Item.EndTime</OutputSelector>
-        <OutputSelector>Item.SellingStatus.CurrentPrice</OutputSelector>
-        <OutputSelector>Item.PictureDetails.GalleryURL</OutputSelector>
       </GetMyeBayBuyingRequest>`
   });
 
