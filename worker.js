@@ -12,7 +12,8 @@ import {
   handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear,
   handleCardImage, handleEbayQueuePost, handleEbayQueueAll, handleEbayQueueRemove
 } from './worker/cardmeta.js';
-import { handleDebugToken } from './worker/debug.js';
+import { handleDebugToken, handleDebugAddToWatch } from './worker/debug.js';
+
 
 
 
@@ -119,6 +120,7 @@ export default {
     if (path === '/ebay-queue-remove' && request.method === 'POST') return handleEbayQueueRemove(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     if (path === '/debug-token' && request.method === 'GET') return handleDebugToken(request, env, cors);
+    if (path === '/debug-addwatch' && request.method === 'GET') return handleDebugAddToWatch(request, env, cors);
     if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);
     return new Response('card-app worker running', { headers: cors });
   }
