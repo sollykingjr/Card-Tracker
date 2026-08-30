@@ -931,6 +931,7 @@ function renderWatchlist() {
 
     const rawTitle = item.savedTitle || item.title || '';
     const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
 
     return `<div class="wl-card${isSelected ? ' wl-selected' : ''}" ${cardClickAttr}>
       ${item.image ? `<img class="wl-img" src="${item.image}" alt="">` : ''}
