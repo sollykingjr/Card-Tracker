@@ -198,6 +198,64 @@ export async function refreshAccessToken(refreshToken, env) {
   return tokens.access_token;
 }
 
+export async function handleAddToWatch(request, env, cors) {
+  try {
+    const { itemId } = await request.json();
+    if (!itemId) {
+      return new Response(JSON.stringify({ error: 'missing itemId' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
+    let accessToken = await env.CACHE.get('ebay_access_token');
+    if (!accessToken) {
+      const refreshToken = await env.CACHE.get('ebay_refresh_token');
+      if (!refreshToken) {
+        return new Response(JSON.stringify({ error: 'not_authenticated' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
+      accessToken = await refreshAccessToken(refreshToken, env);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'refresh_failed' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-CALL-NAME': 'AddToWatchList',
+        'X-EBAY-API-IAF-TOKEN': accessToken,
+        'Content-Type': 'text/xml',
+      },
+      body: `<?xml version="1.0" encoding="utf-8"?>
+        <AddToWatchListRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+          <RequesterCredentials>
+            <eBayAuthToken>${accessToken}</eBayAuthToken>
+          </RequesterCredentials>
+          <ItemID>${itemId}</ItemID>
+        </AddToWatchListRequest>`
+    });
+
+    const xml = await res.text();
+    const ack = xml.match(/<Ack>(.*?)<\/Ack>/)?.[1] || 'Unknown';
+    const count = xml.match(/<WatchListCount>(.*?)<\/WatchListCount>/)?.[1];
+    const max = xml.match(/<WatchListMaximum>(.*?)<\/WatchListMaximum>/)?.[1];
+
+    return new Response(JSON.stringify({ ok: ack === 'Success' || ack === 'Warning', ack, count, max }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 export async function handleSetSnipe(request, env, cors) {
   try {
     const { itemId, maxBid } = await request.json();
