@@ -80,6 +80,11 @@ export async function fetchWatchlistFromEbay(env) {
           </Pagination>
         </WatchList>
         <DetailLevel>ReturnAll</DetailLevel>
+        <OutputSelector>Item.ItemID</OutputSelector>
+        <OutputSelector>Item.Title</OutputSelector>
+        <OutputSelector>Item.EndTime</OutputSelector>
+        <OutputSelector>Item.SellingStatus.CurrentPrice</OutputSelector>
+        <OutputSelector>Item.PictureDetails.GalleryURL</OutputSelector>
       </GetMyeBayBuyingRequest>`
   });
 
@@ -98,12 +103,15 @@ export async function fetchWatchlistFromEbay(env) {
     const endTime = get('EndTime');
     if (endTime && new Date(endTime).getTime() < now) continue;
 
+    const galleryMatch = block.match(/<GalleryURL>(.*?)<\/GalleryURL>/);
+
     rawItems.push({
       itemId: get('ItemID'),
       title: get('Title'),
       endTime,
       currentPrice: get('CurrentPrice'),
       currency: get('CurrencyID'),
+      image: galleryMatch ? galleryMatch[1] : null,
     });
   }
 
@@ -247,6 +255,65 @@ export async function handleAddToWatch(request, env, cors) {
     const max = xml.match(/<WatchListMaximum>(.*?)<\/WatchListMaximum>/)?.[1];
 
     return new Response(JSON.stringify({ ok: ack === 'Success' || ack === 'Warning', ack, count, max }), {
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+export async function handleRemoveFromWatch(request, env, cors) {
+  try {
+    const { itemIds } = await request.json();
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      return new Response(JSON.stringify({ error: 'missing itemIds array' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
+    let accessToken = await env.CACHE.get('ebay_access_token');
+    if (!accessToken) {
+      const refreshToken = await env.CACHE.get('ebay_refresh_token');
+      if (!refreshToken) {
+        return new Response(JSON.stringify({ error: 'not_authenticated' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
+      accessToken = await refreshAccessToken(refreshToken, env);
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: 'refresh_failed' }), {
+          status: 401, headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    const itemIdTags = itemIds.map(id => `<ItemID>${id}</ItemID>`).join('');
+
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-CALL-NAME': 'RemoveFromWatchList',
+        'X-EBAY-API-IAF-TOKEN': accessToken,
+        'Content-Type': 'text/xml',
+      },
+      body: `<?xml version="1.0" encoding="utf-8"?>
+        <RemoveFromWatchListRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+          <RequesterCredentials>
+            <eBayAuthToken>${accessToken}</eBayAuthToken>
+          </RequesterCredentials>
+          ${itemIdTags}
+        </RemoveFromWatchListRequest>`
+    });
+
+    const xml = await res.text();
+    const ack = xml.match(/<Ack>(.*?)<\/Ack>/)?.[1] || 'Unknown';
+    const count = xml.match(/<WatchListCount>(.*?)<\/WatchListCount>/)?.[1];
+
+    return new Response(JSON.stringify({ ok: ack === 'Success' || ack === 'Warning', ack, count }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
   } catch(e) {
