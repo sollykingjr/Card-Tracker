@@ -2,6 +2,7 @@
 const WORKER = 'https://card-app.maxcsolomon.workers.dev';
 
 let srData = { groups: [], searches: [], sections: [] };
+let srUIState = { scrollY: 0, openGroups: new Set() };
 
 // ── Buy Score auto-managed searches ────────────────────────────────────────────
 const BUY_SCORE_THRESHOLD = 5;
@@ -317,7 +318,7 @@ function renderGroupTile(group, idx, len, containerId) {
   return `
     <div class="sr-tile-card" id="srg-${group.id}">
       <div class="sr-tile-row">
-        <button class="sr-chevron-btn" data-id="${group.id}">▸</button>
+        <button class="sr-chevron-btn${srUIState.openGroups.has(group.id) ? ' open' : ''}" data-id="${group.id}">${srUIState.openGroups.has(group.id) ? '▾' : '▸'}</button>
         <div class="sr-tile-main" data-digestkey="${group.digestKey}" data-label="${group.label}" data-type="group" data-id="${group.id}">
           <div class="sr-tile-name">${group.label}</div>
         </div>
@@ -333,7 +334,7 @@ function renderGroupTile(group, idx, len, containerId) {
           </div>
         </div>
       </div>
-      <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:none">
+      <div class="sr-group-searches" id="sr-group-searches-${group.id}" style="display:${srUIState.openGroups.has(group.id) ? 'block' : 'none'}">
         ${groupSearches.length === 0 ? '<div class="sr-empty-group">No searches yet</div>' : groupSearches.map(s => `
           <div class="sr-tile-row sr-tile-row-nested">
             <div class="sr-tile-main" data-groupdigestkey="${group.digestKey}" data-label="${s.label}" data-searchid="${s.id}">
@@ -513,12 +514,19 @@ function wireListEvents() {
       panel.style.display = isOpen ? 'none' : 'block';
       btn.textContent = isOpen ? '▸' : '▾';
       btn.classList.toggle('open', !isOpen);
+      if (isOpen) {
+        srUIState.openGroups.delete(btn.dataset.id);
+      } else {
+        srUIState.openGroups.add(btn.dataset.id);
+      }
     };
   });
+
 
   // Tile click: open Results (group aggregate, standalone search, or an individual search within a group)
   document.querySelectorAll('.sr-tile-main').forEach(el => {
     el.onclick = () => {
+      srUIState.scrollY = window.scrollY;
       if (el.dataset.searchid) {
         const search = srData.searches.find(s => s.id === el.dataset.searchid);
         showDigest(el.dataset.groupdigestkey, el.dataset.label, el.dataset.searchid, search);
@@ -1064,7 +1072,10 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
     </div>
   `;
 
-  document.getElementById('sr-back-btn').onclick = () => initSearchResults();
+  document.getElementById('sr-back-btn').onclick = async () => {
+    await initSearchResults();
+    window.scrollTo(0, srUIState.scrollY);
+  };
   document.getElementById('sr-show-all-btn').onclick = () => {
     showAll = !showAll;
     document.getElementById('sr-show-all-btn').classList.toggle('on', showAll);
