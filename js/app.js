@@ -30,6 +30,7 @@ function clearInactiveSection(prevSection, newSection) {
   }
   if (prevSection === 'watchlist') {
     document.getElementById('list').classList.remove('wl-grid');
+    document.getElementById('wl-toolbar')?.remove();
   }
 }
 
