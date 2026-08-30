@@ -1,6 +1,30 @@
 // ── Search Results ────────────────────────────────────────────────────────────
 const WORKER = 'https://card-app.maxcsolomon.workers.dev';
 
+async function addToWatch(itemId, btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const res = await fetch(`${WORKER}/watch-add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+      body: JSON.stringify({ itemId })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = '✓ Watching';
+    } else {
+      btn.textContent = '☆ Watch';
+      btn.disabled = false;
+      alert(`Failed: ${data.ack || data.error || 'unknown error'}`);
+    }
+  } catch (e) {
+    btn.textContent = '☆ Watch';
+    btn.disabled = false;
+    alert(`Error: ${e.message}`);
+  }
+}
+
 let srData = { groups: [], searches: [], sections: [] };
 let srUIState = { scrollY: 0, openGroups: new Set() };
 
@@ -1248,9 +1272,10 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
         <div class="sr-listing-meta">${item.type} · Listed ${date}${endDate ? ` · Ends ${endDate}` : ''}</div>
         <div class="sr-listing-bottom">
           <div class="sr-listing-price"><span style="color:${priceColor}">$${item.price}</span>${evHtml}</div>
-          <a href="${item.url}" target="_blank" class="sr-listing-link">View on eBay →</a>
+             <a href="${item.url}" target="_blank" class="sr-listing-link">View on eBay →</a>
           ${item.type === 'Auction' ? `<button class="sr-listing-snipe" onclick="openSnipeModal('${item.url.match(/itm\/(\d+)/)?.[1]}')">🎯 Snipe</button>` : ''}
-        </div>
+          <button class="sr-listing-watch" onclick="addToWatch('${item.url.match(/itm\/(\d+)/)?.[1]}', this)">☆ Watch</button>
+       </div>
       </div>
     `;
   }).join('');
