@@ -848,6 +848,27 @@ function updateWatchlistActionBar() {
   if (countEl) countEl.textContent = `${n} selected`;
 }
 
+async function removeSingleFromWatchlist(itemId, btn) {
+  if (!confirm('Remove this item from your watchlist?')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const data = await removeFromWatch([itemId]);
+    if (data.ok) {
+      watchlistItems = watchlistItems.filter(item => item.itemId !== itemId);
+      renderWatchlist();
+    } else {
+      alert(`Failed: ${data.ack || data.error || 'unknown error'}`);
+      btn.disabled = false;
+      btn.textContent = '✕';
+    }
+  } catch(e) {
+    alert(`Error: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '✕';
+  }
+}
+
 async function removeSelectedFromWatchlist() {
   if (watchlistSelected.size === 0) return;
   const ids = Array.from(watchlistSelected);
