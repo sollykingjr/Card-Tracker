@@ -812,8 +812,8 @@ body {
 
 #list.wl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 #list.wl-grid .wl-card { margin-bottom: 0; }
-#list.wl-grid .wl-btns { flex-direction: column; }
-#list.wl-grid .wl-btn { flex: none; width: 100%; }
+#list.wl-grid .wl-btns { flex-direction: row; gap: 3px; }
+#list.wl-grid .wl-btn { flex: 1; min-width: 0; padding: 5px 2px; font-size: 9px; }
 
 /* ── Desktop layout ───────────────────────────────────────────────────────── */
 @media (min-width: 768px) {
