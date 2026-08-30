@@ -1,6 +1,6 @@
 // ── worker.js — entry point: router + imports
 import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost, handleRateLimitCheck, handleMarketplaceInsightsTest } from './worker/misc.js';
-import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, refreshWatchlistCache } from './worker/ebay-watchlist.js';
+import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, handleAddToWatch, refreshWatchlistCache } from './worker/ebay-watchlist.js';
 import {
   checkPlayerSearches, checkNightlySearches, sendPlayerDigestNotification, clearPlayerDigests,
   handlePlayerDigest, handlePlayerDigestJson, handleSearchAlertsGet, handleSearchAlertsPost,
@@ -26,6 +26,7 @@ const PROTECTED_ROUTES = new Set([
   'POST:/mark-seen',
   'POST:/mark-seen-urls',
   'POST:/set-snipe',
+  'POST:/watch-add',
   'POST:/scan-batch',
   'POST:/card-meta',
   'POST:/comc-pulled',
@@ -103,6 +104,7 @@ export default {
     if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
     if (path === '/mark-seen-urls' && request.method === 'POST') return handleMarkSeenUrls(request, env, cors);
     if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
+    if (path === '/watch-add' && request.method === 'POST') return handleAddToWatch(request, env, cors);
     if (path === '/scan' && request.method === 'GET') return handleScan(request, env, cors);
     if (path === '/scan-batch' && request.method === 'POST') return handleScanBatch(request, env, cors);
     if (path === '/card-meta-all' && request.method === 'GET') return handleCardMetaAll(env, cors);
