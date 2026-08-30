@@ -938,7 +938,7 @@ function renderWatchlist() {
         ${price ? `<span class="wl-price">${price}</span>` : ''}
         <button class="wl-remove-btn" onclick="event.stopPropagation();removeSingleFromWatchlist('${item.itemId}', this)">Remove</button>
       </div>
-      <div class="wl-title-display">${safeTitle}</div>
+      <div class="wl-title-display" onclick="event.stopPropagation();window.open('${ebayUrl}','_blank')">${safeTitle}</div>
       <div class="wl-btns">
         <button class="wl-btn" onclick="event.stopPropagation();openEditNameModal('${item.itemId}', ${i})">Edit Name</button>
         <button class="wl-btn" onclick="event.stopPropagation();openSearchOptionsModal('${item.itemId}', ${i})">Search Options</button>
