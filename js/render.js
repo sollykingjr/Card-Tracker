@@ -892,8 +892,8 @@ function renderWatchlist() {
   document.getElementById('wl-toolbar')?.remove();
   const toolbar = document.createElement('div');
   toolbar.id = 'wl-toolbar';
-  toolbar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:10px';
-  toolbar.innerHTML = `<button class="wl-btn" style="flex:none;width:auto;padding:7px 16px" onclick="toggleWatchlistSelectMode()">${watchlistSelectMode ? 'Cancel' : 'Select'}</button>`;
+  toolbar.style.cssText = 'display:flex;justify-content:flex-end;padding:0 10px 10px;margin-top:-6px';
+  toolbar.innerHTML = `<button class="wl-btn" style="flex:none;width:auto;padding:8px 20px;font-size:13px" onclick="toggleWatchlistSelectMode()">${watchlistSelectMode ? 'Cancel' : 'Select'}</button>`;
   list.parentNode.insertBefore(toolbar, list);
 
   const cardsHtml = watchlistItems.map((item, i) => {
