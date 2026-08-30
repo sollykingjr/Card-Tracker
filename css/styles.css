@@ -850,10 +850,15 @@ body {
 .wl-card { position: relative; transition: border-color .15s, box-shadow .15s; }
 .wl-card.wl-selected { border-color: var(--acc); box-shadow: 0 0 0 2px var(--acc-bg); }
 
-#list.wl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#list.wl-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 #list.wl-grid .wl-card { margin-bottom: 0; }
-#list.wl-grid .wl-btns { flex-direction: row; gap: 3px; }
-#list.wl-grid .wl-btn { flex: 1; min-width: 0; padding: 5px 2px; font-size: 9px; }
+#list.wl-grid .wl-btns { flex-wrap: wrap; gap: 6px; }
+#list.wl-grid .wl-btn { flex: 1 1 45%; min-width: 0; padding: 8px 4px; font-size: 12px; }
+#list.wl-grid .wl-title-display { cursor: pointer; }
+
+@media (min-width: 700px) {
+  #list.wl-grid { grid-template-columns: 1fr 1fr; }
+}
 
 /* ── Desktop layout ───────────────────────────────────────────────────────── */
 @media (min-width: 768px) {
