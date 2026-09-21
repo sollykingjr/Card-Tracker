@@ -51,7 +51,7 @@ export async function checkPlayerSearches(env) {
   });
   const tokenData = await tokenRes.json();
   if (!tokenData.access_token) {
-    await notifyCronFailure(env, 'checkPlayerSearches-token', 'eBay client-credentials auth failed — hourly search alerts are not running.');
+    await notifyCronFailure(env, 'checkPlayerSearches-token', `eBay client-credentials auth failed (${tokenRes.status}): ${tokenData.error || 'unknown'} — ${tokenData.error_description || 'no description'}`);
     return;
   }
 
@@ -250,11 +250,11 @@ export async function checkNightlySearches(env) {
     },
     body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
   });
-  const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) {
-    await notifyCronFailure(env, 'checkNightlySearches-token', 'eBay client-credentials auth failed — nightly search alerts are not running.');
-    return;
-  }
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) {
+      await notifyCronFailure(env, 'checkNightlySearches-token', `eBay client-credentials auth failed (${tokenRes.status}): ${tokenData.error || 'unknown'} — ${tokenData.error_description || 'no description'}`);
+      return;
+    }
 
   const now = Date.now();
   const cutoff = now - (24 * 60 * 60 * 1000);
@@ -650,7 +650,7 @@ export async function handleRunSearch(request, env, cors) {
       body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) return new Response(JSON.stringify({ error: 'token_failed' }), {
+    if (!tokenData.access_token) return new Response(JSON.stringify({ error: 'token_failed', detail: tokenData, status: tokenRes.status }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
