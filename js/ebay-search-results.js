@@ -468,7 +468,7 @@ async function renderList() {
   const setBadge = (badge, count) => {
     if (!badge) return;
     if (count > 0) {
-      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.textContent = count > 999 ? '1K+' : String(count);
       badge.style.display = 'inline-flex';
     } else {
       badge.style.display = 'none';
