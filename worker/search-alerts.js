@@ -247,19 +247,24 @@ export async function checkNightlySearches(env) {
   if (groups.length === 0 && searches.length === 0) return;
 
   const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
-  const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
-  });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      await notifyCronFailure(env, 'checkNightlySearches-token', `eBay client-credentials auth failed (${tokenRes.status}): ${tokenData.error || 'unknown'} — ${tokenData.error_description || 'no description'}`);
+  let tokenData;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+    });
+    tokenData = await tokenRes.json();
+    if (tokenData.access_token) break;
+    if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+    else {
+      await notifyCronFailure(env, 'checkNightlySearches-token', `eBay client-credentials auth failed after 3 attempts (${tokenRes.status}): ${tokenData.error || 'unknown'} — ${tokenData.error_description || 'no description'}`);
       return;
     }
+  }
 
   const now = Date.now();
   const cutoff = now - (24 * 60 * 60 * 1000);
@@ -646,16 +651,22 @@ export async function handleRunSearch(request, env, cors) {
     });
 
     const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
-    const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) return new Response(JSON.stringify({ error: 'token_failed', detail: tokenData, status: tokenRes.status }), {
+    let tokenData, tokenStatus;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+      });
+      tokenData = await tokenRes.json();
+      tokenStatus = tokenRes.status;
+      if (tokenData.access_token) break;
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+    if (!tokenData.access_token) return new Response(JSON.stringify({ error: 'token_failed', detail: tokenData, status: tokenStatus }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
     });
 
