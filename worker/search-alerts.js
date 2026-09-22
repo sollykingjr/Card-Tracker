@@ -41,18 +41,23 @@ export async function checkPlayerSearches(env) {
   if (searches.length === 0 && groups.length === 0) return;
 
   const credentials = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
-  const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
-  });
-  const tokenData = await tokenRes.json();
-  if (!tokenData.access_token) {
-    await notifyCronFailure(env, 'checkPlayerSearches-token', `eBay client-credentials auth failed (${tokenRes.status}): ${tokenData.error || 'unknown'} — ${tokenData.error_description || 'no description'}`);
-    return;
+  let tokenData;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const tokenRes = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+    });
+    tokenData = await tokenRes.json();
+    if (tokenData.access_token) break;
+    if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+    else {
+      await notifyCronFailure(env, 'checkPlayerSearches-token', `eBay client-credentials auth failed after 3 attempts (${tokenRes.status}): ${tokenData.error || 'unknown'} — ${tokenData.error_description || 'no description'}`);
+      return;
+    }
   }
 
   const now = Date.now();
