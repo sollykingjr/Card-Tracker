@@ -342,8 +342,16 @@ async function ctRemoveTag(idx, tag) {
 }
 
 async function ctFetchScansForPage(itemIds) {
-  const needed = [...new Set(itemIds.filter(id => id && !(id in ctScanCache)))];
+  // Retry items whose last check found nothing yet, not just brand-new items —
+  // a scan can land in Drive after the first check, and we want the next
+  // render (sort/filter/page change) to pick it up instead of caching "no scan" forever.
+  const needed = [...new Set(itemIds.filter(id => {
+    if (!id) return false;
+    const cached = ctScanCache[id];
+    return !cached || (!cached.front && !cached.back);
+  }))];
   if (!needed.length) return;
+  let foundNew = false;
   try {
     const res = await fetch(`${WORKER_URL}/scan-batch`, {
       method: 'POST',
@@ -352,11 +360,18 @@ async function ctFetchScansForPage(itemIds) {
     });
     if (!res.ok) throw new Error(`scan-batch: HTTP ${res.status}`);
     const data = await res.json();
+    needed.forEach(id => {
+      const wasCached = id in ctScanCache;
+      const result = data[id];
+      if (!wasCached || (result && (result.front || result.back))) foundNew = true;
+    });
     Object.assign(ctScanCache, data);
   } catch (e) {
-    needed.forEach(id => { if (!(id in ctScanCache)) ctScanCache[id] = { front: null, back: null }; });
+    needed.forEach(id => { if (!(id in ctScanCache)) { ctScanCache[id] = { front: null, back: null }; foundNew = true; } });
   }
-  ctRenderBody();
+  // Only repaint when something actually changed — otherwise this would
+  // re-trigger itself via ctRenderBody() every time, in a tight fetch loop.
+  if (foundNew) ctRenderBody();
 }
 
 function ctThumbHTML(itemId) {
