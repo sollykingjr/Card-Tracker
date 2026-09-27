@@ -39,7 +39,7 @@ function ebayBuildDefaultListing(c) {
     allowOffers: false,
     offerAuto: '',
     offerMin: '',
-    action: 'draft',
+    action: 'scheduled',
     schedule: '',
     description: 'Please see scan for condition. Please reach out with any questions.',
     condition: 'Excellent',
@@ -121,6 +121,56 @@ function ebayToggleFormatFields() {
   offerBlock.innerHTML = format === 'FixedPrice' ? ebayRenderOfferFields(current) : '';
 }
 
+// ── Live / Scheduled (eBay allows scheduling up to 3 weeks out) ──
+const EBAY_MAX_SCHEDULE_DAYS = 21;
+
+function ebayNormalizeAction(a) {
+  return a === 'live' ? 'live' : 'scheduled'; // legacy 'draft' → scheduled (never goes live by accident)
+}
+
+function ebayLocalInputValue(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function ebayRenderActionFields(l) {
+  const action = ebayNormalizeAction(l.action);
+  const now = new Date();
+  const min = ebayLocalInputValue(new Date(now.getTime() + 5 * 60 * 1000));
+  const max = ebayLocalInputValue(new Date(now.getTime() + EBAY_MAX_SCHEDULE_DAYS * 24 * 60 * 60 * 1000));
+  const labelStyle = 'font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px';
+  const inputStyle = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit';
+  return `
+    <div style="margin-bottom:12px">
+      <div style="${labelStyle}">Action</div>
+      <select id="el-action" onchange="ebayToggleScheduleField()" style="${inputStyle}">
+        <option value="live" ${action === 'live' ? 'selected' : ''}>Live (list now)</option>
+        <option value="scheduled" ${action === 'scheduled' ? 'selected' : ''}>Scheduled</option>
+      </select>
+    </div>
+    <div id="el-schedule-wrap" style="margin-bottom:12px;display:${action === 'scheduled' ? 'block' : 'none'}">
+      <div style="${labelStyle}">Start Time (max 3 weeks out)</div>
+      <input type="datetime-local" id="el-schedule" value="${l.schedule || ''}" min="${min}" max="${max}" style="${inputStyle}">
+    </div>`;
+}
+
+function ebayToggleScheduleField() {
+  const wrap = document.getElementById('el-schedule-wrap');
+  if (wrap) wrap.style.display = document.getElementById('el-action').value === 'scheduled' ? 'block' : 'none';
+}
+
+// Returns an error string, or null if the listing's action/schedule is publishable right now.
+function ebayScheduleProblem(l) {
+  if (ebayNormalizeAction(l.action) !== 'scheduled') return null;
+  if (!l.schedule) return 'Scheduled but no start time set';
+  const d = new Date(l.schedule); // datetime-local string → local time
+  if (isNaN(d.getTime())) return 'Invalid start time';
+  const diff = d.getTime() - Date.now();
+  if (diff <= 0) return 'Start time is in the past';
+  if (diff > EBAY_MAX_SCHEDULE_DAYS * 24 * 60 * 60 * 1000) return 'Start time is more than 3 weeks out';
+  return null;
+}
+
 async function ebayOpenListingForm(itemId) {
   const c = cards.find(x => x.itemId === itemId);
   if (!c) return;
@@ -154,8 +204,7 @@ async function ebayOpenListingForm(itemId) {
         </select>
       </div>
       <div id="el-offer-block">${ebayRenderOfferFields(l)}</div>
-      ${ebayField('Action', 'el-action', l.action, { type: 'select', options: ['draft', 'live'] })}
-      ${ebayField('Schedule (optional)', 'el-schedule', l.schedule, { type: 'datetime-local' })}
+      ${ebayRenderActionFields(l)}
       ${ebayField('Description', 'el-description', l.description, { type: 'textarea' })}
       ${!l.isGraded ? ebayField('Card Condition', 'el-condition', l.condition, { type: 'select', options: ['Near mint or better', 'Excellent', 'Very good', 'Poor'] }) : ''}
       <div id="el-sports-fields" style="display:${(l.cardType || 'sports') === 'sports' ? 'block' : 'none'}">
@@ -218,8 +267,8 @@ async function ebaySaveListing(itemId) {
     allowOffers: checked('el-allowOffers'),
     offerAuto: val('el-offerAuto'),
     offerMin: val('el-offerMin'),
-    action: val('el-action'),
-    schedule: val('el-schedule'),
+    action: ebayNormalizeAction(val('el-action')),
+    schedule: val('el-action') === 'scheduled' ? val('el-schedule') : '',
     description: val('el-description'),
     condition: isGraded ? '' : val('el-condition'),
     sport: cardType === 'sports' ? val('el-sport') : '',
@@ -238,6 +287,9 @@ async function ebaySaveListing(itemId) {
     country: val('el-country'),
     isGraded
   };
+
+  const schedProblem = ebayScheduleProblem(listing);
+  if (schedProblem) { alert(schedProblem); return; }
 
   try {
     await fetch(`${WORKER_URL}/ebay-queue`, {
@@ -275,11 +327,15 @@ function ebayRenderQueueListHtml() {
     const c = cards.find(x => x.itemId === itemId);
     const title = l.title || (c ? c.fullCard : itemId);
     const price = l.price ? `$${parseFloat(l.price).toFixed(2)}` : '—';
+    const action = ebayNormalizeAction(l.action);
+    const when = action === 'live' ? 'Live' : (l.schedule ? `Scheduled ${new Date(l.schedule).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Scheduled (no time set)');
+    const safeId = itemId.replace(/[^A-Za-z0-9_-]/g, '_');
     return `
       <div class="recent-row" style="align-items:center">
         <div class="recent-info">
           <div class="rc-name">${title}</div>
-          <div class="rc-date">${price} · ${l.format || 'FixedPrice'}</div>
+          <div class="rc-date">${price} · ${l.format || 'FixedPrice'} · ${when}</div>
+          <div id="el-pub-status-${safeId}" style="font-size:12px;margin-top:2px"></div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
           <button onclick="ebayEditFromQueue('${itemId.replace(/'/g, "\\'")}')" style="padding:6px 10px;font-size:11px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-weight:700;cursor:pointer;font-family:inherit">Edit</button>
@@ -303,7 +359,8 @@ function ebayRenderQueueListHtml() {
       <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Shipping Policy (this export)</div>
       <select id="el-export-shipping" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">${shippingOptionsHtml}</select>
     </div>
-    <button id="ebay-export-btn" onclick="ebayExportQueue()" style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px">Export Queue</button>
+    <button id="ebay-publish-btn" onclick="ebayPublishQueue()" style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px">Publish to eBay</button>
+    <button id="ebay-export-btn" onclick="ebayExportQueue()" style="width:100%;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">Export CSV instead</button>
   `;
 }
 
@@ -350,11 +407,11 @@ function ebayBuildCsvRowMap(itemId, l, shippingChoice) {
   const map = {};
   const set = (header, val) => { if (val !== '' && val !== undefined && val !== null) map[header] = val; };
 
-  set('*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)', l.action === 'live' ? 'Add' : 'Draft');
+  set('*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)', 'Add');
   set('CustomLabel', itemId);
   set('*Category', isSports ? '261328' : '183454');
   set('*Title', l.title);
-  if (l.action === 'live' && l.schedule) {
+  if (ebayNormalizeAction(l.action) === 'scheduled' && l.schedule) {
     const d = new Date(l.schedule);
     if (!isNaN(d.getTime())) set('ScheduleTime', d.toISOString());
   }
@@ -413,6 +470,80 @@ function ebayBuildCsvRowMap(itemId, l, shippingChoice) {
 
 function ebayBuildCsvLine(map) {
   return EBAY_CSV_HEADERS.map(h => ebayCsvEscape(map[h] || '')).join(',');
+}
+
+function ebayShippingPolicyId(choice) {
+  const m = (choice || '').match(/\(ID:\s*(\d+)\)/);
+  return m ? m[1] : '';
+}
+
+function ebaySetPubStatus(itemId, text, color) {
+  const el = document.getElementById(`el-pub-status-${itemId.replace(/[^A-Za-z0-9_-]/g, '_')}`);
+  if (el) { el.textContent = text; el.style.color = color; }
+}
+
+async function ebayPublishQueue() {
+  const entries = Object.entries(ebayQueueCache);
+  if (!entries.length) { alert('Queue is empty.'); return; }
+
+  const shippingChoice = document.getElementById('el-export-shipping')?.value;
+  const shippingPolicyId = ebayShippingPolicyId(shippingChoice);
+  if (!shippingPolicyId) { alert('Pick a shipping policy first.'); return; }
+  localStorage.setItem('ebayShippingPolicy', shippingChoice);
+
+  // Catch bad schedules before anything is sent to eBay.
+  const problems = entries
+    .map(([id, l]) => [id, l, ebayScheduleProblem(l)])
+    .filter(([, , p]) => p);
+  if (problems.length) {
+    problems.forEach(([id, , p]) => ebaySetPubStatus(id, `⚠ ${p} — edit before publishing`, 'var(--dn)'));
+    alert(`${problems.length} card(s) need a valid start time (within 3 weeks). Nothing was published.`);
+    return;
+  }
+
+  const liveCount = entries.filter(([, l]) => ebayNormalizeAction(l.action) === 'live').length;
+  const schedCount = entries.length - liveCount;
+  if (!confirm(`Publish ${entries.length} card(s) to eBay?\n\n${liveCount} live now · ${schedCount} scheduled`)) return;
+
+  const btn = document.getElementById('ebay-publish-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
+
+  let ok = 0, failed = 0;
+  for (const [itemId, l] of entries) {
+    ebaySetPubStatus(itemId, 'Publishing…', 'var(--tx3)');
+    const mode = ebayNormalizeAction(l.action);
+    try {
+      const res = await fetch(`${WORKER_URL}/ebay-publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+        body: JSON.stringify({
+          itemId,
+          shippingPolicyId,
+          mode,
+          startDate: mode === 'scheduled' ? new Date(l.schedule).toISOString() : undefined
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        ok++;
+        ebaySetPubStatus(itemId, mode === 'live' ? `✓ Listed (#${data.listingId})` : `✓ Scheduled (#${data.listingId})`, 'var(--up)');
+        await ebayRemoveFromQueue(itemId);
+      } else {
+        failed++;
+        const err = data.error;
+        const msg = typeof err === 'string' ? err : (err && `${err.step}: ${err.message}`) || `HTTP ${res.status}`;
+        ebaySetPubStatus(itemId, `✗ ${msg}`, 'var(--dn)');
+      }
+    } catch (e) {
+      failed++;
+      ebaySetPubStatus(itemId, `✗ ${e.message}`, 'var(--dn)');
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Publish to eBay'; }
+  // Rows stay on screen with their result; published cards are already out of the saved queue.
+  const hdr = document.querySelector('#mcontent .section-hdr');
+  if (hdr) hdr.textContent = `eBay Queue — ${ok} published${failed ? `, ${failed} failed` : ''}`;
 }
 
 async function ebayExportQueue() {
