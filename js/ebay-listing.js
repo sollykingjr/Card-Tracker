@@ -190,6 +190,7 @@ function ebayMoney(v) {
 // In-memory draft so "Back to Edit" keeps everything typed. Nothing is saved server-side.
 let ebayDraft = null; // { itemId, listing }
 let ebayScanState = { front: 'loading', back: 'loading' };
+let ebayLiveState = { state: 'loading' }; // live eBay check: active | scheduled | none | unknown
 
 // ── 1) Form ──
 async function ebayOpenListingForm(itemId, keepDraft) {
@@ -326,7 +327,14 @@ function ebayRunChecks(itemId, l) {
 
   const tags = typeof ctGetTags === 'function' ? ctGetTags(c) : [];
   if (tags.includes('Sold')) blocks.push('This card is tagged Sold');
-  else if (tags.includes('Listed')) blocks.push('This card is already tagged Listed on eBay');
+
+  // Live eBay check is the source of truth for listed/scheduled (tags can lag 15 min).
+  const live = ebayLiveState;
+  const fmtStart = t => new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  if (live.state === 'scheduled') blocks.push(`Already scheduled on eBay${live.startTime ? ` — starts ${fmtStart(live.startTime)}` : ''}${live.listingId ? ` (#${live.listingId})` : ''}`);
+  else if (live.state === 'active') blocks.push(`Already live on eBay${live.listingId ? ` (#${live.listingId})` : ''}`);
+  else if (live.state === 'unknown') blocks.push(`Couldn't check eBay for an existing listing${live.error ? ` (${live.error})` : ''} — go back and review again`);
+  else if (live.state === 'none' && tags.includes('Listed') && !tags.includes('Sold')) warns.push('Tagged Listed, but not live or scheduled on eBay — OK to repost (tag clears on next sync)');
 
   const price = ebayMoney(l.price);
   if (price === null || price <= 0) blocks.push('Price is missing');
@@ -361,7 +369,7 @@ function ebayRunChecks(itemId, l) {
     if (auto !== null && min !== null && min > auto) warns.push(`Minimum offer ($${min.toFixed(2)}) is above auto-accept ($${auto.toFixed(2)})`);
   }
 
-  const scansPending = ebayScanState.front === 'loading' || ebayScanState.back === 'loading';
+  const scansPending = ebayScanState.front === 'loading' || ebayScanState.back === 'loading' || ebayLiveState.state === 'loading';
   return { blocks, warns, scansPending };
 }
 
@@ -374,7 +382,8 @@ function ebayRenderChecks() {
 
   const row = (icon, text, color) => `<div style="display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:1.4;color:${color};margin-bottom:6px"><span>${icon}</span><span>${ebayEsc(text)}</span></div>`;
   let html = blocks.map(b => row('🛑', b, 'var(--dn)')).join('') + warns.map(w => row('⚠', w, 'var(--tx2)')).join('');
-  if (scansPending) html += row('…', 'Checking scans', 'var(--tx3)');
+  if (ebayScanState.front === 'loading' || ebayScanState.back === 'loading') html += row('…', 'Checking scans', 'var(--tx3)');
+  if (ebayLiveState.state === 'loading') html += row('…', 'Checking eBay for an existing listing', 'var(--tx3)');
   if (!blocks.length && !warns.length && !scansPending) html = row('✓', 'All checks passed', 'var(--up)');
   box.innerHTML = html;
 
@@ -383,7 +392,7 @@ function ebayRenderChecks() {
   btn.style.opacity = canPublish ? '1' : '.45';
   btn.style.cursor = canPublish ? 'pointer' : 'not-allowed';
   btn.textContent = blocks.length ? 'Fix the issues above to publish'
-    : scansPending ? 'Checking scans…'
+    : scansPending ? 'Checking…'
     : warns.length ? `Publish anyway (${warns.length} warning${warns.length > 1 ? 's' : ''})`
     : 'Publish';
 }
@@ -395,12 +404,28 @@ function ebayScanLoaded(side, ok) {
   ebayRenderChecks();
 }
 
+async function ebayCheckLiveStatus(itemId) {
+  let st;
+  try {
+    const res = await fetch(`${WORKER_URL}/ebay-listing-status?itemId=${encodeURIComponent(itemId)}`, { headers: { 'X-App-Key': APP_KEY } });
+    st = await res.json();
+    if (!res.ok && !st.state) st = { state: 'unknown', error: st.error || `HTTP ${res.status}` };
+  } catch (e) {
+    st = { state: 'unknown', error: e.message };
+  }
+  if (!ebayDraft || ebayDraft.itemId !== itemId) return; // user moved on
+  ebayLiveState = st;
+  ebayRenderChecks();
+}
+
 // ── 3) Review page ──
 function ebayReviewListing(itemId, useDraft) {
   const l = (useDraft && ebayDraft && ebayDraft.itemId === itemId) ? ebayDraft.listing : ebayCollectForm(itemId);
   ebayDraft = { itemId, listing: l };
   ebayScanState = { front: 'loading', back: 'loading' };
+  ebayLiveState = { state: 'loading' };
   try { localStorage.setItem('ebayShippingPolicyId', l.shippingPolicyId); } catch (e) {}
+  ebayCheckLiveStatus(itemId);
 
   const price = ebayMoney(l.price);
   const when = ebayNormalizeAction(l.action) === 'live'

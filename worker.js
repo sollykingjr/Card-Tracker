@@ -14,7 +14,7 @@ import {
   handleCardImage
 } from './worker/cardmeta.js';
 import { handleDebugRawWatchlist } from './worker/debug.js';
-import { handleEbayPublish } from './worker/ebay-publish.js';
+import { handleEbayPublish, handleEbayListingStatus } from './worker/ebay-publish.js';
 
 
 
@@ -35,6 +35,7 @@ const PROTECTED_ROUTES = new Set([
   'POST:/card-override',
   'POST:/card-override-pending-clear',
   'POST:/ebay-publish',
+  'GET:/ebay-listing-status',
   'GET:/test-promotions',
   'GET:/comc-pulled-invalidate-scans',
 ]);
@@ -121,6 +122,7 @@ export default {
     if (path === '/card-override-pending-all' && request.method === 'GET') return handleCardOverridePendingAll(env, cors);
     if (path === '/card-override-pending-clear' && request.method === 'POST') return handleCardOverridePendingClear(request, env, cors);
     if (path === '/ebay-publish' && request.method === 'POST') return handleEbayPublish(request, env, cors);
+    if (path === '/ebay-listing-status' && request.method === 'GET') return handleEbayListingStatus(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);
     return new Response('card-app worker running', { headers: cors });

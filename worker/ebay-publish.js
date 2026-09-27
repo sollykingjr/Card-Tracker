@@ -2,6 +2,7 @@
 // Flow per card: inventory item (PUT) → offer (create or update) → publishOffer.
 // Live = publish now. Scheduled = listingStartDate (max 3 weeks out, eBay's limit).
 import { refreshAccessToken } from './ebay-watchlist.js';
+import { fetchLiveListings } from './ebay-selling.js';
 
 const API = 'https://api.ebay.com/sell/inventory/v1';
 const MARKETPLACE = 'EBAY_US';
@@ -210,6 +211,49 @@ export function buildInventoryItem(l, itemId, shippingPolicyId, cond, imageSides
   return item;
 }
 
+// ── Is this card live or scheduled on eBay right now? ──
+// Ended / unsold listings count as 'none' so a card can be reposted.
+function offerState(o) {
+  if (!o || o.status !== 'PUBLISHED') return 'none';
+  const ls = o.listing && o.listing.listingStatus;
+  if (ls === 'ENDED' || ls === 'EBAY_ENDED' || ls === 'INACTIVE') return 'ended';
+  const start = o.listingStartDate ? Date.parse(o.listingStartDate) : NaN;
+  if ((!isNaN(start) && start > Date.now()) || ls === 'NOT_LISTED') return 'scheduled';
+  return 'active';
+}
+
+// Checks the app's own offer for this SKU, then every active/scheduled listing on the
+// account (catches listings made in Seller Hub or by CSV with this Custom Label).
+async function getLiveStatus(env, token, itemId) {
+  const r = await ebay(token, 'GET', `/offer?sku=${encodeURIComponent(itemId)}&marketplace_id=${MARKETPLACE}`);
+  const offer = r.ok && r.data && Array.isArray(r.data.offers) ? r.data.offers[0] : null;
+  const os = offerState(offer);
+  if (os === 'active' || os === 'scheduled') {
+    return { state: os, listingId: offer.listing && offer.listing.listingId, startTime: offer.listingStartDate || null, offer };
+  }
+  const live = await fetchLiveListings(env);
+  if (live.error) return { state: 'unknown', error: live.error, offer };
+  const sched = live.scheduled.find(i => i.sku === itemId);
+  if (sched) return { state: 'scheduled', listingId: sched.listingId, startTime: sched.startTime || null, offer };
+  const act = live.active.find(i => i.sku === itemId);
+  if (act) return { state: 'active', listingId: act.listingId, startTime: act.startTime || null, offer };
+  return { state: 'none', offer };
+}
+
+// GET /ebay-listing-status?itemId=...  → { state: 'active'|'scheduled'|'none'|'unknown', listingId?, startTime? }
+export async function handleEbayListingStatus(request, env, cors) {
+  try {
+    const itemId = new URL(request.url).searchParams.get('itemId');
+    if (!itemId) return json({ error: 'missing itemId' }, 400, cors);
+    const token = await getAccessToken(env);
+    if (!token) return json({ state: 'unknown', error: 'not_authenticated' }, 200, cors);
+    const st = await getLiveStatus(env, token, itemId);
+    return json({ state: st.state, listingId: st.listingId || null, startTime: st.startTime || null, error: st.error || null }, 200, cors);
+  } catch (e) {
+    return json({ state: 'unknown', error: e.message }, 200, cors);
+  }
+}
+
 // POST /ebay-publish
 // { itemId, listing, shippingPolicyId, mode: 'live'|'scheduled', startDate?: ISO string, imageSides?: ['front','back'] }
 export async function handleEbayPublish(request, env, cors) {
@@ -220,11 +264,11 @@ export async function handleEbayPublish(request, env, cors) {
     const sides = Array.isArray(imageSides) ? imageSides.filter(s => s === 'front' || s === 'back') : null;
     if (sides && !sides.includes('front')) return json({ error: 'front scan is required' }, 400, cors);
 
-    // Never list a card the app already knows is listed or sold.
+    // Never list a sold card. (Listed is checked live against eBay below, so an
+    // ended/unsold listing can be reposted even before the tag sync clears it.)
     const meta = await env.CACHE.get(`card-meta:${itemId}`, { type: 'json' });
     const tags = (meta && Array.isArray(meta.tags)) ? meta.tags : [];
-    const blockTag = tags.find(t => t === 'Listed' || t === 'Sold');
-    if (blockTag) return json({ error: `card is tagged ${blockTag}`, step: 'precheck' }, 409, cors);
+    if (tags.includes('Sold')) return json({ error: 'card is tagged Sold', step: 'precheck' }, 409, cors);
     if (mode !== 'live' && mode !== 'scheduled') return json({ error: 'mode must be live or scheduled' }, 400, cors);
 
     let listingStartDate;
@@ -243,6 +287,15 @@ export async function handleEbayPublish(request, env, cors) {
 
     const token = await getAccessToken(env);
     if (!token) return json({ error: 'not_authenticated', authUrl: '/auth' }, 401, cors);
+
+    // Must run before touching the inventory item — a PUT would revise a live listing.
+    const status = await getLiveStatus(env, token, itemId);
+    if (status.state === 'active' || status.state === 'scheduled') {
+      return json({ error: `already ${status.state} on eBay (#${status.listingId})`, step: 'precheck', state: status.state, listingId: status.listingId, startTime: status.startTime }, 409, cors);
+    }
+    if (status.state === 'unknown') {
+      return json({ error: `couldn't confirm with eBay that this card isn't already listed (${status.error})`, step: 'precheck' }, 502, cors);
+    }
 
     const locErr = await ensureLocation(token);
     if (locErr) return json({ error: locErr }, 502, cors);
@@ -289,12 +342,14 @@ export async function handleEbayPublish(request, env, cors) {
     if (listingStartDate) offer.listingStartDate = listingStartDate;
 
     let offerId;
-    const existing = await ebay(token, 'GET', `/offer?sku=${encodeURIComponent(sku)}&marketplace_id=${MARKETPLACE}`);
-    const prior = existing.ok && existing.data && Array.isArray(existing.data.offers) ? existing.data.offers[0] : null;
+    let prior = status.offer;
+    if (prior && prior.status === 'PUBLISHED') {
+      // Old listing ended without selling — remove its offer and start a fresh listing.
+      const del = await ebay(token, 'DELETE', `/offer/${prior.offerId}`);
+      if (!del.ok && del.status !== 404) return json({ error: stepError('offer_delete_ended', del) }, 502, cors);
+      prior = null;
+    }
     if (prior) {
-      if (prior.status === 'PUBLISHED') {
-        return json({ error: 'already published on eBay', step: 'offer', listingId: prior.listing && prior.listing.listingId }, 409, cors);
-      }
       offerId = prior.offerId;
       const upd = await ebay(token, 'PUT', `/offer/${offerId}`, offer);
       if (!upd.ok) return json({ error: stepError('offer_update', upd) }, 502, cors);

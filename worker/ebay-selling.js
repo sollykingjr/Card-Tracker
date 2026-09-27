@@ -1,20 +1,21 @@
 // ── ebay-selling.js — GetMyeBaySelling polling + tag reconciliation
 import { refreshAccessToken } from './ebay-watchlist.js';
 
-export async function fetchMyeBaySelling(env) {
+async function getSellingToken(env) {
   let accessToken = await env.CACHE.get('ebay_access_token');
+  if (accessToken) return { accessToken };
+  const refreshToken = await env.CACHE.get('ebay_refresh_token');
+  if (!refreshToken) return { error: 'not_authenticated' };
+  accessToken = await refreshAccessToken(refreshToken, env);
+  return accessToken ? { accessToken } : { error: 'refresh_failed' };
+}
 
-  if (!accessToken) {
-    const refreshToken = await env.CACHE.get('ebay_refresh_token');
-    if (!refreshToken) {
-      return { error: 'not_authenticated', authUrl: '/auth' };
-    }
-    accessToken = await refreshAccessToken(refreshToken, env);
-    if (!accessToken) {
-      return { error: 'refresh_failed', authUrl: '/auth' };
-    }
-  }
+const decodeXml = (s) => s
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 
+// One GetMyeBaySelling call for one list section + page. Returns parsed items and page count.
+async function fetchSellingPage(accessToken, listTag, page) {
   const res = await fetch('https://api.ebay.com/ws/api.dll', {
     method: 'POST',
     headers: {
@@ -26,49 +27,66 @@ export async function fetchMyeBaySelling(env) {
     },
     body: `<?xml version="1.0" encoding="utf-8"?>
       <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-        <RequesterCredentials>
-          <eBayAuthToken>${accessToken}</eBayAuthToken>
-        </RequesterCredentials>
-        <ActiveList>
+        <RequesterCredentials><eBayAuthToken>${accessToken}</eBayAuthToken></RequesterCredentials>
+        <${listTag}>
           <Include>true</Include>
-          <Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>1</PageNumber></Pagination>
-        </ActiveList>
-        <SoldList>
-          <Include>true</Include>
-          <Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>1</PageNumber></Pagination>
-        </SoldList>
-        <UnsoldList>
-          <Include>true</Include>
-          <Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>1</PageNumber></Pagination>
-        </UnsoldList>
+          <Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>${page}</PageNumber></Pagination>
+        </${listTag}>
         <DetailLevel>ReturnAll</DetailLevel>
       </GetMyeBaySellingRequest>`
   });
-
   const xml = await res.text();
+  const section = xml.match(new RegExp(`<${listTag}[^>]*>([\\s\\S]*?)<\\/${listTag}>`));
+  if (!section) return { items: [], pages: 0 };
+  const items = [];
+  for (const m of section[1].matchAll(/<Item[^>]*>([\s\S]*?)<\/Item>/g)) {
+    const pick = (tag) => { const x = m[1].match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`)); return x ? decodeXml(x[1]).trim() : ''; };
+    const sku = pick('SKU');
+    if (sku) items.push({ sku, listingId: pick('ItemID'), startTime: pick('StartTime') });
+  }
+  const pagesMatch = section[1].match(/<TotalNumberOfPages[^>]*>(\d+)<\/TotalNumberOfPages>/);
+  return { items, pages: pagesMatch ? parseInt(pagesMatch[1], 10) : 1 };
+}
 
-  // Match listings to cards by Custom Label (SKU), which is set to the app's card Item ID.
-  // Listings with no SKU are skipped.
-  const decode = (s) => s
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
-
-  const extractSkus = (sectionTag) => {
-    const sectionMatch = xml.match(new RegExp(`<${sectionTag}>([\\s\\S]*?)<\\/${sectionTag}>`));
-    if (!sectionMatch) return [];
-    const skus = [];
-    for (const item of sectionMatch[1].matchAll(/<Item>([\s\S]*?)<\/Item>/g)) {
-      const skuMatch = item[1].match(/<SKU>([\s\S]*?)<\/SKU>/);
-      const sku = skuMatch ? decode(skuMatch[1]).trim() : '';
-      if (sku) skus.push(sku);
+// All items in a list section, following pagination (capped at 10 pages = 2,000 items).
+async function fetchSellingList(accessToken, listTag, allPages) {
+  const first = await fetchSellingPage(accessToken, listTag, 1);
+  const items = [...first.items];
+  if (allPages) {
+    for (let p = 2; p <= Math.min(first.pages, 10); p++) {
+      items.push(...(await fetchSellingPage(accessToken, listTag, p)).items);
     }
-    return [...new Set(skus)];
-  };
+  }
+  return items;
+}
 
+// Live listings (active + scheduled) with details, keyed by SKU = card Item ID.
+export async function fetchLiveListings(env) {
+  const tok = await getSellingToken(env);
+  if (tok.error) return { error: tok.error };
+  const [active, scheduled] = await Promise.all([
+    fetchSellingList(tok.accessToken, 'ActiveList', true),
+    fetchSellingList(tok.accessToken, 'ScheduledList', true),
+  ]);
+  return { active, scheduled };
+}
+
+// Match listings to cards by Custom Label (SKU), which is set to the app's card Item ID.
+// Scheduled listings count as listed. Listings with no SKU are skipped.
+export async function fetchMyeBaySelling(env) {
+  const tok = await getSellingToken(env);
+  if (tok.error) return { error: tok.error, authUrl: '/auth' };
+  const [active, scheduled, sold, unsold] = await Promise.all([
+    fetchSellingList(tok.accessToken, 'ActiveList', true),
+    fetchSellingList(tok.accessToken, 'ScheduledList', true),
+    fetchSellingList(tok.accessToken, 'SoldList', false),
+    fetchSellingList(tok.accessToken, 'UnsoldList', false),
+  ]);
+  const skus = (arr) => [...new Set(arr.map(i => i.sku))];
   return {
-    active: extractSkus('ActiveList'),
-    sold: extractSkus('SoldList'),
-    unsold: extractSkus('UnsoldList'),
+    active: skus([...active, ...scheduled]),
+    sold: skus(sold),
+    unsold: skus(unsold),
   };
 }
 
