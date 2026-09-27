@@ -47,24 +47,32 @@ export async function fetchMyeBaySelling(env) {
 
   const xml = await res.text();
 
-  const extractItemIds = (sectionTag) => {
+  // Match listings to cards by Custom Label (SKU), which is set to the app's card Item ID.
+  // Listings with no SKU are skipped.
+  const decode = (s) => s
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+
+  const extractSkus = (sectionTag) => {
     const sectionMatch = xml.match(new RegExp(`<${sectionTag}>([\\s\\S]*?)<\\/${sectionTag}>`));
     if (!sectionMatch) return [];
-    const ids = [...sectionMatch[1].matchAll(/<ItemID>(.*?)<\/ItemID>/g)].map(m => m[1]);
-    return [...new Set(ids)];
+    const skus = [];
+    for (const item of sectionMatch[1].matchAll(/<Item>([\s\S]*?)<\/Item>/g)) {
+      const skuMatch = item[1].match(/<SKU>([\s\S]*?)<\/SKU>/);
+      const sku = skuMatch ? decode(skuMatch[1]).trim() : '';
+      if (sku) skus.push(sku);
+    }
+    return [...new Set(skus)];
   };
 
-    return {
-    active: extractItemIds('ActiveList'),
-    sold: extractItemIds('SoldList'),
-    unsold: extractItemIds('UnsoldList'),
+  return {
+    active: extractSkus('ActiveList'),
+    sold: extractSkus('SoldList'),
+    unsold: extractSkus('UnsoldList'),
   };
 }
 
 export async function reconcileListingTags(env) {
-  const { active, sold, unsold, error } = await fetchMyeBaySelling(env);
-  if (error) return { error };
-
   const getTags = async (itemId) => {
     const existing = await env.CACHE.get(`card-meta:${itemId}`, { type: 'json' });
     return (existing && Array.isArray(existing.tags)) ? existing.tags : [];
@@ -81,13 +89,44 @@ export async function reconcileListingTags(env) {
     }
   };
 
-  const prevActive = new Set();
-  let cursor;
-  do {
-    const page = await env.CACHE.list({ prefix: 'listing-state:', cursor });
-    for (const k of page.keys) prevActive.add(k.name.slice('listing-state:'.length));
-    cursor = page.list_complete ? undefined : page.cursor;
-  } while (cursor);
+  const listIds = async (prefix) => {
+    const ids = new Set();
+    let cursor;
+    do {
+      const page = await env.CACHE.list({ prefix, cursor });
+      for (const k of page.keys) ids.add(k.name.slice(prefix.length));
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    return ids;
+  };
+
+  // One-time cleanup: the previous version keyed listing-state:/tag-snapshot:/card-meta:
+  // by eBay listing numbers instead of SKUs. Every such key present before this flag is set
+  // came from that version — restore tags from snapshots and remove the stale keys.
+  const MIGRATION_FLAG = 'migration:sku-matching-v1';
+  if (!(await env.CACHE.get(MIGRATION_FLAG))) {
+    const staleIds = new Set([
+      ...(await listIds('listing-state:')),
+      ...(await listIds('tag-snapshot:')),
+    ]);
+    for (const id of staleIds) {
+      const snapshot = await env.CACHE.get(`tag-snapshot:${id}`, { type: 'json' });
+      if (Array.isArray(snapshot)) {
+        await setTags(id, snapshot);
+      } else {
+        const tags = await getTags(id);
+        await setTags(id, tags.filter(t => t !== 'Listed' && t !== 'Sold'));
+      }
+      await env.CACHE.delete(`tag-snapshot:${id}`);
+      await env.CACHE.delete(`listing-state:${id}`);
+    }
+    await env.CACHE.put(MIGRATION_FLAG, new Date().toISOString());
+  }
+
+  const { active, sold, unsold, error } = await fetchMyeBaySelling(env);
+  if (error) return { error };
+
+  const prevActive = await listIds('listing-state:');
 
   const activeSet = new Set(active);
   const soldSet = new Set(sold);
@@ -105,6 +144,7 @@ export async function reconcileListingTags(env) {
     const tags = await getTags(itemId);
     if (soldSet.has(itemId)) {
       await setTags(itemId, [...new Set([...tags.filter(t => t !== 'Listed'), 'Sold'])]);
+      await env.CACHE.delete(`tag-snapshot:${itemId}`);
     } else {
       const snapshot = await env.CACHE.get(`tag-snapshot:${itemId}`, { type: 'json' });
       const restored = Array.isArray(snapshot) ? snapshot : tags.filter(t => t !== 'Listed');
