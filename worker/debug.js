@@ -1,3 +1,4 @@
+import { buildInventoryItem } from './ebay-publish.js';
 // ── debug.js — temporary debug endpoints, delete when no longer needed ────────
 
 export async function handleDebugRawWatchlist(request, env, cors) {
@@ -60,16 +61,18 @@ export async function handleDebugInventoryVariants(request, env, cors) {
   };
   const desc = { conditionDescriptors: [{ name: '40001', values: ['400011'] }] };
   const pkg = (h) => ({ packageWeightAndSize: { weight: { value: 1, unit: 'OUNCE' }, dimensions: { length: 6, width: 4, height: h, unit: 'INCH' } } });
+  const real = buildInventoryItem(listing, cardId, '254806132017');
+  const withProduct = (p) => ({ ...real, product: { ...real.product, ...p } });
   const variants = {
-    '1_bare': { ...base },
-    '2_with_condition_descriptor': { ...base, ...desc },
-    '3_with_package_height_0.2': { ...base, ...pkg(0.2) },
-    '4_with_package_height_1': { ...base, ...pkg(1) },
-    '5_descriptor_plus_package_0.2': { ...base, ...desc, ...pkg(0.2) },
-    '6_no_images': { ...base, product: { ...base.product, imageUrls: undefined } },
+    '1_real_exact': real,
+    '2_real_no_aspects': withProduct({ aspects: {} }),
+    '3_real_front_image_only': withProduct({ imageUrls: [real.product.imageUrls[0]] }),
+    '4_real_back_image_only': withProduct({ imageUrls: [real.product.imageUrls[1]] }),
+    '5_real_no_images': withProduct({ imageUrls: [] }),
+    '6_real_short_title': withProduct({ title: 'Test card' }),
   };
   const hdrs = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Language': 'en-US', 'Accept-Language': 'en-US' };
-  const out = { cardIdUsedForImage: cardId, queuedListing: listing, results: {} };
+  const out = { cardIdUsedForImage: cardId, queuedListing: listing, realPayload: real, results: {} };
   let i = 0;
   for (const [name, body] of Object.entries(variants)) {
     i++;

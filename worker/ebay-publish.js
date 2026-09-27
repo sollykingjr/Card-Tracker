@@ -129,6 +129,27 @@ function buildAspects(l) {
   return aspects;
 }
 
+export function buildInventoryItem(l, itemId, shippingPolicyId, cond) {
+  cond = cond || buildConditionAndDescriptors(l);
+  const item = {
+    availability: { shipToLocationAvailability: { quantity: parseInt(l.quantity, 10) || 1 } },
+    condition: cond.condition,
+    conditionDescriptors: cond.conditionDescriptors,
+    product: {
+      title: (l.title || '').slice(0, 80),
+      description: l.description || '',
+      aspects: buildAspects(l),
+      imageUrls: [
+        `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg`,
+        `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`
+      ]
+    }
+  };
+  const pkg = PACKAGE_BY_POLICY[shippingPolicyId];
+  if (pkg) item.packageWeightAndSize = pkg;
+  return item;
+}
+
 // POST /ebay-publish  { itemId, shippingPolicyId, mode: 'live'|'scheduled', startDate?: ISO string }
 export async function handleEbayPublish(request, env, cors) {
   try {
@@ -162,22 +183,7 @@ export async function handleEbayPublish(request, env, cors) {
     const qty = parseInt(l.quantity, 10) || 1;
 
     // 1) Inventory item
-    const item = {
-      availability: { shipToLocationAvailability: { quantity: qty } },
-      condition: cond.condition,
-      conditionDescriptors: cond.conditionDescriptors,
-      product: {
-        title: (l.title || '').slice(0, 80),
-        description: l.description || '',
-        aspects: buildAspects(l),
-        imageUrls: [
-          `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg`,
-          `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`
-        ]
-      }
-    };
-    const pkg = PACKAGE_BY_POLICY[shippingPolicyId];
-    if (pkg) item.packageWeightAndSize = pkg;
+    const item = buildInventoryItem(l, itemId, shippingPolicyId, cond);
 
     const put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
     if (!put.ok) return json({ error: stepError('inventory_item', put) }, 502, cors);
