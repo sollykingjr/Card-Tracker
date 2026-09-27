@@ -13,10 +13,16 @@ const RETURN_POLICY_ID = '238602691017';  // Mascot - No returns accepted
 const PAYMENT_POLICY_ID = '239080495017'; // eBay Managed Payments BIN
 
 // Package weight/size per shipping policy (decimals are allowed in this API).
+const PWE_PACKAGE = {
+  weight: { value: 1, unit: 'OUNCE' },
+  dimensions: { length: 6, width: 4, height: 0.2, unit: 'INCH' }
+};
 const PACKAGE_BY_POLICY = {
-  '254806132017': { // PWE - Not Flat Rate
-    weight: { value: 1, unit: 'OUNCE' },
-    dimensions: { length: 6, width: 4, height: 0.2, unit: 'INCH' }
+  '254806132017': PWE_PACKAGE, // PWE - Not Flat Rate
+  '251924633017': PWE_PACKAGE, // PWE Free Shipping
+  '239080494017': {            // Calculated Bubble Mailers
+    weight: { value: 3, unit: 'OUNCE' },
+    dimensions: { length: 7, width: 5, height: 1, unit: 'INCH' }
   }
 };
 
