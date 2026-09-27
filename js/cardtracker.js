@@ -356,7 +356,7 @@ async function ctFetchScansForPage(itemIds) {
     const res = await fetch(`${WORKER_URL}/scan-batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-      body: JSON.stringify({ itemIds: needed })
+      body: JSON.stringify({ itemIds: needed, fresh: true })
     });
     if (!res.ok) throw new Error(`scan-batch: HTTP ${res.status}`);
     const data = await res.json();
