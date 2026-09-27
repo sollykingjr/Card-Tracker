@@ -14,6 +14,7 @@ let ctFilterSets = [];           // OR within category
 let ctFilterSerial = false;      // checked = only serial-numbered
 let ctFilterGraded = false;      // checked = only graded
 let ctFilterInHand = false;      // checked = only in-hand
+let ctExcludeListed = false;     // checked = hide cards tagged Listed
 
 function ctOpenSearch(query) {
   ctQuery = query;
@@ -192,6 +193,8 @@ function ctRenderTags(idx) {
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${c.itemId ? '8px' : '0'}">
       ${tags.length ? tags.map(t => t === 'Sold'
         ? `<div style="padding:5px 11px;border-radius:20px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700">Sold</div>`
+        : t === 'Listed'
+        ? `<div style="padding:5px 11px;border-radius:20px;background:var(--b3-bg);color:var(--b3-tx);font-size:11px;font-weight:700">Listed</div>`
         : `<div style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;background:var(--surf2);border:1px solid var(--bdr2);color:var(--tx2);font-size:11px;font-weight:700">
              ${t}
              <button onclick="ctRemoveTag(${idx}, '${t.replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--tx3);font-size:13px;cursor:pointer;padding:0;line-height:1;font-family:inherit">×</button>
@@ -384,6 +387,7 @@ function ctFiltersActiveCount() {
   let n = 0;
   if (ctFilterSold !== 'all') n++;
   if (ctFilterInHand) n++;
+  if (ctExcludeListed) n++;
   if (ctFilterSerial) n++;
   if (ctFilterGraded) n++;
   if (ctFilterTags.length) n++;
@@ -415,6 +419,7 @@ function ctFilterPanelHTML(scope) {
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">In Hand</div>
     <div style="display:flex;gap:6px;margin-bottom:20px">
       <button class="schip${ctFilterInHand?' on':''}" onclick="ctToggleFilterInHand()" style="flex:1;padding:8px;font-size:11px">In Hand Only</button>
+      <button class="schip${ctExcludeListed?' on':''}" onclick="ctToggleExcludeListed()" style="flex:1;padding:8px;font-size:11px">Exclude eBay Listings</button>
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
@@ -453,6 +458,7 @@ function ctCloseFilters() {
 function ctResetFilters() {
   ctFilterSold = 'all';
   ctFilterInHand = false;
+  ctExcludeListed = false;
   ctFilterSerial = false;
   ctFilterGraded = false;
   ctFilterTags = [];
@@ -466,6 +472,13 @@ function ctResetFilters() {
 
 function ctToggleFilterInHand() {
   ctFilterInHand = !ctFilterInHand;
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctToggleExcludeListed() {
+  ctExcludeListed = !ctExcludeListed;
   ctPage = 1;
   ctRenderFilterContent();
   ctRenderBody();
@@ -572,7 +585,8 @@ function ctDateLine(c) {
 function ctListRowHTML(c) {
   const dateLine = ctDateLine(c);
   const inHand = ctIsInHand(c);
-  const tags = ctGetTags(c).filter(t => t !== 'Sold');
+  const listed = ctGetTags(c).includes('Listed');
+  const tags = ctGetTags(c).filter(t => t !== 'Sold' && t !== 'Listed');
   return `
     <div class="cs-row" onclick="ctOpenCard(${cards.indexOf(c)})">
       <div class="cs-row-top">
@@ -593,6 +607,7 @@ function ctListRowHTML(c) {
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           ${inHand ? '<span class="badge b5">In Hand</span>' : ''}
+          ${listed ? '<span class="badge b3">Listed</span>' : ''}
           ${c.salePrice ? '<span class="badge" style="background:rgba(248,113,113,.15);color:var(--dn)">Sold</span>' : ''}
           ${tags.length ? `<div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px">${tags.map(t => `<span style="padding:2px 8px;border-radius:20px;background:var(--surf2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:600">${t}</span>`).join('')}</div>` : ''}
         </div>
@@ -684,6 +699,7 @@ function ctFilterCategoryMatch(c) {
   if (ctFilterSerial && !c.serialNo) return false;
   if (ctFilterGraded && !c.grade) return false;
   if (ctFilterInHand && !ctIsInHand(c)) return false;
+  if (ctExcludeListed && ctGetTags(c).includes('Listed')) return false;
 
   if (ctFilterSports.length && !ctFilterSports.includes(c.sport)) return false;
   if (ctFilterYears.length && !ctFilterYears.includes(String(c.year))) return false;
