@@ -776,6 +776,37 @@ function ctCopyName(idx, btn) {
   ctCopyId(c.fullCard || c.playerDisplay || '', btn);
 }
 
+// Opens a URL outside the app. On an iPhone/iPad Home Screen web app, links normally open
+// in iOS's in-app viewer (separate login, can't hand off to apps), so use the x-safari-
+// scheme to open real Safari instead. Everywhere else, a normal new tab.
+function ctOpenExternal(url) {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (isIOS && standalone && /^https:\/\//.test(url)) {
+    window.location.href = 'x-safari-' + url;
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
+// Copies the card name and opens Card Ladder sales history searched for it.
+function ctSearchCardLadder(idx, btn) {
+  const c = cards[idx];
+  if (!c) return;
+  const name = c.fullCard || c.playerDisplay || '';
+  if (!name) return;
+  // Start the copy but don't wait — opening must stay inside the tap or it gets blocked.
+  if (navigator.clipboard) navigator.clipboard.writeText(name).catch(() => {});
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied — opening Card Ladder…';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }
+  ctOpenExternal(searchUrl.cardladder(name));
+}
+
 function ctToggleMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById('ct-menu');
@@ -840,6 +871,7 @@ function ctOpenCard(idx) {
        <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="flex:1;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Copy Item ID</button>
        <button onclick="ctCopyName(${idx}, this)" style="flex:1;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Copy Item Name</button>
      </div>
+     <button onclick="ctSearchCardLadder(${idx}, this)" style="width:100%;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">Search Card Ladder Sales</button>
     <div id="ct-inhand" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
