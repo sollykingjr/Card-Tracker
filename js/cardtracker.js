@@ -419,9 +419,9 @@ function ctFilterPanelHTML(scope) {
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">In Hand / eBay</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px">
       <button class="schip${ctFilterListed==='all'?' on':''}" onclick="ctSetFilterListed('all')" style="padding:8px;font-size:11px">All</button>
+      <button class="schip${ctFilterInHand?' on':''}" onclick="ctToggleFilterInHand()" style="padding:8px;font-size:11px">In Hand Only</button>
       <button class="schip${ctFilterListed==='exclude'?' on':''}" onclick="ctSetFilterListed('exclude')" style="padding:8px;font-size:11px">Exclude eBay Listings</button>
       <button class="schip${ctFilterListed==='only'?' on':''}" onclick="ctSetFilterListed('only')" style="padding:8px;font-size:11px">eBay Listings Only</button>
-      <button class="schip${ctFilterInHand?' on':''}" onclick="ctToggleFilterInHand()" style="padding:8px;font-size:11px">In Hand Only</button>
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
