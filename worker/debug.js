@@ -70,17 +70,22 @@ export async function handleDebugInventoryVariants(request, env, cors) {
     '4_real_back_image_only': withProduct({ imageUrls: [real.product.imageUrls[1]] }),
     '5_real_no_images': withProduct({ imageUrls: [] }),
     '6_real_short_title': withProduct({ title: 'Test card' }),
+    'REALSKU': real,
   };
   const hdrs = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Content-Language': 'en-US', 'Accept-Language': 'en-US' };
   const out = { cardIdUsedForImage: cardId, queuedListing: listing, realPayload: real, results: {} };
   let i = 0;
   for (const [name, body] of Object.entries(variants)) {
     i++;
-    const sku = `debug-variant-${i}`;
+    const sku = name === 'REALSKU' ? cardId : `debug-variant-${i}`;
     const r = await fetch(`https://api.ebay.com/sell/inventory/v1/inventory_item/${sku}`, { method: 'PUT', headers: hdrs, body: JSON.stringify(body) });
     const text = await r.text();
     out.results[name] = { status: r.status, body: text.slice(0, 500) };
-    await fetch(`https://api.ebay.com/sell/inventory/v1/inventory_item/${sku}`, { method: 'DELETE', headers: hdrs });
+    if (name !== 'REALSKU') await fetch(`https://api.ebay.com/sell/inventory/v1/inventory_item/${sku}`, { method: 'DELETE', headers: hdrs });
+    else {
+      const g = await fetch(`https://api.ebay.com/sell/inventory/v1/offer?sku=${sku}&marketplace_id=EBAY_US`, { headers: hdrs });
+      out.realSkuOffers = { status: g.status, body: (await g.text()).slice(0, 800) };
+    }
   }
   return new Response(JSON.stringify(out, null, 2), { headers: { ...cors, 'Content-Type': 'application/json' } });
 }
