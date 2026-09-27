@@ -119,7 +119,8 @@ function buildAspects(l) {
   }
   add('Manufacturer', l.manufacturer);
   add('Season', l.season);
-  add('Year Manufactured', l.season);
+  const year = String(l.season || '').match(/\d{4}/); // "2023-24" → 2023 (eBay wants a number here)
+  if (year) add('Year Manufactured', year[0]);
   add('Parallel/Variety', l.parallel);
   add('Set', l.set);
   add('Card Number', l.cardNo);
