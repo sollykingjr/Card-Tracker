@@ -13,7 +13,7 @@ import {
   handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear,
   handleCardImage, handleEbayQueuePost, handleEbayQueueAll, handleEbayQueueRemove
 } from './worker/cardmeta.js';
-import { handleDebugRawWatchlist, handleDebugInventoryVariants } from './worker/debug.js';
+import { handleDebugRawWatchlist } from './worker/debug.js';
 import { handleEbayPublish } from './worker/ebay-publish.js';
 
 
@@ -111,7 +111,6 @@ export default {
     if (path === '/watch-add' && request.method === 'POST') return handleAddToWatch(request, env, cors);
     if (path === '/watch-remove' && request.method === 'POST') return handleRemoveFromWatch(request, env, cors);
     if (path === '/debug-raw-watchlist' && request.method === 'GET') return handleDebugRawWatchlist(request, env, cors);
-    if (path === '/debug-inventory-variants' && request.method === 'GET') return handleDebugInventoryVariants(request, env, cors);
     if (path === '/scan' && request.method === 'GET') return handleScan(request, env, cors);
     if (path === '/scan-batch' && request.method === 'POST') return handleScanBatch(request, env, cors);
     if (path === '/card-meta-all' && request.method === 'GET') return handleCardMetaAll(env, cors);

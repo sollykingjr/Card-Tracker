@@ -185,7 +185,12 @@ export async function handleEbayPublish(request, env, cors) {
     // 1) Inventory item
     const item = buildInventoryItem(l, itemId, shippingPolicyId, cond);
 
-    const put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
+    // PUT is idempotent, so retry once on eBay's transient 25001 "system error".
+    let put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
+    if (!put.ok && put.status >= 500) {
+      await new Promise(r => setTimeout(r, 2000));
+      put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
+    }
     if (!put.ok) return json({ error: stepError('inventory_item', put) }, 502, cors);
 
     // 2) Offer
