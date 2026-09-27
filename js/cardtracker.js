@@ -791,24 +791,16 @@ function ctOpenExternal(url) {
   }
 }
 
-// Copies the card name and opens a search for it: Card Ladder sales history, COMC, or
-// eBay active listings. Card Ladder and COMC go to real Safari from the iPhone Home
-// Screen app (logins live there); eBay uses a normal link so iOS hands it to the eBay app.
-function ctSearchOn(idx, platform, btn) {
+// Opens the search editor (chips + Suggested) for Card Ladder, COMC, or eBay.
+function ctSearchOn(idx, platform) {
   const c = cards[idx];
   if (!c) return;
-  const name = c.fullCard || c.playerDisplay || '';
-  if (!name || !searchUrl[platform]) return;
-  // Start the copy but don't wait — opening must stay inside the tap or it gets blocked.
-  if (navigator.clipboard) navigator.clipboard.writeText(name).catch(() => {});
-  if (btn) {
-    const orig = btn.textContent;
-    btn.textContent = 'Copied ✓';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  }
-  const url = searchUrl[platform](name);
-  if (platform === 'ebay') window.open(url, '_blank');
-  else ctOpenExternal(url);
+  openSearchEditor({
+    platform,
+    text: c.fullCard || c.playerDisplay || '',
+    key: 'card:' + (c.itemId || idx),
+    playerHint: c.playerDisplay || ''
+  });
 }
 
 function ctToggleMenu(e) {
@@ -877,9 +869,9 @@ function ctOpenCard(idx) {
      </div>
      <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px">Search Options</div>
      <div style="display:flex;gap:8px">
-       <button onclick="ctSearchOn(${idx}, 'cardladder', this)" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Card Ladder</button>
-       <button onclick="ctSearchOn(${idx}, 'comc', this)" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">COMC</button>
-       <button onclick="ctSearchOn(${idx}, 'ebay', this)" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">eBay</button>
+       <button onclick="ctSearchOn(${idx}, 'cardladder')" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Card Ladder</button>
+       <button onclick="ctSearchOn(${idx}, 'comc')" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">COMC</button>
+       <button onclick="ctSearchOn(${idx}, 'ebay')" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">eBay</button>
      </div>
     <div id="ct-inhand" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>

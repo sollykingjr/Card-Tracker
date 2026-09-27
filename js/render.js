@@ -794,6 +794,14 @@ function openEditNameModal(itemId, i) {
 
 
 // ── Search Options modal ───────────────────────────────────────────────────────
+let wlSearchCtx = null; // { text, key } for the watchlist item whose Search Options are open
+
+function wlOpenSearch(platform) {
+  if (!wlSearchCtx) return;
+  document.getElementById('searchopts-modal')?.remove();
+  openSearchEditor({ platform, text: wlSearchCtx.text, key: wlSearchCtx.key });
+}
+
 function openSearchOptionsModal(itemId, i) {
   const existing = document.getElementById('searchopts-modal');
   if (existing) existing.remove();
@@ -802,6 +810,8 @@ function openSearchOptionsModal(itemId, i) {
   const rawTitle = item.savedTitle || item.title || '';
   const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
 
+  wlSearchCtx = { text: safeTitle, key: 'wl:' + item.itemId };
+
   const modal = document.createElement('div');
   modal.id = 'searchopts-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -809,11 +819,11 @@ function openSearchOptionsModal(itemId, i) {
     <div style="background:var(--surf);border-radius:14px;padding:20px;width:100%;max-width:320px">
       <div style="font-size:15px;font-weight:600;margin-bottom:14px">Search Options</div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <button onclick="ctOpenExternal(searchUrl.cardladder('${safeTitle.replace(/'/g,"\\'")}'))"
+        <button onclick="wlOpenSearch('cardladder')"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">Card Ladder</button>
-        <button onclick="ctOpenExternal(searchUrl.comc('${safeTitle.replace(/'/g,"\\'")}'))"
+        <button onclick="wlOpenSearch('comc')"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">COMC</button>
-        <button onclick="window.open(searchUrl.ebay('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
+        <button onclick="wlOpenSearch('ebay')"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">eBay Search</button>
       </div>
     </div>
