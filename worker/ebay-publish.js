@@ -130,6 +130,61 @@ function buildAspects(l) {
   return aspects;
 }
 
+// ── Promoted Listings (general / cost-per-sale) ──
+const MKT = 'https://api.ebay.com/sell/marketing/v1';
+const CAMPAIGN_KV = 'ebay-promo-campaign-id';
+
+async function mkt(token, method, path, body) {
+  const res = await fetch(`${MKT}${path}`, {
+    method,
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text }; }
+  return { ok: res.ok, status: res.status, data, headers: res.headers };
+}
+
+// Reuses a running manual cost-per-sale campaign (cached in KV), else creates "Card Tracker".
+async function getPromoCampaignId(token, env) {
+  const cached = await env.CACHE.get(CAMPAIGN_KV);
+  if (cached) {
+    const c = await mkt(token, 'GET', `/ad_campaign/${cached}`);
+    if (c.ok && c.data && ['RUNNING', 'SCHEDULED'].includes(c.data.campaignStatus)) return { id: cached };
+  }
+  const list = await mkt(token, 'GET', '/ad_campaign?campaign_status=RUNNING&limit=100');
+  const found = list.ok && list.data && (list.data.campaigns || []).find(c =>
+    c.marketplaceId === MARKETPLACE &&
+    c.fundingStrategy && c.fundingStrategy.fundingModel === 'COST_PER_SALE' &&
+    !c.campaignCriterion // rules-based campaigns can't take manually added listings
+  );
+  if (found) {
+    await env.CACHE.put(CAMPAIGN_KV, found.campaignId);
+    return { id: found.campaignId };
+  }
+  const created = await mkt(token, 'POST', '/ad_campaign', {
+    campaignName: 'Card Tracker',
+    marketplaceId: MARKETPLACE,
+    startDate: new Date().toISOString(),
+    fundingStrategy: { fundingModel: 'COST_PER_SALE', bidPercentage: '2.0' }
+  });
+  if (!created.ok) return { error: stepError('promo_campaign', created) };
+  const loc = created.headers.get('Location') || '';
+  const id = loc.split('/').pop();
+  if (!id) return { error: { step: 'promo_campaign', message: 'no campaign id returned' } };
+  await env.CACHE.put(CAMPAIGN_KV, id);
+  return { id };
+}
+
+async function promoteListing(token, env, listingId, rate) {
+  const camp = await getPromoCampaignId(token, env);
+  if (camp.error) return camp;
+  const ad = await mkt(token, 'POST', `/ad_campaign/${camp.id}/ad`, { listingId, bidPercentage: rate });
+  if (!ad.ok) return { error: stepError('promo_ad', ad) };
+  return { ok: true, campaignId: camp.id, rate };
+}
+
 export function buildInventoryItem(l, itemId, shippingPolicyId, cond) {
   cond = cond || buildConditionAndDescriptors(l);
   const item = {
@@ -241,10 +296,19 @@ export async function handleEbayPublish(request, env, cors) {
     const pub = await ebay(token, 'POST', `/offer/${offerId}/publish`);
     if (!pub.ok) return json({ error: stepError('publish', pub), offerId }, 502, cors);
 
+    const listingId = pub.data && pub.data.listingId;
+
+    // 4) Optional Promoted Listings ad rate. A failure here doesn't undo the listing.
+    let promo = null;
+    const rateNum = parseFloat(l.adRate);
+    if (listingId && !isNaN(rateNum) && rateNum > 0) {
+      promo = await promoteListing(token, env, listingId, rateNum.toFixed(1));
+    }
+
     return json({
-      ok: true, itemId, offerId,
-      listingId: pub.data && pub.data.listingId,
+      ok: true, itemId, offerId, listingId,
       mode, listingStartDate: listingStartDate || null,
+      promo,
       warnings: (pub.data && pub.data.warnings) || []
     }, 200, cors);
   } catch (e) {

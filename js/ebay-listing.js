@@ -204,6 +204,10 @@ async function ebayOpenListingForm(itemId) {
         </select>
       </div>
       <div id="el-offer-block">${ebayRenderOfferFields(l)}</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Promote % (optional, blank = none)</div>
+        <input type="number" id="el-adRate" value="${l.adRate ?? ''}" min="2" max="100" step="0.1" placeholder="e.g. 2.1" autocomplete="off" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">
+      </div>
       ${ebayRenderActionFields(l)}
       ${ebayField('Description', 'el-description', l.description, { type: 'textarea' })}
       ${!l.isGraded ? ebayField('Card Condition', 'el-condition', l.condition, { type: 'select', options: ['Near mint or better', 'Excellent', 'Very good', 'Poor'] }) : ''}
@@ -267,6 +271,7 @@ async function ebaySaveListing(itemId) {
     allowOffers: checked('el-allowOffers'),
     offerAuto: val('el-offerAuto'),
     offerMin: val('el-offerMin'),
+    adRate: val('el-adRate').trim(),
     action: ebayNormalizeAction(val('el-action')),
     schedule: val('el-action') === 'scheduled' ? val('el-schedule') : '',
     description: val('el-description'),
@@ -290,6 +295,10 @@ async function ebaySaveListing(itemId) {
 
   const schedProblem = ebayScheduleProblem(listing);
   if (schedProblem) { alert(schedProblem); return; }
+  if (listing.adRate !== '') {
+    const r = parseFloat(listing.adRate);
+    if (isNaN(r) || r < 2 || r > 100) { alert('Promote % must be between 2 and 100 (or blank).'); return; }
+  }
 
   try {
     await fetch(`${WORKER_URL}/ebay-queue`, {
@@ -334,7 +343,7 @@ function ebayRenderQueueListHtml() {
       <div class="recent-row" style="align-items:center">
         <div class="recent-info">
           <div class="rc-name">${title}</div>
-          <div class="rc-date">${price} · ${l.format || 'FixedPrice'} · ${when}</div>
+          <div class="rc-date">${price} · ${l.format || 'FixedPrice'} · ${when}${l.adRate ? ` · Promoted ${l.adRate}%` : ''}</div>
           <div id="el-pub-status-${safeId}" style="font-size:12px;margin-top:2px"></div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
@@ -526,7 +535,11 @@ async function ebayPublishQueue() {
       const data = await res.json();
       if (res.ok && data.ok) {
         ok++;
-        ebaySetPubStatus(itemId, mode === 'live' ? `✓ Listed (#${data.listingId})` : `✓ Scheduled (#${data.listingId})`, 'var(--up)');
+        let msg = mode === 'live' ? `✓ Listed (#${data.listingId})` : `✓ Scheduled (#${data.listingId})`;
+        let color = 'var(--up)';
+        if (data.promo && data.promo.ok) msg += ` · promoted ${data.promo.rate}%`;
+        else if (data.promo && data.promo.error) { msg += ` · ⚠ not promoted: ${data.promo.error.message || data.promo.error}`; color = 'var(--tx2)'; }
+        ebaySetPubStatus(itemId, msg, color);
         await ebayRemoveFromQueue(itemId);
       } else {
         failed++;
