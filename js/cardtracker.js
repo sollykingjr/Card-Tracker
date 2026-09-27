@@ -14,7 +14,7 @@ let ctFilterSets = [];           // OR within category
 let ctFilterSerial = false;      // checked = only serial-numbered
 let ctFilterGraded = false;      // checked = only graded
 let ctFilterInHand = false;      // checked = only in-hand
-let ctExcludeListed = false;     // checked = hide cards tagged Listed
+let ctFilterListed = 'all';      // 'all' | 'exclude' | 'only' (tagged Listed)
 
 function ctOpenSearch(query) {
   ctQuery = query;
@@ -387,7 +387,7 @@ function ctFiltersActiveCount() {
   let n = 0;
   if (ctFilterSold !== 'all') n++;
   if (ctFilterInHand) n++;
-  if (ctExcludeListed) n++;
+  if (ctFilterListed !== 'all') n++;
   if (ctFilterSerial) n++;
   if (ctFilterGraded) n++;
   if (ctFilterTags.length) n++;
@@ -416,10 +416,12 @@ function ctFilterPanelHTML(scope) {
       <button class="schip${ctFilterSold==='only'?' on':''}" onclick="ctSetFilterSold('only')" style="flex:1;padding:8px;font-size:11px">Sold Only</button>
     </div>
 
-    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">In Hand</div>
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">In Hand / eBay</div>
     <div style="display:flex;gap:6px;margin-bottom:20px">
+      <button class="schip${ctFilterListed==='all'?' on':''}" onclick="ctSetFilterListed('all')" style="flex:1;padding:8px;font-size:11px">All</button>
+      <button class="schip${ctFilterListed==='exclude'?' on':''}" onclick="ctSetFilterListed('exclude')" style="flex:1;padding:8px;font-size:11px">Exclude eBay Listings</button>
+      <button class="schip${ctFilterListed==='only'?' on':''}" onclick="ctSetFilterListed('only')" style="flex:1;padding:8px;font-size:11px">eBay Listings Only</button>
       <button class="schip${ctFilterInHand?' on':''}" onclick="ctToggleFilterInHand()" style="flex:1;padding:8px;font-size:11px">In Hand Only</button>
-      <button class="schip${ctExcludeListed?' on':''}" onclick="ctToggleExcludeListed()" style="flex:1;padding:8px;font-size:11px">Exclude eBay Listings</button>
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
@@ -458,7 +460,7 @@ function ctCloseFilters() {
 function ctResetFilters() {
   ctFilterSold = 'all';
   ctFilterInHand = false;
-  ctExcludeListed = false;
+  ctFilterListed = 'all';
   ctFilterSerial = false;
   ctFilterGraded = false;
   ctFilterTags = [];
@@ -477,8 +479,8 @@ function ctToggleFilterInHand() {
   ctRenderBody();
 }
 
-function ctToggleExcludeListed() {
-  ctExcludeListed = !ctExcludeListed;
+function ctSetFilterListed(val) {
+  ctFilterListed = val;
   ctPage = 1;
   ctRenderFilterContent();
   ctRenderBody();
@@ -699,7 +701,8 @@ function ctFilterCategoryMatch(c) {
   if (ctFilterSerial && !c.serialNo) return false;
   if (ctFilterGraded && !c.grade) return false;
   if (ctFilterInHand && !ctIsInHand(c)) return false;
-  if (ctExcludeListed && ctGetTags(c).includes('Listed')) return false;
+  if (ctFilterListed === 'exclude' && ctGetTags(c).includes('Listed')) return false;
+  if (ctFilterListed === 'only' && !ctGetTags(c).includes('Listed')) return false;
 
   if (ctFilterSports.length && !ctFilterSports.includes(c.sport)) return false;
   if (ctFilterYears.length && !ctFilterYears.includes(String(c.year))) return false;
