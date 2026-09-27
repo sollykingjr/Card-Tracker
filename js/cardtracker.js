@@ -608,9 +608,11 @@ function ctListRowHTML(c) {
           <div style="font-size:16px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-          ${inHand ? '<span class="badge b5">In Hand</span>' : ''}
-          ${listed ? '<span class="badge b3">Listed</span>' : ''}
-          ${c.salePrice ? '<span class="badge" style="background:rgba(248,113,113,.15);color:var(--dn)">Sold</span>' : ''}
+          <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px">
+            ${inHand ? '<span class="badge b5">In Hand</span>' : ''}
+            ${listed ? '<span class="badge b3">Listed</span>' : ''}
+            ${c.salePrice ? '<span class="badge" style="background:rgba(248,113,113,.15);color:var(--dn)">Sold</span>' : ''}
+          </div>
           ${tags.length ? `<div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px">${tags.map(t => `<span style="padding:2px 8px;border-radius:20px;background:var(--surf2);border:1px solid var(--bdr2);color:var(--tx2);font-size:10px;font-weight:600">${t}</span>`).join('')}</div>` : ''}
         </div>
       </div>
