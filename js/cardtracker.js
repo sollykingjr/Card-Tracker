@@ -769,6 +769,13 @@ function ctCopyId(id, btn) {
   }).catch(()=>{});
 }
 
+// Copies the card's full name (same text as the modal title), e.g. for a Card Ladder search.
+function ctCopyName(idx, btn) {
+  const c = cards[idx];
+  if (!c) return;
+  ctCopyId(c.fullCard || c.playerDisplay || '', btn);
+}
+
 function ctToggleMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById('ct-menu');
@@ -829,7 +836,10 @@ function ctOpenCard(idx) {
         return `<div class="scard"><div class="slbl">Sale Date</div><div class="sval">—</div></div>`;
       })()}
     </div>
-     <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="width:100%;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px">Copy Item ID</button>
+     <div style="display:flex;gap:8px;margin-top:4px">
+       <button onclick="ctCopyId('${(c.itemId||'').replace(/'/g,"\\'")}', this)" style="flex:1;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Copy Item ID</button>
+       <button onclick="ctCopyName(${idx}, this)" style="flex:1;height:40px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Copy Item Name</button>
+     </div>
     <div id="ct-inhand" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
