@@ -192,6 +192,20 @@ let ebayDraft = null; // { itemId, listing }
 let ebayScanState = { front: 'loading', back: 'loading' };
 let ebayLiveState = { state: 'loading' }; // live eBay check: active | scheduled | none | unknown
 
+// Swap the modal to a new screen and start it at the top. Without the reset the Review
+// page opens scrolled to where the (longer) form was, and iOS Safari can lock the
+// scroll area when its content is replaced while scrolled past the new bottom.
+function ebayShowScreen(html) {
+  const content = document.getElementById('mcontent');
+  const scroller = content.closest('.modal') || content.parentElement;
+  content.innerHTML = html;
+  if (scroller) {
+    scroller.scrollTop = 0;
+    // Nudge iOS to re-measure the scroll area on the next frame.
+    requestAnimationFrame(() => { scroller.style.overflowY = 'hidden'; void scroller.offsetHeight; scroller.style.overflowY = ''; scroller.scrollTop = 0; });
+  }
+}
+
 // ── 1) Form ──
 async function ebayOpenListingForm(itemId, keepDraft) {
   const c = cards.find(x => x.itemId === itemId);
@@ -265,7 +279,7 @@ async function ebayOpenListingForm(itemId, keepDraft) {
     </div>
   `;
 
-  document.getElementById('mcontent').innerHTML = html;
+  ebayShowScreen(html);
 }
 
 function ebaySetCardType(type) {
@@ -475,7 +489,7 @@ function ebayReviewListing(itemId, useDraft) {
       </button>
     </div>
   `;
-  document.getElementById('mcontent').innerHTML = html;
+  ebayShowScreen(html);
   ebayRenderChecks();
 }
 
@@ -559,7 +573,7 @@ function ebayRenderResult(ok, data, httpStatus, networkError) {
         Try again
       </button>`;
   }
-  document.getElementById('mcontent').innerHTML = `
+  ebayShowScreen(`
     <div class="section-hdr">List on eBay</div>
-    <div style="margin-top:20px;text-align:center">${body}</div>`;
+    <div style="margin-top:20px;text-align:center">${body}</div>`);
 }
