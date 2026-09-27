@@ -9,7 +9,8 @@ let watchlistSelected = new Set();
 // ── Search URLs ───────────────────────────────────────────────────────────────
 const searchUrl = {
   cardladder: q => `https://app.cardladder.com/sales-history?q=${encodeURIComponent(q)}&direction=desc`,
-  comc:       q => `https://www.comc.com/Cards,sr,=${q.replace(/ /g,'+')},i100`,
+  // COMC puts the query in the path, so strip characters that would cut it off (# ? /) or break it (% & ,).
+  comc:       q => `https://www.comc.com/Cards,sr,=${q.replace(/[#?\/%&,]/g, ' ').trim().replace(/\s+/g, '+')},i100`,
   ebay:       q => `https://www.ebay.com/sch/212/i.html?_nkw=${encodeURIComponent(q)}&_from=R40`,
 };
 
