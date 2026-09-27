@@ -11,7 +11,7 @@ import {
   handleScan, handleScanBatch, handleCardMetaAll, handleCardMetaPost, handleCardMetaInHandAll,
   handleComcPulledAll, handleComcPulledPost, handleComcPulledInvalidateScans,
   handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear,
-  handleCardImage, handleEbayQueuePost, handleEbayQueueAll, handleEbayQueueRemove
+  handleCardImage
 } from './worker/cardmeta.js';
 import { handleDebugRawWatchlist } from './worker/debug.js';
 import { handleEbayPublish } from './worker/ebay-publish.js';
@@ -34,8 +34,6 @@ const PROTECTED_ROUTES = new Set([
   'POST:/comc-pulled',
   'POST:/card-override',
   'POST:/card-override-pending-clear',
-  'POST:/ebay-queue',
-  'POST:/ebay-queue-remove',
   'POST:/ebay-publish',
   'GET:/test-promotions',
   'GET:/comc-pulled-invalidate-scans',
@@ -122,9 +120,6 @@ export default {
     if (path === '/card-override' && request.method === 'POST') return handleCardOverride(request, env, cors);
     if (path === '/card-override-pending-all' && request.method === 'GET') return handleCardOverridePendingAll(env, cors);
     if (path === '/card-override-pending-clear' && request.method === 'POST') return handleCardOverridePendingClear(request, env, cors);
-    if (path === '/ebay-queue' && request.method === 'POST') return handleEbayQueuePost(request, env, cors);
-    if (path === '/ebay-queue-all' && request.method === 'GET') return handleEbayQueueAll(env, cors);
-    if (path === '/ebay-queue-remove' && request.method === 'POST') return handleEbayQueueRemove(request, env, cors);
     if (path === '/ebay-publish' && request.method === 'POST') return handleEbayPublish(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);

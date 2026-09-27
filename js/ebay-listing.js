@@ -1,19 +1,4 @@
-// ── ebay-listing.js — per-card eBay listing form: open, save, load, remove ──
-let ebayQueueCache = {}; // itemId -> saved listing object, hydrated from /ebay-queue-all
-let ebayQueueLoaded = false;
-
-async function ebayLoadQueue() {
-  if (ebayQueueLoaded) return ebayQueueCache;
-  try {
-    const res = await fetch(`${WORKER_URL}/ebay-queue-all`);
-    if (res.ok) {
-      ebayQueueCache = await res.json();
-      ebayQueueLoaded = true;
-    }
-  } catch (e) {}
-  return ebayQueueCache;
-}
-
+// ── ebay-listing.js — per-card eBay listing: form → review (with checks) → publish ──
 function ebayGuessGraderGrade(gradeText) {
   const t = (gradeText || '').trim();
   if (!t) return { grader: '', grade: '' };
@@ -171,13 +156,50 @@ function ebayScheduleProblem(l) {
   return null;
 }
 
-async function ebayOpenListingForm(itemId) {
+// ── Shipping policies (business policy IDs) ──
+const EBAY_SHIPPING_OPTIONS = [
+  { id: '254806132017', label: 'PWE - Not Flat Rate' },
+  { id: '239080494017', label: 'Calculated Bubble Mailers' },
+  { id: '251924633017', label: 'PWE Free Shipping' }
+];
+
+function ebayShippingLabel(id) {
+  const o = EBAY_SHIPPING_OPTIONS.find(x => x.id === id);
+  return o ? o.label : id;
+}
+
+function ebayDefaultShippingId() {
+  let saved = '';
+  try { saved = localStorage.getItem('ebayShippingPolicyId') || ''; } catch (e) {}
+  return EBAY_SHIPPING_OPTIONS.some(o => o.id === saved) ? saved : EBAY_SHIPPING_OPTIONS[0].id;
+}
+
+// Grader/grade names eBay recognizes (mirrors worker/ebay-publish.js).
+const EBAY_GRADERS = ['PSA', 'BCCG', 'BVG', 'BGS', 'CSG', 'CGC', 'SGC', 'KSA', 'GMA', 'HGA', 'ISA', 'PCA', 'GSG', 'PGS', 'MNT', 'TAG', 'RCG', 'PCG', 'ACE', 'CGA', 'TCG', 'ARK', 'OTHER'];
+const EBAY_GRADES = ['10', '9.5', '9', '8.5', '8', '7.5', '7', '6.5', '6', '5.5', '5', '4.5', '4', '3.5', '3', '2.5', '2', '1.5', '1', 'AUTHENTIC'];
+
+function ebayEsc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function ebayMoney(v) {
+  const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// In-memory draft so "Back to Edit" keeps everything typed. Nothing is saved server-side.
+let ebayDraft = null; // { itemId, listing }
+let ebayScanState = { front: 'loading', back: 'loading' };
+
+// ── 1) Form ──
+async function ebayOpenListingForm(itemId, keepDraft) {
   const c = cards.find(x => x.itemId === itemId);
   if (!c) return;
+  const l = (keepDraft && ebayDraft && ebayDraft.itemId === itemId) ? ebayDraft.listing : ebayBuildDefaultListing(c);
+  if (!l.shippingPolicyId) l.shippingPolicyId = ebayDefaultShippingId();
 
-  await ebayLoadQueue();
-  const existing = ebayQueueCache[itemId];
-  const l = existing || ebayBuildDefaultListing(c);
+  const shipOptions = EBAY_SHIPPING_OPTIONS
+    .map(o => `<option value="${o.id}" ${o.id === l.shippingPolicyId ? 'selected' : ''}>${o.label}</option>`).join('');
 
   const html = `
     <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
@@ -230,10 +252,14 @@ async function ebayOpenListingForm(itemId) {
       ${l.isGraded ? ebayField('Grader', 'el-grader', l.grader) : ''}
       ${l.isGraded ? ebayField('Grade', 'el-grade', l.grade) : ''}
       ${ebayField('Country of Origin', 'el-country', l.country)}
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Shipping Policy</div>
+        <select id="el-shipping" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">${shipOptions}</select>
+      </div>
       <input type="hidden" id="el-isGraded" value="${l.isGraded ? '1' : ''}">
-      <button onclick="ebaySaveListing('${itemId.replace(/'/g, "\\'")}')"
+      <button onclick="ebayReviewListing('${itemId.replace(/'/g, "\\'")}')"
         style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">
-        Save to Queue
+        Review
       </button>
     </div>
   `;
@@ -253,27 +279,26 @@ function ebaySetCardType(type) {
   tcgBtn.style.color = type === 'tcg' ? 'var(--acc)' : 'var(--tx2)';
 }
 
-async function ebaySaveListing(itemId) {
+function ebayCollectForm(itemId) {
   const val = id => document.getElementById(id)?.value ?? '';
   const checked = id => document.getElementById(id)?.checked ?? false;
   const isGraded = val('el-isGraded') === '1';
-
   const cardType = val('el-cardType') || 'sports';
-
-  const listing = {
+  return {
     itemId,
     cardType,
     game: cardType === 'tcg' ? val('el-game') : '',
-    title: val('el-title'),
+    title: val('el-title').trim(),
     price: val('el-price'),
     quantity: val('el-quantity') || 1,
     format: val('el-format'),
-    allowOffers: checked('el-allowOffers'),
+    allowOffers: val('el-format') === 'FixedPrice' && checked('el-allowOffers'),
     offerAuto: val('el-offerAuto'),
     offerMin: val('el-offerMin'),
     adRate: val('el-adRate').trim(),
     action: ebayNormalizeAction(val('el-action')),
     schedule: val('el-action') === 'scheduled' ? val('el-schedule') : '',
+    shippingPolicyId: val('el-shipping'),
     description: val('el-description'),
     condition: isGraded ? '' : val('el-condition'),
     sport: cardType === 'sports' ? val('el-sport') : '',
@@ -292,320 +317,224 @@ async function ebaySaveListing(itemId) {
     country: val('el-country'),
     isGraded
   };
+}
 
-  const schedProblem = ebayScheduleProblem(listing);
-  if (schedProblem) { alert(schedProblem); return; }
-  if (listing.adRate !== '') {
-    const r = parseFloat(listing.adRate);
-    if (isNaN(r) || r < 2 || r > 100) { alert('Promote % must be between 2 and 100 (or blank).'); return; }
+// ── 2) Checks ── blocks stop publishing; warnings can be published past.
+function ebayRunChecks(itemId, l) {
+  const blocks = [], warns = [];
+  const c = cards.find(x => x.itemId === itemId) || {};
+
+  const tags = typeof ctGetTags === 'function' ? ctGetTags(c) : [];
+  if (tags.includes('Sold')) blocks.push('This card is tagged Sold');
+  else if (tags.includes('Listed')) blocks.push('This card is already tagged Listed on eBay');
+
+  const price = ebayMoney(l.price);
+  if (price === null || price <= 0) blocks.push('Price is missing');
+  if (!l.title) blocks.push('Title is missing');
+  else if (l.title.length > 80) warns.push(`Title is ${l.title.length} characters — eBay will cut it to 80`);
+
+  if (!l.shippingPolicyId) blocks.push('Shipping policy is missing');
+
+  const sched = ebayScheduleProblem(l);
+  if (sched) blocks.push(sched);
+
+  if (l.adRate !== '' && l.adRate !== undefined) {
+    const r = parseFloat(l.adRate);
+    if (isNaN(r) || r < 2 || r > 100) blocks.push('Promote % must be between 2 and 100 (or blank)');
   }
 
-  try {
-    await fetch(`${WORKER_URL}/ebay-queue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-      body: JSON.stringify(listing)
-    });
-    ebayQueueCache[itemId] = listing;
-    document.getElementById('mcontent').innerHTML = _modalMainHtml;
-  } catch (e) {
-    alert('Could not save to queue: ' + e.message);
-  }
-}
-
-async function ebayRemoveFromQueue(itemId) {
-  try {
-    await fetch(`${WORKER_URL}/ebay-queue-remove`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-      body: JSON.stringify({ itemId })
-    });
-    delete ebayQueueCache[itemId];
-  } catch (e) {}
-}
-
-function ebayRenderQueueListHtml() {
-  const entries = Object.entries(ebayQueueCache);
-  if (!entries.length) {
-    return `
-      <div class="section-hdr">eBay Queue</div>
-      <div class="empty-msg" style="margin-top:12px">No cards queued yet.</div>
-    `;
-  }
-  const rows = entries.map(([itemId, l]) => {
-    const c = cards.find(x => x.itemId === itemId);
-    const title = l.title || (c ? c.fullCard : itemId);
-    const price = l.price ? `$${parseFloat(l.price).toFixed(2)}` : '—';
-    const action = ebayNormalizeAction(l.action);
-    const when = action === 'live' ? 'Live' : (l.schedule ? `Scheduled ${new Date(l.schedule).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Scheduled (no time set)');
-    const safeId = itemId.replace(/[^A-Za-z0-9_-]/g, '_');
-    return `
-      <div class="recent-row" style="align-items:center">
-        <div class="recent-info">
-          <div class="rc-name">${title}</div>
-          <div class="rc-date">${price} · ${l.format || 'FixedPrice'} · ${when}${l.adRate ? ` · Promoted ${l.adRate}%` : ''}</div>
-          <div id="el-pub-status-${safeId}" style="font-size:12px;margin-top:2px"></div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0">
-          <button onclick="ebayEditFromQueue('${itemId.replace(/'/g, "\\'")}')" style="padding:6px 10px;font-size:11px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-weight:700;cursor:pointer;font-family:inherit">Edit</button>
-          <button onclick="ebayRemoveFromQueueUI('${itemId.replace(/'/g, "\\'")}')" style="padding:6px 10px;font-size:11px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-weight:700;cursor:pointer;font-family:inherit">Remove</button>
-        </div>
-      </div>`;
-  }).join('');
-
-  const SHIPPING_OPTIONS = [
-    'PWE - Not Flat Rate - (ID: 254806132017)',
-    'Calculated Bubble Mailers - (ID: 239080494017)',
-    'PWE Free Shipping - (ID: 251924633017)'
-  ];
-  const lastShipping = localStorage.getItem('ebayShippingPolicy') || SHIPPING_OPTIONS[0];
-  const shippingOptionsHtml = SHIPPING_OPTIONS.map(o => `<option value="${o}" ${o === lastShipping ? 'selected' : ''}>${o}</option>`).join('');
-
-  return `
-    <div class="section-hdr">eBay Queue (${entries.length})</div>
-    <div style="margin-top:12px">${rows}</div>
-    <div style="margin-top:16px">
-      <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Shipping Policy (this export)</div>
-      <select id="el-export-shipping" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">${shippingOptionsHtml}</select>
-    </div>
-    <button id="ebay-publish-btn" onclick="ebayPublishQueue()" style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px">Publish to eBay</button>
-    <button id="ebay-export-btn" onclick="ebayExportQueue()" style="width:100%;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">Export CSV instead</button>
-  `;
-}
-
-async function ebayOpenQueueModal() {
-  await ebayLoadQueue();
-  _modalMainHtml = ebayRenderQueueListHtml();
-  document.getElementById('mcontent').innerHTML = _modalMainHtml;
-  document.getElementById('mwrap').classList.add('on');
-}
-
-function ebayEditFromQueue(itemId) {
-  _modalMainHtml = ebayRenderQueueListHtml();
-  ebayOpenListingForm(itemId);
-}
-
-async function ebayRemoveFromQueueUI(itemId) {
-  await ebayRemoveFromQueue(itemId);
-  _modalMainHtml = ebayRenderQueueListHtml();
-  document.getElementById('mcontent').innerHTML = _modalMainHtml;
-}
-
-const EBAY_CSV_HEADERS = ["*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)","CustomLabel","*Category","StoreCategory","*Title","Subtitle","Relationship","RelationshipDetails","ScheduleTime","*ConditionID","CD:Professional Grader - (ID: 27501)","CD:Grade - (ID: 27502)","CDA:Certification Number - (ID: 27503)","CD:Card Condition - (ID: 40001)","*C:Sport","C:Player/Athlete","C:Manufacturer","C:Season","C:Parallel/Variety","C:Features","C:Set","C:Team","C:League","C:Autographed","C:Card Name","C:Card Number","C:Type","C:Year Manufactured","C:Signed By","C:Autograph Authentication","C:Card Size","C:Country of Origin","C:Material","C:Event/Tournament","C:Autograph Format","C:Vintage","C:Language","C:Original/Licensed Reprint","C:Autograph Authentication Number","C:California Prop 65 Warning","C:Card Thickness","C:Customized","C:Insert Set","C:Print Run","*C:Game","C:Character","C:Card Type","C:Age Level","C:Speciality","C:Rarity","C:Finish","C:Attribute/MTG:Color","C:Creature/Monster Type","C:Stage","C:Convention/Event","C:Franchise","C:Illustrator","C:HP","C:Attack/Power","C:Defense/Toughness","C:Cost","PicURL","GalleryType","VideoID","*Description","*Format","*Duration","*StartPrice","BuyItNowPrice","BestOfferEnabled","BestOfferAutoAcceptPrice","MinimumBestOfferPrice","*Quantity","ImmediatePayRequired","*Location","ShippingType","ShippingService-1:Option","ShippingService-1:Cost","ShippingService-2:Option","ShippingService-2:Cost","*DispatchTimeMax","PromotionalShippingDiscount","ShippingDiscountProfileID","*ReturnsAcceptedOption","ReturnsWithinOption","RefundOption","ShippingCostPaidByOption","AdditionalDetails","ShippingProfileName","ReturnProfileName","PaymentProfileName","Product Safety Pictograms","Product Safety Statements","Product Safety Component","Regulatory Document Ids","Manufacturer Name","Manufacturer AddressLine1","Manufacturer AddressLine2","Manufacturer City","Manufacturer Country","Manufacturer PostalCode","Manufacturer StateOrProvince","Manufacturer Phone","Manufacturer Email","Manufacturer ContactURL","Responsible Person 1","Responsible Person 1 Type","Responsible Person 1 AddressLine1","Responsible Person 1 AddressLine2","Responsible Person 1 City","Responsible Person 1 Country","Responsible Person 1 PostalCode","Responsible Person 1 StateOrProvince","Responsible Person 1 Phone","Responsible Person 1 Email","Responsible Person 1 ContactURL"];
-
-const EBAY_CONDITION_MAP = {
-  'Near mint or better': 'Near mint or better - (ID: 400010)',
-  'Excellent': 'Excellent - (ID: 400011)',
-  'Very good': 'Very good - (ID: 400012)',
-  'Poor': 'Poor - (ID: 400013)'
-};
-
-const EBAY_MANUAL_SHIPPING_COSTS = {
-  'PWE - Not Flat Rate - (ID: 254806132017)': { cost: '1.25', service: 'US_eBayStandardEnvelope' },
-  'Calculated Bubble Mailers - (ID: 239080494017)': { cost: '5.85', service: 'USPSParcel' }
-};
-
-function ebayCsvEscape(val) {
-  const s = String(val ?? '');
-  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-  return s;
-}
-
-function ebayBuildCsvRowMap(itemId, l, shippingChoice) {
-  const isSports = (l.cardType || 'sports') === 'sports';
-  const map = {};
-  const set = (header, val) => { if (val !== '' && val !== undefined && val !== null) map[header] = val; };
-
-  set('*Action(SiteID=US|Country=US|Currency=USD|Version=1193|CC=UTF-8)', 'Add');
-  set('CustomLabel', itemId);
-  set('*Category', isSports ? '261328' : '183454');
-  set('*Title', l.title);
-  if (ebayNormalizeAction(l.action) === 'scheduled' && l.schedule) {
-    const d = new Date(l.schedule);
-    if (!isNaN(d.getTime())) set('ScheduleTime', d.toISOString());
-  }
-  set('*ConditionID', l.isGraded ? '2750' : '4000');
   if (l.isGraded) {
-    set('CD:Professional Grader - (ID: 27501)', l.grader);
-    set('CD:Grade - (ID: 27502)', l.grade);
-  } else {
-    set('CD:Card Condition - (ID: 40001)', EBAY_CONDITION_MAP[l.condition] || l.condition);
+    if (!EBAY_GRADERS.includes((l.grader || '').trim().toUpperCase())) blocks.push(`Grader "${l.grader || ''}" isn't one eBay recognizes (e.g. PSA, BGS, SGC, CGC)`);
+    if (!EBAY_GRADES.includes((l.grade || '').trim().toUpperCase())) blocks.push(`Grade "${l.grade || ''}" isn't one eBay recognizes (e.g. 10, 9.5, 9)`);
   }
-  if (isSports) {
-    set('*C:Sport', l.sport);
-    set('C:Player/Athlete', l.player);
-    set('C:Team', l.team);
-    set('C:League', l.league);
-    set('C:Autographed', l.autographed);
-  } else {
-    set('*C:Game', l.game);
-  }
-  set('C:Manufacturer', l.manufacturer);
-  set('C:Season', l.season);
-  set('C:Parallel/Variety', l.parallel);
-  if (l.printRun) set('C:Features', 'Serial Numbered');
-  set('C:Set', l.set);
-  set('C:Card Number', l.cardNo);
-  set('C:Year Manufactured', l.season);
-  set('C:Country of Origin', l.country);
-  set('C:Print Run', l.printRun);
-  set('PicURL', `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg|https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`);
-  set('*Description', l.description);
-  set('*Format', l.format);
-  set('*Duration', l.format === 'Auction' ? '7' : 'GTC');
-  set('*StartPrice', l.price);
-  if (l.format === 'FixedPrice' && l.allowOffers) {
-    set('BestOfferEnabled', 'true');
-    set('BestOfferAutoAcceptPrice', l.offerAuto);
-    set('MinimumBestOfferPrice', l.offerMin);
-  }
-  set('*Quantity', l.quantity || 1);
-  set('*Location', '10022');
-  set('*DispatchTimeMax', '1');
 
-  const manualShip = EBAY_MANUAL_SHIPPING_COSTS[shippingChoice];
-  if (manualShip) {
-    set('ShippingType', 'Flat');
-    set('ShippingService-1:Option', manualShip.service);
-    set('ShippingService-1:Cost', manualShip.cost);
-  } else {
-    set('ShippingProfileName', shippingChoice);
-  }
-  set('ReturnProfileName', 'Mascot - No returns accepted - (ID: 238602691017)');
-  set('PaymentProfileName', 'eBay Managed Payments BIN - (ID: 239080495017)');
+  if (ebayScanState.front === 'missing') blocks.push('Front scan is missing');
+  if (ebayScanState.back === 'missing') warns.push('Back scan is missing — will list with the front only');
 
-  return map;
+  const cost = ebayMoney(c.purchasePrice);
+  if (price !== null && cost !== null && cost > 0 && price < cost) warns.push(`Price $${price.toFixed(2)} is below what you paid ($${cost.toFixed(2)})`);
+
+  if (l.allowOffers && price !== null) {
+    const auto = ebayMoney(l.offerAuto), min = ebayMoney(l.offerMin);
+    if (auto !== null && auto >= price) warns.push(`Auto-accept ($${auto.toFixed(2)}) is at or above the price`);
+    if (min !== null && min >= price) warns.push(`Minimum offer ($${min.toFixed(2)}) is at or above the price`);
+    if (auto !== null && min !== null && min > auto) warns.push(`Minimum offer ($${min.toFixed(2)}) is above auto-accept ($${auto.toFixed(2)})`);
+  }
+
+  const scansPending = ebayScanState.front === 'loading' || ebayScanState.back === 'loading';
+  return { blocks, warns, scansPending };
 }
 
-function ebayBuildCsvLine(map) {
-  return EBAY_CSV_HEADERS.map(h => ebayCsvEscape(map[h] || '')).join(',');
+function ebayRenderChecks() {
+  if (!ebayDraft) return;
+  const { blocks, warns, scansPending } = ebayRunChecks(ebayDraft.itemId, ebayDraft.listing);
+  const box = document.getElementById('el-checks');
+  const btn = document.getElementById('el-publish-btn');
+  if (!box || !btn) return;
+
+  const row = (icon, text, color) => `<div style="display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:1.4;color:${color};margin-bottom:6px"><span>${icon}</span><span>${ebayEsc(text)}</span></div>`;
+  let html = blocks.map(b => row('🛑', b, 'var(--dn)')).join('') + warns.map(w => row('⚠', w, 'var(--tx2)')).join('');
+  if (scansPending) html += row('…', 'Checking scans', 'var(--tx3)');
+  if (!blocks.length && !warns.length && !scansPending) html = row('✓', 'All checks passed', 'var(--up)');
+  box.innerHTML = html;
+
+  const canPublish = !blocks.length && !scansPending;
+  btn.disabled = !canPublish;
+  btn.style.opacity = canPublish ? '1' : '.45';
+  btn.style.cursor = canPublish ? 'pointer' : 'not-allowed';
+  btn.textContent = blocks.length ? 'Fix the issues above to publish'
+    : scansPending ? 'Checking scans…'
+    : warns.length ? `Publish anyway (${warns.length} warning${warns.length > 1 ? 's' : ''})`
+    : 'Publish';
 }
 
-function ebayShippingPolicyId(choice) {
-  const m = (choice || '').match(/\(ID:\s*(\d+)\)/);
-  return m ? m[1] : '';
+function ebayScanLoaded(side, ok) {
+  ebayScanState[side] = ok ? 'ok' : 'missing';
+  const img = document.getElementById(`el-scan-${side}`);
+  if (img && !ok) img.parentElement.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--dn)">No ${side} scan</div>`;
+  ebayRenderChecks();
 }
 
-function ebaySetPubStatus(itemId, text, color) {
-  const el = document.getElementById(`el-pub-status-${itemId.replace(/[^A-Za-z0-9_-]/g, '_')}`);
-  if (el) { el.textContent = text; el.style.color = color; }
+// ── 3) Review page ──
+function ebayReviewListing(itemId, useDraft) {
+  const l = (useDraft && ebayDraft && ebayDraft.itemId === itemId) ? ebayDraft.listing : ebayCollectForm(itemId);
+  ebayDraft = { itemId, listing: l };
+  ebayScanState = { front: 'loading', back: 'loading' };
+  try { localStorage.setItem('ebayShippingPolicyId', l.shippingPolicyId); } catch (e) {}
+
+  const price = ebayMoney(l.price);
+  const when = ebayNormalizeAction(l.action) === 'live'
+    ? 'Live now'
+    : (l.schedule ? new Date(l.schedule).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'No start time');
+  const offers = !l.allowOffers ? 'Off'
+    : [l.offerAuto ? `auto-accept $${ebayMoney(l.offerAuto)?.toFixed(2)}` : null, l.offerMin ? `min $${ebayMoney(l.offerMin)?.toFixed(2)}` : null].filter(Boolean).join(' · ') || 'On';
+  const cond = l.isGraded ? `${l.grader} ${l.grade}` : (l.condition || '—');
+  const img = side => `https://card-app.maxcsolomon.workers.dev/card-image/${encodeURIComponent(itemId)}-${side}.jpg`;
+  const scanBox = side => `
+    <div style="flex:1;aspect-ratio:5/7;border:1px solid var(--bdr2);border-radius:8px;overflow:hidden;background:var(--surf2)">
+      <img id="el-scan-${side}" src="${img(side)}" alt="${side}" style="width:100%;height:100%;object-fit:contain;display:block"
+        onload="ebayScanLoaded('${side}', true)" onerror="ebayScanLoaded('${side}', false)">
+    </div>`;
+  const line = (label, value) => `
+    <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)">
+      <div style="font-size:13px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">${label}</div>
+      <div style="font-size:16px;color:var(--tx);font-weight:600;text-align:right">${value}</div>
+    </div>`;
+
+  const html = `
+    <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
+      <button onclick="ebayOpenListingForm('${itemId.replace(/'/g, "\\'")}', true)"
+        style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0">
+        ← Back to Edit
+      </button>
+    </div>
+    <div class="section-hdr">Review Listing</div>
+    <div style="margin-top:12px">
+      <div style="display:flex;gap:10px;margin-bottom:14px">${scanBox('front')}${scanBox('back')}</div>
+      <div style="font-size:20px;font-weight:700;line-height:1.3;color:var(--tx)">${ebayEsc(l.title) || '<span style="color:var(--dn)">No title</span>'}</div>
+      <div style="font-size:12px;color:${l.title.length > 80 ? 'var(--dn)' : 'var(--tx3)'};margin:4px 0 10px">${l.title.length}/80 characters</div>
+      ${line('Price', price !== null ? `$${price.toFixed(2)}` : '<span style="color:var(--dn)">Missing</span>')}
+      ${line('Format', l.format === 'Auction' ? 'Auction (7 days)' : 'Fixed price')}
+      ${l.format === 'FixedPrice' ? line('Offers', ebayEsc(offers)) : ''}
+      ${line('Posting', ebayEsc(when))}
+      ${line('Shipping', ebayEsc(ebayShippingLabel(l.shippingPolicyId)))}
+      ${line('Promoted', l.adRate ? `${ebayEsc(l.adRate)}%` : 'No')}
+      ${line('Condition', ebayEsc(cond))}
+      <div style="margin-top:16px">
+        <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Checks</div>
+        <div id="el-checks"></div>
+      </div>
+      <button id="el-publish-btn" onclick="ebayPublishListing()"
+        style="width:100%;height:48px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px">
+        Publish
+      </button>
+    </div>
+  `;
+  document.getElementById('mcontent').innerHTML = html;
+  ebayRenderChecks();
 }
 
-async function ebayPublishQueue() {
-  const entries = Object.entries(ebayQueueCache);
-  if (!entries.length) { alert('Queue is empty.'); return; }
+// ── 4) Publish + result ──
+async function ebayPublishListing() {
+  if (!ebayDraft) return;
+  const { itemId, listing: l } = ebayDraft;
+  const { blocks, scansPending } = ebayRunChecks(itemId, l);
+  if (blocks.length || scansPending) { ebayRenderChecks(); return; }
 
-  const shippingChoice = document.getElementById('el-export-shipping')?.value;
-  const shippingPolicyId = ebayShippingPolicyId(shippingChoice);
-  if (!shippingPolicyId) { alert('Pick a shipping policy first.'); return; }
-  localStorage.setItem('ebayShippingPolicy', shippingChoice);
+  const btn = document.getElementById('el-publish-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
 
-  // Catch bad schedules before anything is sent to eBay.
-  const problems = entries
-    .map(([id, l]) => [id, l, ebayScheduleProblem(l)])
-    .filter(([, , p]) => p);
-  if (problems.length) {
-    problems.forEach(([id, , p]) => ebaySetPubStatus(id, `⚠ ${p} — edit before publishing`, 'var(--dn)'));
-    alert(`${problems.length} card(s) need a valid start time (within 3 weeks). Nothing was published.`);
-    return;
-  }
-
-  const liveCount = entries.filter(([, l]) => ebayNormalizeAction(l.action) === 'live').length;
-  const schedCount = entries.length - liveCount;
-  if (!confirm(`Publish ${entries.length} card(s) to eBay?\n\n${liveCount} live now · ${schedCount} scheduled`)) return;
-
-  const btn = document.getElementById('ebay-publish-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
-
-  let ok = 0, failed = 0;
-  const failures = {}; // itemId -> error text, re-shown after the list refreshes
-  const promoNotes = [];
-  for (const [itemId, l] of entries) {
-    ebaySetPubStatus(itemId, 'Publishing…', 'var(--tx3)');
-    const mode = ebayNormalizeAction(l.action);
-    try {
-      const res = await fetch(`${WORKER_URL}/ebay-publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-        body: JSON.stringify({
-          itemId,
-          shippingPolicyId,
-          mode,
-          startDate: mode === 'scheduled' ? new Date(l.schedule).toISOString() : undefined
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        ok++;
-        let msg = mode === 'live' ? `✓ Listed (#${data.listingId})` : `✓ Scheduled (#${data.listingId})`;
-        let color = 'var(--up)';
-        if (data.promo && data.promo.ok) msg += ` · promoted ${data.promo.rate}%`;
-        else if (data.promo && data.promo.error) {
-          const why = data.promo.error.message || data.promo.error;
-          msg += ` · ⚠ not promoted: ${why}`; color = 'var(--tx2)';
-          promoNotes.push(`${l.title || itemId}: not promoted — ${why}`);
-        }
-        ebaySetPubStatus(itemId, msg, color);
-        await ebayRemoveFromQueue(itemId);
-      } else {
-        failed++;
-        const err = data.error;
-        const msg = typeof err === 'string' ? err : (err && `${err.step}: ${err.message}`) || `HTTP ${res.status}`;
-        failures[itemId] = `✗ ${msg}`;
-        ebaySetPubStatus(itemId, failures[itemId], 'var(--dn)');
-      }
-    } catch (e) {
-      failed++;
-      failures[itemId] = `✗ ${e.message}`;
-      ebaySetPubStatus(itemId, failures[itemId], 'var(--dn)');
-    }
-  }
-
-  // Published cards are already out of the saved queue — redraw so only failures remain.
-  _modalMainHtml = ebayRenderQueueListHtml();
-  document.getElementById('mcontent').innerHTML = _modalMainHtml;
-  for (const [id, text] of Object.entries(failures)) ebaySetPubStatus(id, text, 'var(--dn)');
-
-  const summary = document.createElement('div');
-  summary.style.cssText = 'font-size:13px;margin:10px 0 4px;line-height:1.5';
-  summary.innerHTML = `<div style="color:var(--up);font-weight:700">✓ ${ok} published${failed ? `<span style="color:var(--dn)"> · ✗ ${failed} failed (still queued)</span>` : ''}</div>`
-    + promoNotes.map(n => `<div style="color:var(--tx2)">⚠ ${n.replace(/</g, '&lt;')}</div>`).join('');
-  const hdr = document.querySelector('#mcontent .section-hdr');
-  if (hdr) hdr.after(summary);
-}
-
-async function ebayExportQueue() {
-  const entries = Object.entries(ebayQueueCache);
-  if (!entries.length) { alert('Queue is empty.'); return; }
-
-  const shippingChoice = document.getElementById('el-export-shipping')?.value;
-  if (shippingChoice) localStorage.setItem('ebayShippingPolicy', shippingChoice);
-
-  const btn = document.getElementById('ebay-export-btn');
-  if (btn) { btn.textContent = 'Building file...'; btn.disabled = true; }
-
+  const mode = ebayNormalizeAction(l.action);
+  const imageSides = ebayScanState.back === 'ok' ? ['front', 'back'] : ['front'];
+  let data = null, httpStatus = 0, networkError = null;
   try {
-    const lines = [];
-    lines.push('Info,Version=1.0.0,Template=fx_category_template_EBAY_US');
-    lines.push(EBAY_CSV_HEADERS.map(ebayCsvEscape).join(','));
-    for (const [itemId, l] of entries) {
-      const map = ebayBuildCsvRowMap(itemId, l, shippingChoice);
-      lines.push(ebayBuildCsvLine(map));
-    }
-    const csvText = lines.join('\r\n');
-
-    const blob = new Blob(['\uFEFF' + csvText], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ebay-listings-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const res = await fetch(`${WORKER_URL}/ebay-publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+      body: JSON.stringify({
+        itemId,
+        listing: l,
+        shippingPolicyId: l.shippingPolicyId,
+        mode,
+        startDate: mode === 'scheduled' ? new Date(l.schedule).toISOString() : undefined,
+        imageSides
+      })
+    });
+    httpStatus = res.status;
+    data = await res.json();
   } catch (e) {
-    alert('Export failed: ' + e.message);
-  } finally {
-    if (btn) { btn.textContent = 'Export Queue'; btn.disabled = false; }
+    networkError = e.message;
   }
+
+  const ok = data && data.ok;
+  if (ok && typeof ctTagCache === 'object') {
+    // Mark locally right away so it can't be listed twice; the 15-min sync makes it permanent.
+    const cur = ctTagCache[itemId] || [];
+    if (!cur.includes('Listed')) ctTagCache[itemId] = [...cur, 'Listed'];
+  }
+  ebayRenderResult(ok, data, httpStatus, networkError);
+}
+
+function ebayRenderResult(ok, data, httpStatus, networkError) {
+  const { itemId, listing: l } = ebayDraft;
+  const back = itemId.replace(/'/g, "\\'");
+  let body;
+  if (ok) {
+    const mode = ebayNormalizeAction(l.action);
+    const when = mode === 'live' ? 'Listed now' : `Scheduled for ${new Date(l.schedule).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+    let promo = '';
+    if (data.promo && data.promo.ok) promo = `<div style="font-size:14px;color:var(--tx2);margin-top:6px">Promoted at ${ebayEsc(data.promo.rate)}%</div>`;
+    else if (data.promo && data.promo.error) promo = `<div style="font-size:14px;color:var(--dn);margin-top:6px">⚠ Not promoted: ${ebayEsc(data.promo.error.message || data.promo.error)}</div>`;
+    body = `
+      <div style="font-size:40px;line-height:1;color:var(--up)">✓</div>
+      <div style="font-size:20px;font-weight:700;margin-top:10px;color:var(--tx)">${ebayEsc(when)}</div>
+      <div style="font-size:15px;color:var(--tx2);margin-top:6px">${ebayEsc(l.title)}</div>
+      ${promo}
+      <a href="https://www.ebay.com/itm/${encodeURIComponent(data.listingId)}" target="_blank" rel="noopener"
+        style="display:flex;align-items:center;justify-content:center;height:44px;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;text-decoration:none;margin-top:18px">
+        View on eBay (#${ebayEsc(data.listingId)})
+      </a>
+      <button onclick="ebayDraft=null;document.getElementById('mcontent').innerHTML=_modalMainHtml;if(typeof ctOpenCardIdx!=='undefined'&&ctOpenCardIdx!==null&&typeof ctRenderTags==='function')ctRenderTags(ctOpenCardIdx)"
+        style="width:100%;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">
+        Done
+      </button>`;
+  } else {
+    const err = data && data.error;
+    const msg = networkError || (typeof err === 'string' ? err : (err && `${err.step}: ${err.message}`)) || `HTTP ${httpStatus}`;
+    body = `
+      <div style="font-size:40px;line-height:1;color:var(--dn)">✗</div>
+      <div style="font-size:20px;font-weight:700;margin-top:10px;color:var(--tx)">Not published</div>
+      <div style="font-size:14px;color:var(--dn);margin-top:8px;line-height:1.4">${ebayEsc(msg)}</div>
+      <button onclick="ebayOpenListingForm('${back}', true)"
+        style="width:100%;height:44px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:18px">
+        ← Back to Edit
+      </button>
+      <button onclick="ebayReviewListing('${back}', true)"
+        style="width:100%;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">
+        Try again
+      </button>`;
+  }
+  document.getElementById('mcontent').innerHTML = `
+    <div class="section-hdr">List on eBay</div>
+    <div style="margin-top:20px;text-align:center">${body}</div>`;
 }

@@ -94,11 +94,5 @@ function renderPortfolio() {
     </div>
   `;
 
-  const ebayQueueBtnHtml = `
-    <div class="srow" style="margin:16px">
-      <button onclick="ebayOpenQueueModal()" style="width:100%;height:44px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Manage eBay Queue</button>
-    </div>
-  `;
-
-  root.innerHTML = `${heroHtml}${purchasesHtml}${salesHtml}${flipHtml}${recentHtml}${ebayQueueBtnHtml}`;
+  root.innerHTML = `${heroHtml}${purchasesHtml}${salesHtml}${flipHtml}${recentHtml}`;
 }

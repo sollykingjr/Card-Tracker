@@ -185,7 +185,7 @@ async function promoteListing(token, env, listingId, rate) {
   return { ok: true, campaignId: camp.id, rate };
 }
 
-export function buildInventoryItem(l, itemId, shippingPolicyId, cond) {
+export function buildInventoryItem(l, itemId, shippingPolicyId, cond, imageSides) {
   cond = cond || buildConditionAndDescriptors(l);
   const item = {
     availability: { shipToLocationAvailability: { quantity: parseInt(l.quantity, 10) || 1 } },
@@ -195,10 +195,8 @@ export function buildInventoryItem(l, itemId, shippingPolicyId, cond) {
       title: (l.title || '').slice(0, 80),
       description: l.description || '',
       aspects: buildAspects(l),
-      imageUrls: [
-        `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-front.jpg`,
-        `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-back.jpg`
-      ]
+      imageUrls: (imageSides && imageSides.length ? imageSides : ['front', 'back'])
+        .map(side => `https://card-app.maxcsolomon.workers.dev/card-image/${itemId}-${side}.jpg`)
     }
   };
   const pkg = PACKAGE_BY_POLICY[shippingPolicyId];
@@ -206,11 +204,21 @@ export function buildInventoryItem(l, itemId, shippingPolicyId, cond) {
   return item;
 }
 
-// POST /ebay-publish  { itemId, shippingPolicyId, mode: 'live'|'scheduled', startDate?: ISO string }
+// POST /ebay-publish
+// { itemId, listing, shippingPolicyId, mode: 'live'|'scheduled', startDate?: ISO string, imageSides?: ['front','back'] }
 export async function handleEbayPublish(request, env, cors) {
   try {
-    const { itemId, shippingPolicyId, mode, startDate } = await request.json();
+    const { itemId, listing, shippingPolicyId, mode, startDate, imageSides } = await request.json();
     if (!itemId || !shippingPolicyId) return json({ error: 'missing itemId or shippingPolicyId' }, 400, cors);
+    if (!listing || typeof listing !== 'object') return json({ error: 'missing listing' }, 400, cors);
+    const sides = Array.isArray(imageSides) ? imageSides.filter(s => s === 'front' || s === 'back') : null;
+    if (sides && !sides.includes('front')) return json({ error: 'front scan is required' }, 400, cors);
+
+    // Never list a card the app already knows is listed or sold.
+    const meta = await env.CACHE.get(`card-meta:${itemId}`, { type: 'json' });
+    const tags = (meta && Array.isArray(meta.tags)) ? meta.tags : [];
+    const blockTag = tags.find(t => t === 'Listed' || t === 'Sold');
+    if (blockTag) return json({ error: `card is tagged ${blockTag}`, step: 'precheck' }, 409, cors);
     if (mode !== 'live' && mode !== 'scheduled') return json({ error: 'mode must be live or scheduled' }, 400, cors);
 
     let listingStartDate;
@@ -222,9 +230,7 @@ export async function handleEbayPublish(request, env, cors) {
       listingStartDate = d.toISOString();
     }
 
-    const raw = await env.CACHE.get(`ebay-queue:${itemId}`);
-    if (!raw) return json({ error: 'card not in eBay queue' }, 404, cors);
-    const l = JSON.parse(raw);
+    const l = listing;
 
     const cond = buildConditionAndDescriptors(l);
     if (cond.error) return json({ error: cond.error, step: 'condition' }, 400, cors);
@@ -239,7 +245,7 @@ export async function handleEbayPublish(request, env, cors) {
     const qty = parseInt(l.quantity, 10) || 1;
 
     // 1) Inventory item
-    const item = buildInventoryItem(l, itemId, shippingPolicyId, cond);
+    const item = buildInventoryItem(l, itemId, shippingPolicyId, cond, sides);
 
     // PUT is idempotent, so retry once on eBay's transient 25001 "system error".
     let put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
