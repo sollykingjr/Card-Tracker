@@ -972,8 +972,8 @@ function renderCardTracker() {
   ctLoadPendingOverrides();
 
   root.innerHTML = `
-    <div class="sr-wrap">
-      <div style="padding:16px 16px 0">
+    <div class="ct-wrap">
+      <div class="ct-toolbar" style="padding:16px 16px 0">
         ${searchBarHTML('ct', 'Search name, set, year, item ID...')}
       </div>
       <div id="ct-body"></div>
@@ -1014,17 +1014,17 @@ function ctRenderBody() {
     const matches = allMatches.slice(startIdx, startIdx + CT_PAGE_SIZE);
     ctFetchScansForPage(matches.map(c => c.itemId));
     body.innerHTML = `
-      <div style="display:flex;gap:16px;align-items:flex-start">
+      <div class="ct-body-row">
         <div class="ct-filter-sidebar" style="flex-shrink:0;width:240px">
           <div class="srow" style="margin:16px 0 16px 16px">
             <div id="ct-filter-sidebar-content"></div>
           </div>
         </div>
-        <div style="flex:1;min-width:0">
+        <div class="ct-main-col">
           <div class="sort-chips" style="margin:16px 16px 0">
             ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
           </div>
-          <div class="srow" style="margin:16px">
+          <div class="srow ct-toolbar-row" style="margin:16px 16px 0">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
               <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
               <div style="display:flex;gap:6px">
@@ -1033,12 +1033,15 @@ function ctRenderBody() {
               </div>
             </div>
             ${ctPaginationHTML(ctPage, totalPages)}
-            ${matches.length
-              ? (ctViewMode === 'card'
-                ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
-                : matches.map(c => ctListRowHTML(c)).join(''))
-              : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
-            ${ctPaginationHTML(ctPage, totalPages)}
+          </div>
+          <div class="ct-list-scroll">
+            <div style="margin:0 16px 16px">
+              ${matches.length
+                ? (ctViewMode === 'card'
+                  ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`
+                  : matches.map(c => ctListRowHTML(c)).join(''))
+                : '<div style="font-size:12px;color:var(--tx3);padding:8px 0">No matching cards</div>'}
+            </div>
           </div>
         </div>
       </div>
