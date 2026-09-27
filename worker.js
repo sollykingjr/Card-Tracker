@@ -43,8 +43,9 @@ const PROTECTED_ROUTES = new Set([
 export default {
   async scheduled(event, env, ctx) {
    try {
-    if (event.cron === '*/15 * * * *') {
+        if (event.cron === '*/15 * * * *') {
       await refreshWatchlistCache(env);
+      await reconcileListingTags(env);
       return;
     }
     if (event.cron === '0 10 * * *') {
