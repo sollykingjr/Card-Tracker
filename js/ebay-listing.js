@@ -518,6 +518,8 @@ async function ebayPublishQueue() {
   if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
 
   let ok = 0, failed = 0;
+  const failures = {}; // itemId -> error text, re-shown after the list refreshes
+  const promoNotes = [];
   for (const [itemId, l] of entries) {
     ebaySetPubStatus(itemId, 'Publishing…', 'var(--tx3)');
     const mode = ebayNormalizeAction(l.action);
@@ -538,25 +540,38 @@ async function ebayPublishQueue() {
         let msg = mode === 'live' ? `✓ Listed (#${data.listingId})` : `✓ Scheduled (#${data.listingId})`;
         let color = 'var(--up)';
         if (data.promo && data.promo.ok) msg += ` · promoted ${data.promo.rate}%`;
-        else if (data.promo && data.promo.error) { msg += ` · ⚠ not promoted: ${data.promo.error.message || data.promo.error}`; color = 'var(--tx2)'; }
+        else if (data.promo && data.promo.error) {
+          const why = data.promo.error.message || data.promo.error;
+          msg += ` · ⚠ not promoted: ${why}`; color = 'var(--tx2)';
+          promoNotes.push(`${l.title || itemId}: not promoted — ${why}`);
+        }
         ebaySetPubStatus(itemId, msg, color);
         await ebayRemoveFromQueue(itemId);
       } else {
         failed++;
         const err = data.error;
         const msg = typeof err === 'string' ? err : (err && `${err.step}: ${err.message}`) || `HTTP ${res.status}`;
-        ebaySetPubStatus(itemId, `✗ ${msg}`, 'var(--dn)');
+        failures[itemId] = `✗ ${msg}`;
+        ebaySetPubStatus(itemId, failures[itemId], 'var(--dn)');
       }
     } catch (e) {
       failed++;
-      ebaySetPubStatus(itemId, `✗ ${e.message}`, 'var(--dn)');
+      failures[itemId] = `✗ ${e.message}`;
+      ebaySetPubStatus(itemId, failures[itemId], 'var(--dn)');
     }
   }
 
-  if (btn) { btn.disabled = false; btn.textContent = 'Publish to eBay'; }
-  // Rows stay on screen with their result; published cards are already out of the saved queue.
+  // Published cards are already out of the saved queue — redraw so only failures remain.
+  _modalMainHtml = ebayRenderQueueListHtml();
+  document.getElementById('mcontent').innerHTML = _modalMainHtml;
+  for (const [id, text] of Object.entries(failures)) ebaySetPubStatus(id, text, 'var(--dn)');
+
+  const summary = document.createElement('div');
+  summary.style.cssText = 'font-size:13px;margin:10px 0 4px;line-height:1.5';
+  summary.innerHTML = `<div style="color:var(--up);font-weight:700">✓ ${ok} published${failed ? `<span style="color:var(--dn)"> · ✗ ${failed} failed (still queued)</span>` : ''}</div>`
+    + promoNotes.map(n => `<div style="color:var(--tx2)">⚠ ${n.replace(/</g, '&lt;')}</div>`).join('');
   const hdr = document.querySelector('#mcontent .section-hdr');
-  if (hdr) hdr.textContent = `eBay Queue — ${ok} published${failed ? `, ${failed} failed` : ''}`;
+  if (hdr) hdr.after(summary);
 }
 
 async function ebayExportQueue() {
