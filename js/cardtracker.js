@@ -1024,18 +1024,18 @@ function ctRenderBody() {
           <div class="sort-chips" style="margin:16px 16px 0">
             ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
           </div>
-          <div class="srow ct-toolbar-row" style="margin:16px 16px 0">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-              <div class="srow-t">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
-              <div style="display:flex;gap:6px">
-                ${ctFilterButtonHTML()}
-                ${ctViewToggleHTML()}
+          <div class="ct-panel">
+            <div class="ct-toolbar-row">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <div class="srow-t" style="margin-bottom:0">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
+                <div style="display:flex;gap:6px">
+                  ${ctFilterButtonHTML()}
+                  ${ctViewToggleHTML()}
+                </div>
               </div>
+              ${ctPaginationHTML(ctPage, totalPages)}
             </div>
-            ${ctPaginationHTML(ctPage, totalPages)}
-          </div>
-          <div class="ct-list-scroll">
-            <div style="margin:0 16px 16px">
+            <div class="ct-list-scroll">
               ${matches.length
                 ? (ctViewMode === 'card'
                   ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${matches.map(c => ctCardBoxHTML(c)).join('')}</div>`

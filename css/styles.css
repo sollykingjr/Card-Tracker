@@ -1002,12 +1002,29 @@ body {
   display: flex;
   flex-direction: column;
 }
-.ct-main-col > .sort-chips,
-.ct-main-col > .ct-toolbar-row { flex-shrink: 0; }
+.ct-main-col > .sort-chips { flex-shrink: 0; }
+.ct-panel {
+  flex: 1;
+  min-height: 0;
+  margin: 16px 16px 16px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ct-toolbar-row {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--bdr);
+}
 .ct-list-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding: 12px 14px;
 }
 .sr-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .sr-title { font-size: 16px; font-weight: 700; color: var(--tx); letter-spacing: -.01em; }
