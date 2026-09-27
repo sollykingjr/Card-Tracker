@@ -36,11 +36,11 @@ function ebayBuildDefaultListing(c) {
     price: '',
     quantity: 1,
     format: 'FixedPrice',
-    allowOffers: false,
+    allowOffers: true,
     offerAuto: '',
     offerMin: '',
     action: 'scheduled',
-    schedule: '',
+    schedule: ebayLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)), // default: 1 hour from now
     description: 'Please see scan for condition. Please reach out with any questions.',
     condition: 'Excellent',
     sport: c.sport || '',
