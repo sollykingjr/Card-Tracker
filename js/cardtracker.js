@@ -43,6 +43,7 @@ function ctSetPage(p) {
 }
 
 let ctScanCache = {};
+let ctScanRetryAt = {}; // itemId -> timestamp of last "not found" live recheck
 let ctTagCache = {};
 let ctTagsLoaded = false;
 let ctPendingCache = {};
@@ -341,34 +342,59 @@ async function ctRemoveTag(idx, tag) {
   } catch (e) {}
 }
 
+const CT_SCAN_RETRY_COOLDOWN_MS = 120000; // don't live-recheck the same empty scan more than once per 2 min
+
 async function ctFetchScansForPage(itemIds) {
-  // Retry items whose last check found nothing yet, not just brand-new items —
-  // a scan can land in Drive after the first check, and we want the next
-  // render (sort/filter/page change) to pick it up instead of caching "no scan" forever.
-  const needed = [...new Set(itemIds.filter(id => {
-    if (!id) return false;
+  const ids = [...new Set(itemIds.filter(Boolean))];
+  const now = Date.now();
+
+  // Never seen this session — ask normally, so the backend can serve its own
+  // (fast) cache for cards that already have a known scan.
+  const firstTime = ids.filter(id => !(id in ctScanCache));
+
+  // Seen before and came back empty — only these get a live Drive recheck,
+  // throttled so it isn't refired on every render.
+  const retry = ids.filter(id => {
     const cached = ctScanCache[id];
-    return !cached || (!cached.front && !cached.back);
-  }))];
-  if (!needed.length) return;
+    if (!cached || cached.front || cached.back) return false;
+    const last = ctScanRetryAt[id] || 0;
+    return now - last >= CT_SCAN_RETRY_COOLDOWN_MS;
+  });
+
+  if (!firstTime.length && !retry.length) return;
+
   let foundNew = false;
-  try {
-    const res = await fetch(`${WORKER_URL}/scan-batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-      body: JSON.stringify({ itemIds: needed, fresh: true })
-    });
-    if (!res.ok) throw new Error(`scan-batch: HTTP ${res.status}`);
-    const data = await res.json();
-    needed.forEach(id => {
-      const wasCached = id in ctScanCache;
-      const result = data[id];
-      if (!wasCached || (result && (result.front || result.back))) foundNew = true;
-    });
-    Object.assign(ctScanCache, data);
-  } catch (e) {
-    needed.forEach(id => { if (!(id in ctScanCache)) { ctScanCache[id] = { front: null, back: null }; foundNew = true; } });
+
+  async function runBatch(batchIds, fresh) {
+    if (!batchIds.length) return;
+    try {
+      const res = await fetch(`${WORKER_URL}/scan-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+        body: JSON.stringify({ itemIds: batchIds, fresh })
+      });
+      if (!res.ok) throw new Error(`scan-batch: HTTP ${res.status}`);
+      const data = await res.json();
+      batchIds.forEach(id => {
+        const wasCached = id in ctScanCache;
+        const result = data[id];
+        if (!wasCached || (result && (result.front || result.back))) foundNew = true;
+        if (fresh) ctScanRetryAt[id] = now;
+      });
+      Object.assign(ctScanCache, data);
+    } catch (e) {
+      batchIds.forEach(id => {
+        if (!(id in ctScanCache)) { ctScanCache[id] = { front: null, back: null }; foundNew = true; }
+        if (fresh) ctScanRetryAt[id] = now;
+      });
+    }
   }
+
+  await Promise.all([
+    runBatch(firstTime, false),
+    runBatch(retry, true)
+  ]);
+
   // Only repaint when something actually changed — otherwise this would
   // re-trigger itself via ctRenderBody() every time, in a tight fetch loop.
   if (foundNew) ctRenderBody();
