@@ -4,6 +4,32 @@ import { fetchMyeBaySelling } from './ebay-selling.js';
 export async function handleDebugSelling(request, env, cors) {
   const result = await fetchMyeBaySelling(env);
 
+  let rawSnippet = null;
+  const accessToken = await env.CACHE.get('ebay_access_token');
+  if (accessToken) {
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-CALL-NAME': 'GetMyeBaySelling',
+        'X-EBAY-API-IAF-TOKEN': accessToken,
+        'Content-Type': 'text/xml',
+      },
+      body: `<?xml version="1.0" encoding="utf-8"?>
+        <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+          <RequesterCredentials><eBayAuthToken>${accessToken}</eBayAuthToken></RequesterCredentials>
+          <ActiveList><Include>true</Include><Pagination><EntriesPerPage>2</EntriesPerPage><PageNumber>1</PageNumber></Pagination></ActiveList>
+          <SoldList><Include>false</Include></SoldList>
+          <UnsoldList><Include>false</Include></UnsoldList>
+          <DetailLevel>ReturnAll</DetailLevel>
+        </GetMyeBaySellingRequest>`
+    });
+    const xml = await res.text();
+    const activeMatch = xml.match(/<ActiveList>([\s\S]*?)<\/ActiveList>/);
+    rawSnippet = activeMatch ? activeMatch[1].slice(0, 4000) : xml.slice(0, 2000);
+  }
+
   const listIds = async (prefix) => {
     const ids = [];
     let cursor;
@@ -24,6 +50,7 @@ export async function handleDebugSelling(request, env, cors) {
     migrationFlag,
     listingState,
     tagSnapshots,
+    rawSnippet,
   }, null, 2), {
     headers: { ...cors, 'Content-Type': 'application/json' }
   });
