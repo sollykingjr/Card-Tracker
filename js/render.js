@@ -809,9 +809,9 @@ function openSearchOptionsModal(itemId, i) {
     <div style="background:var(--surf);border-radius:14px;padding:20px;width:100%;max-width:320px">
       <div style="font-size:15px;font-weight:600;margin-bottom:14px">Search Options</div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <button onclick="window.open(searchUrl.cardladder('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
+        <button onclick="ctOpenExternal(searchUrl.cardladder('${safeTitle.replace(/'/g,"\\'")}'))"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">Card Ladder</button>
-        <button onclick="window.open(searchUrl.comc('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
+        <button onclick="ctOpenExternal(searchUrl.comc('${safeTitle.replace(/'/g,"\\'")}'))"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">COMC</button>
         <button onclick="window.open(searchUrl.ebay('${safeTitle.replace(/'/g,"\\'")}'),'_blank')"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">eBay Search</button>
