@@ -6,6 +6,19 @@ let CACHE = null;
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 const cl      = v => (!v||String(v).trim()===''||v==='-'||v==='—'||v==='\\-') ? null : String(v).trim();
+// Removes a stand-alone dash separator (" - ", " – ", " — ") from card names, e.g.
+// "Bowman Draft Chrome - Refractor" → "Bowman Draft Chrome Refractor". Hyphens inside
+// names or card numbers (Smith-Njigba, BDC-7) have no spaces around them and are kept.
+const stripDashSep = v => {
+  if (v == null) return v;
+  const out = String(v).replace(/(^|\s)[-–—](?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+  return out || null;
+};
+const cleanCardNames = c => {
+  if (!c) return c;
+  for (const k of ['fullCard', 'set', 'variation', 'version']) if (c[k]) c[k] = stripDashSep(c[k]);
+  return c;
+};
 const fmt     = v => cl(v) ?? '—';
 const fmtP    = v => { const c=cl(v); return c?(c.startsWith('$')?c:'$'+c):'—'; };
 const normName= v => (v||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -200,7 +213,7 @@ function hydrateCardsFromCache() {
   try {
     const raw = localStorage.getItem(CARDS_CACHE_KEY);
     if (!raw) return false;
-    cards = JSON.parse(raw);
+    cards = JSON.parse(raw).map(cleanCardNames);
     buildCache();
     return true;
   } catch(e) {
@@ -244,7 +257,7 @@ async function loadCardData() {
       daysOwned:cl(r[19]),
       grade:cl(r[20]),
       fullCard:cl(r[21])||[cl(r[2]),cl(r[3]),cl(r[4]),cl(r[7])].filter(Boolean).join(' ')
-    }));
+    })).map(cleanCardNames);
 
     buildCache();
 
