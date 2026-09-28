@@ -473,7 +473,8 @@ async function ebayCheckFees(itemId) {
       body: JSON.stringify(ebayPublishBody(itemId, draft.listing))
     });
     const data = await res.json();
-    if (res.ok && data.ok) st = { state: 'done', total: data.total || 0, fees: data.fees || [] };
+    if (res.ok && data.na) st = { state: 'na' }; // eBay can't estimate this format (auctions)
+    else if (res.ok && data.ok) st = { state: 'done', total: data.total || 0, fees: data.fees || [] };
     else {
       const err = data.error;
       st = { state: 'error', error: typeof err === 'string' ? err : (err && `${err.step}: ${err.message}`) || `HTTP ${res.status}` };
