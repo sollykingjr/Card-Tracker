@@ -321,7 +321,6 @@ export async function handleEbayPublish(request, env, cors) {
       sku,
       marketplaceId: MARKETPLACE,
       format: isAuction ? 'AUCTION' : 'FIXED_PRICE',
-      availableQuantity: qty,
       categoryId: (l.cardType || 'sports') === 'sports' ? '261328' : '183454',
       listingDescription: l.description || '',
       listingDuration: isAuction ? 'DAYS_7' : 'GTC',
@@ -339,6 +338,8 @@ export async function handleEbayPublish(request, env, cors) {
       if (l.offerMin) terms.autoDeclinePrice = { value: String(parseFloat(l.offerMin).toFixed(2)), currency: 'USD' };
       offer.listingPolicies.bestOfferTerms = terms;
     }
+    // eBay rejects availableQuantity on auction offers (25762); auctions are always qty 1.
+    if (!isAuction) offer.availableQuantity = qty;
     if (listingStartDate) offer.listingStartDate = listingStartDate;
 
     let offerId;
