@@ -191,6 +191,9 @@ function ebayMoney(v) {
 let ebayDraft = null; // { itemId, listing }
 let ebayScanState = { front: 'loading', back: 'loading' };
 let ebayLiveState = { state: 'loading' }; // live eBay check: active | scheduled | none | unknown
+let ebayFeeState = { state: 'idle' };      // fee estimate: idle | loading | done | error
+let ebayPreparedItemId = null;             // card with unpublished eBay records from Review (cleaned up if not published)
+let ebayDiscardPromise = null;
 
 // Swap the modal to a new screen and start it at the top. Without the reset the Review
 // page opens scrolled to where the (longer) form was, and iOS Safari can lock the
@@ -210,6 +213,7 @@ function ebayShowScreen(html) {
 async function ebayOpenListingForm(itemId, keepDraft) {
   const c = cards.find(x => x.itemId === itemId);
   if (!c) return;
+  ebayDiscardPrepared(false); // leaving a Review without publishing
   const l = (keepDraft && ebayDraft && ebayDraft.itemId === itemId) ? ebayDraft.listing : ebayBuildDefaultListing(c);
   if (!l.shippingPolicyId) l.shippingPolicyId = ebayDefaultShippingId();
 
@@ -382,7 +386,11 @@ function ebayRunChecks(itemId, l) {
     if (auto !== null && min !== null && min > auto) warns.push(`Minimum offer ($${min.toFixed(2)}) is above auto-accept ($${auto.toFixed(2)})`);
   }
 
-  const scansPending = ebayScanState.front === 'loading' || ebayScanState.back === 'loading' || ebayLiveState.state === 'loading';
+  if (ebayFeeState.state === 'done' && ebayFeeState.total > 0) warns.push(`Publishing will cost $${ebayFeeState.total.toFixed(2)} in eBay fees`);
+  if (ebayFeeState.state === 'error') warns.push(`Couldn't get eBay's fee estimate (${ebayFeeState.error}) — any fee would show in Seller Hub`);
+
+  const scansPending = ebayScanState.front === 'loading' || ebayScanState.back === 'loading' || ebayLiveState.state === 'loading'
+    || ebayFeeState.state === 'loading' || (ebayFeeState.state === 'idle' && !blocks.length);
   return { blocks, warns, scansPending };
 }
 
@@ -397,8 +405,15 @@ function ebayRenderChecks() {
   let html = blocks.map(b => row('🛑', b, 'var(--dn)')).join('') + warns.map(w => row('⚠', w, 'var(--tx2)')).join('');
   if (ebayScanState.front === 'loading' || ebayScanState.back === 'loading') html += row('…', 'Checking scans', 'var(--tx3)');
   if (ebayLiveState.state === 'loading') html += row('…', 'Checking eBay for an existing listing', 'var(--tx3)');
+  if (ebayFeeState.state === 'loading') html += row('…', 'Getting eBay fee estimate', 'var(--tx3)');
   if (!blocks.length && !warns.length && !scansPending) html = row('✓', 'All checks passed', 'var(--up)');
   box.innerHTML = html;
+
+  ebayRenderFeeLine(blocks.length > 0);
+  // Once scans + the live check are done and nothing blocks, ask eBay what publishing will cost.
+  const readyForFees = !blocks.length && ebayFeeState.state === 'idle' && ebayLiveState.state === 'none'
+    && ebayScanState.front !== 'loading' && ebayScanState.back !== 'loading';
+  if (readyForFees) ebayCheckFees(ebayDraft.itemId);
 
   const canPublish = !blocks.length && !scansPending;
   btn.disabled = !canPublish;
@@ -431,12 +446,89 @@ async function ebayCheckLiveStatus(itemId) {
   ebayRenderChecks();
 }
 
+function ebayPublishBody(itemId, l) {
+  const mode = ebayNormalizeAction(l.action);
+  return {
+    itemId,
+    listing: l,
+    shippingPolicyId: l.shippingPolicyId,
+    mode,
+    startDate: mode === 'scheduled' ? new Date(l.schedule).toISOString() : undefined,
+    imageSides: ebayScanState.back === 'ok' ? ['front', 'back'] : ['front']
+  };
+}
+
+async function ebayCheckFees(itemId) {
+  if (!ebayDraft || ebayDraft.itemId !== itemId) return;
+  ebayFeeState = { state: 'loading' };
+  ebayRenderChecks();
+  if (ebayDiscardPromise) { try { await ebayDiscardPromise; } catch (e) {} }
+  const draft = ebayDraft;
+  let st;
+  try {
+    ebayPreparedItemId = itemId; // records may now exist on eBay (unpublished)
+    const res = await fetch(`${WORKER_URL}/ebay-fee-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+      body: JSON.stringify(ebayPublishBody(itemId, draft.listing))
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) st = { state: 'done', total: data.total || 0, fees: data.fees || [] };
+    else {
+      const err = data.error;
+      st = { state: 'error', error: typeof err === 'string' ? err : (err && `${err.step}: ${err.message}`) || `HTTP ${res.status}` };
+    }
+  } catch (e) {
+    st = { state: 'error', error: e.message };
+  }
+  if (ebayDraft !== draft) return; // user moved on
+  ebayFeeState = st;
+  ebayRenderChecks();
+}
+
+function ebayRenderFeeLine(blocked) {
+  const el = document.getElementById('el-fee-value');
+  if (!el) return;
+  const f = ebayFeeState;
+  if (blocked && f.state === 'idle') { el.innerHTML = '<span style="color:var(--tx3)">—</span>'; return; }
+  const names = { InsertionFee: 'insertion' };
+  if (f.state === 'done') {
+    if (f.total > 0) {
+      const parts = f.fees.filter(x => x.amount - x.discount > 0).map(x => `${names[x.type] || x.type.replace(/Fee$/, '').toLowerCase()} $${(x.amount - x.discount).toFixed(2)}`);
+      el.innerHTML = `<span style="color:var(--dn)">$${f.total.toFixed(2)}</span>${parts.length ? `<div style="font-size:12px;color:var(--tx3);font-weight:500">${ebayEsc(parts.join(' · '))}</div>` : ''}`;
+    } else {
+      el.innerHTML = '<span style="color:var(--up)">$0.00 · free</span>';
+    }
+  } else if (f.state === 'error') el.innerHTML = '<span style="color:var(--tx3)">Unavailable</span>';
+  else el.innerHTML = '<span style="color:var(--tx3)">Checking…</span>';
+}
+
+// Removes the unpublished records a Review created, if the card wasn't published.
+function ebayDiscardPrepared(useBeacon) {
+  const itemId = ebayPreparedItemId;
+  if (!itemId) return;
+  ebayPreparedItemId = null;
+  const opts = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+    body: JSON.stringify({ itemId }),
+    keepalive: !!useBeacon
+  };
+  ebayDiscardPromise = fetch(`${WORKER_URL}/ebay-discard`, opts).catch(() => {}).finally(() => { ebayDiscardPromise = null; });
+}
+
+// Clean up when the modal is closed or the page goes away mid-review.
+document.getElementById('closebtn')?.addEventListener('click', () => ebayDiscardPrepared(false));
+document.getElementById('mwrap')?.addEventListener('click', e => { if (e.target === document.getElementById('mwrap')) ebayDiscardPrepared(false); });
+window.addEventListener('pagehide', () => ebayDiscardPrepared(true));
+
 // ── 3) Review page ──
 function ebayReviewListing(itemId, useDraft) {
   const l = (useDraft && ebayDraft && ebayDraft.itemId === itemId) ? ebayDraft.listing : ebayCollectForm(itemId);
   ebayDraft = { itemId, listing: l };
   ebayScanState = { front: 'loading', back: 'loading' };
   ebayLiveState = { state: 'loading' };
+  ebayFeeState = { state: 'idle' };
   try { localStorage.setItem('ebayShippingPolicyId', l.shippingPolicyId); } catch (e) {}
   ebayCheckLiveStatus(itemId);
 
@@ -477,6 +569,7 @@ function ebayReviewListing(itemId, useDraft) {
       ${line('Posting', ebayEsc(when))}
       ${line('Shipping', ebayEsc(ebayShippingLabel(l.shippingPolicyId)))}
       ${line('Promoted', l.adRate ? `${ebayEsc(l.adRate)}%` : 'No')}
+      ${line('Listing fees', '<span id="el-fee-value"><span style="color:var(--tx3)">Checking…</span></span>')}
       ${line('Condition', ebayEsc(cond))}
       <div style="margin-top:16px">
         <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Checks</div>
@@ -502,21 +595,13 @@ async function ebayPublishListing() {
   const btn = document.getElementById('el-publish-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
 
-  const mode = ebayNormalizeAction(l.action);
-  const imageSides = ebayScanState.back === 'ok' ? ['front', 'back'] : ['front'];
   let data = null, httpStatus = 0, networkError = null;
+  ebayPreparedItemId = itemId; // if publishing fails, leftovers get cleaned up on close
   try {
     const res = await fetch(`${WORKER_URL}/ebay-publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-      body: JSON.stringify({
-        itemId,
-        listing: l,
-        shippingPolicyId: l.shippingPolicyId,
-        mode,
-        startDate: mode === 'scheduled' ? new Date(l.schedule).toISOString() : undefined,
-        imageSides
-      })
+      body: JSON.stringify(ebayPublishBody(itemId, l))
     });
     httpStatus = res.status;
     data = await res.json();
@@ -525,6 +610,7 @@ async function ebayPublishListing() {
   }
 
   const ok = data && data.ok;
+  if (ok) ebayPreparedItemId = null; // it's live/scheduled now — nothing to clean up
   if (ok && typeof ctTagCache === 'object') {
     // Mark locally right away so it can't be listed twice; the 15-min sync makes it permanent.
     const cur = ctTagCache[itemId] || [];

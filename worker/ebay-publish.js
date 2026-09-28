@@ -255,111 +255,120 @@ export async function handleEbayListingStatus(request, env, cors) {
   }
 }
 
+// ── Shared: validate, check eBay, then create/update the inventory item + offer (unpublished).
+// Returns { ok: true, token, offerId, listingStartDate, l, mode } or { fail: {status, body} }.
+async function prepareListing(env, body) {
+  const { itemId, listing, shippingPolicyId, mode, startDate, imageSides } = body || {};
+  const fail = (status, b) => ({ fail: { status, body: b } });
+  if (!itemId || !shippingPolicyId) return fail(400, { error: 'missing itemId or shippingPolicyId' });
+  if (!listing || typeof listing !== 'object') return fail(400, { error: 'missing listing' });
+  const sides = Array.isArray(imageSides) ? imageSides.filter(s => s === 'front' || s === 'back') : null;
+  if (sides && !sides.includes('front')) return fail(400, { error: 'front scan is required' });
+
+  // Never list a sold card. (Listed is checked live against eBay below, so an
+  // ended/unsold listing can be reposted even before the tag sync clears it.)
+  const meta = await env.CACHE.get(`card-meta:${itemId}`, { type: 'json' });
+  const tags = (meta && Array.isArray(meta.tags)) ? meta.tags : [];
+  if (tags.includes('Sold')) return fail(409, { error: 'card is tagged Sold', step: 'precheck' });
+  if (mode !== 'live' && mode !== 'scheduled') return fail(400, { error: 'mode must be live or scheduled' });
+
+  let listingStartDate;
+  if (mode === 'scheduled') {
+    const d = new Date(startDate || '');
+    const diff = d.getTime() - Date.now();
+    if (isNaN(d.getTime()) || diff <= 0) return fail(400, { error: 'scheduled needs a future startDate' });
+    if (diff > MAX_SCHEDULE_MS) return fail(400, { error: 'eBay only allows scheduling up to 3 weeks out' });
+    listingStartDate = d.toISOString();
+  }
+
+  const l = listing;
+  const cond = buildConditionAndDescriptors(l);
+  if (cond.error) return fail(400, { error: cond.error, step: 'condition' });
+
+  const token = await getAccessToken(env);
+  if (!token) return fail(401, { error: 'not_authenticated', authUrl: '/auth' });
+
+  // Must run before touching the inventory item — a PUT would revise a live listing.
+  const status = await getLiveStatus(env, token, itemId);
+  if (status.state === 'active' || status.state === 'scheduled') {
+    return fail(409, { error: `already ${status.state} on eBay (#${status.listingId})`, step: 'precheck', state: status.state, listingId: status.listingId, startTime: status.startTime });
+  }
+  if (status.state === 'unknown') {
+    return fail(502, { error: `couldn't confirm with eBay that this card isn't already listed (${status.error})`, step: 'precheck' });
+  }
+
+  const locErr = await ensureLocation(token);
+  if (locErr) return fail(502, { error: locErr });
+
+  const sku = itemId;
+  const qty = 1; // each card is its own SKU
+
+  // 1) Inventory item — PUT is idempotent, so retry once on eBay's transient 25001.
+  const item = buildInventoryItem(l, itemId, shippingPolicyId, cond, sides);
+  let put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
+  if (!put.ok && put.status >= 500) {
+    await new Promise(r => setTimeout(r, 2000));
+    put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
+  }
+  if (!put.ok) return fail(502, { error: stepError('inventory_item', put) });
+
+  // 2) Offer
+  const isAuction = l.format === 'Auction';
+  const price = { value: String(parseFloat(l.price || 0).toFixed(2)), currency: 'USD' };
+  const offer = {
+    sku,
+    marketplaceId: MARKETPLACE,
+    format: isAuction ? 'AUCTION' : 'FIXED_PRICE',
+    categoryId: (l.cardType || 'sports') === 'sports' ? '261328' : '183454',
+    listingDescription: l.description || '',
+    listingDuration: isAuction ? 'DAYS_7' : 'GTC',
+    merchantLocationKey: LOCATION_KEY,
+    pricingSummary: isAuction ? { auctionStartPrice: price } : { price },
+    listingPolicies: {
+      fulfillmentPolicyId: shippingPolicyId,
+      paymentPolicyId: isAuction ? AUCTION_PAYMENT_POLICY_ID : PAYMENT_POLICY_ID,
+      returnPolicyId: RETURN_POLICY_ID
+    }
+  };
+  if (!isAuction && l.allowOffers) {
+    const terms = { bestOfferEnabled: true };
+    if (l.offerAuto) terms.autoAcceptPrice = { value: String(parseFloat(l.offerAuto).toFixed(2)), currency: 'USD' };
+    if (l.offerMin) terms.autoDeclinePrice = { value: String(parseFloat(l.offerMin).toFixed(2)), currency: 'USD' };
+    offer.listingPolicies.bestOfferTerms = terms;
+  }
+  // eBay rejects availableQuantity on auction offers (25762); auctions are always qty 1.
+  if (!isAuction) offer.availableQuantity = qty;
+  if (listingStartDate) offer.listingStartDate = listingStartDate;
+
+  let offerId;
+  let prior = status.offer;
+  if (prior && prior.status === 'PUBLISHED') {
+    // Old listing ended without selling — remove its offer and start a fresh listing.
+    const del = await ebay(token, 'DELETE', `/offer/${prior.offerId}`);
+    if (!del.ok && del.status !== 404) return fail(502, { error: stepError('offer_delete_ended', del) });
+    prior = null;
+  }
+  if (prior) {
+    offerId = prior.offerId;
+    const upd = await ebay(token, 'PUT', `/offer/${offerId}`, offer);
+    if (!upd.ok) return fail(502, { error: stepError('offer_update', upd) });
+  } else {
+    const created = await ebay(token, 'POST', '/offer', offer);
+    if (!created.ok) return fail(502, { error: stepError('offer_create', created) });
+    offerId = created.data.offerId;
+  }
+
+  return { ok: true, token, offerId, listingStartDate, l, mode };
+}
+
 // POST /ebay-publish
 // { itemId, listing, shippingPolicyId, mode: 'live'|'scheduled', startDate?: ISO string, imageSides?: ['front','back'] }
 export async function handleEbayPublish(request, env, cors) {
   try {
-    const { itemId, listing, shippingPolicyId, mode, startDate, imageSides } = await request.json();
-    if (!itemId || !shippingPolicyId) return json({ error: 'missing itemId or shippingPolicyId' }, 400, cors);
-    if (!listing || typeof listing !== 'object') return json({ error: 'missing listing' }, 400, cors);
-    const sides = Array.isArray(imageSides) ? imageSides.filter(s => s === 'front' || s === 'back') : null;
-    if (sides && !sides.includes('front')) return json({ error: 'front scan is required' }, 400, cors);
-
-    // Never list a sold card. (Listed is checked live against eBay below, so an
-    // ended/unsold listing can be reposted even before the tag sync clears it.)
-    const meta = await env.CACHE.get(`card-meta:${itemId}`, { type: 'json' });
-    const tags = (meta && Array.isArray(meta.tags)) ? meta.tags : [];
-    if (tags.includes('Sold')) return json({ error: 'card is tagged Sold', step: 'precheck' }, 409, cors);
-    if (mode !== 'live' && mode !== 'scheduled') return json({ error: 'mode must be live or scheduled' }, 400, cors);
-
-    let listingStartDate;
-    if (mode === 'scheduled') {
-      const d = new Date(startDate || '');
-      const diff = d.getTime() - Date.now();
-      if (isNaN(d.getTime()) || diff <= 0) return json({ error: 'scheduled needs a future startDate' }, 400, cors);
-      if (diff > MAX_SCHEDULE_MS) return json({ error: 'eBay only allows scheduling up to 3 weeks out' }, 400, cors);
-      listingStartDate = d.toISOString();
-    }
-
-    const l = listing;
-
-    const cond = buildConditionAndDescriptors(l);
-    if (cond.error) return json({ error: cond.error, step: 'condition' }, 400, cors);
-
-    const token = await getAccessToken(env);
-    if (!token) return json({ error: 'not_authenticated', authUrl: '/auth' }, 401, cors);
-
-    // Must run before touching the inventory item — a PUT would revise a live listing.
-    const status = await getLiveStatus(env, token, itemId);
-    if (status.state === 'active' || status.state === 'scheduled') {
-      return json({ error: `already ${status.state} on eBay (#${status.listingId})`, step: 'precheck', state: status.state, listingId: status.listingId, startTime: status.startTime }, 409, cors);
-    }
-    if (status.state === 'unknown') {
-      return json({ error: `couldn't confirm with eBay that this card isn't already listed (${status.error})`, step: 'precheck' }, 502, cors);
-    }
-
-    const locErr = await ensureLocation(token);
-    if (locErr) return json({ error: locErr }, 502, cors);
-
-    const sku = itemId;
-    const qty = 1; // each card is its own SKU
-
-    // 1) Inventory item
-    const item = buildInventoryItem(l, itemId, shippingPolicyId, cond, sides);
-
-    // PUT is idempotent, so retry once on eBay's transient 25001 "system error".
-    let put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
-    if (!put.ok && put.status >= 500) {
-      await new Promise(r => setTimeout(r, 2000));
-      put = await ebay(token, 'PUT', `/inventory_item/${encodeURIComponent(sku)}`, item);
-    }
-    if (!put.ok) return json({ error: stepError('inventory_item', put) }, 502, cors);
-
-    // 2) Offer
-    const isAuction = l.format === 'Auction';
-    const price = { value: String(parseFloat(l.price || 0).toFixed(2)), currency: 'USD' };
-    const offer = {
-      sku,
-      marketplaceId: MARKETPLACE,
-      format: isAuction ? 'AUCTION' : 'FIXED_PRICE',
-      categoryId: (l.cardType || 'sports') === 'sports' ? '261328' : '183454',
-      listingDescription: l.description || '',
-      listingDuration: isAuction ? 'DAYS_7' : 'GTC',
-      merchantLocationKey: LOCATION_KEY,
-      pricingSummary: isAuction ? { auctionStartPrice: price } : { price },
-      listingPolicies: {
-        fulfillmentPolicyId: shippingPolicyId,
-        paymentPolicyId: isAuction ? AUCTION_PAYMENT_POLICY_ID : PAYMENT_POLICY_ID,
-        returnPolicyId: RETURN_POLICY_ID
-      }
-    };
-    if (!isAuction && l.allowOffers) {
-      const terms = { bestOfferEnabled: true };
-      if (l.offerAuto) terms.autoAcceptPrice = { value: String(parseFloat(l.offerAuto).toFixed(2)), currency: 'USD' };
-      if (l.offerMin) terms.autoDeclinePrice = { value: String(parseFloat(l.offerMin).toFixed(2)), currency: 'USD' };
-      offer.listingPolicies.bestOfferTerms = terms;
-    }
-    // eBay rejects availableQuantity on auction offers (25762); auctions are always qty 1.
-    if (!isAuction) offer.availableQuantity = qty;
-    if (listingStartDate) offer.listingStartDate = listingStartDate;
-
-    let offerId;
-    let prior = status.offer;
-    if (prior && prior.status === 'PUBLISHED') {
-      // Old listing ended without selling — remove its offer and start a fresh listing.
-      const del = await ebay(token, 'DELETE', `/offer/${prior.offerId}`);
-      if (!del.ok && del.status !== 404) return json({ error: stepError('offer_delete_ended', del) }, 502, cors);
-      prior = null;
-    }
-    if (prior) {
-      offerId = prior.offerId;
-      const upd = await ebay(token, 'PUT', `/offer/${offerId}`, offer);
-      if (!upd.ok) return json({ error: stepError('offer_update', upd) }, 502, cors);
-    } else {
-      const created = await ebay(token, 'POST', '/offer', offer);
-      if (!created.ok) return json({ error: stepError('offer_create', created) }, 502, cors);
-      offerId = created.data.offerId;
-    }
+    const body = await request.json();
+    const prep = await prepareListing(env, body);
+    if (prep.fail) return json(prep.fail.body, prep.fail.status, cors);
+    const { token, offerId, listingStartDate, l, mode } = prep;
 
     // 3) Publish
     const pub = await ebay(token, 'POST', `/offer/${offerId}/publish`);
@@ -375,11 +384,56 @@ export async function handleEbayPublish(request, env, cors) {
     }
 
     return json({
-      ok: true, itemId, offerId, listingId,
+      ok: true, itemId: body.itemId, offerId, listingId,
       mode, listingStartDate: listingStartDate || null,
       promo,
       warnings: (pub.data && pub.data.warnings) || []
     }, 200, cors);
+  } catch (e) {
+    return json({ error: e.message }, 500, cors);
+  }
+}
+
+// POST /ebay-fee-preview  — same body as /ebay-publish. Prepares the (unpublished) offer and
+// asks eBay what publishing it would cost. Nothing goes live.
+export async function handleEbayFeePreview(request, env, cors) {
+  try {
+    const body = await request.json();
+    const prep = await prepareListing(env, body);
+    if (prep.fail) return json(prep.fail.body, prep.fail.status, cors);
+    const r = await ebay(prep.token, 'POST', '/offer/get_listing_fees', { offers: [{ offerId: prep.offerId }] });
+    if (!r.ok) return json({ error: stepError('fees', r), prepared: true }, 502, cors);
+    const summary = (r.data && r.data.feeSummaries && r.data.feeSummaries[0]) || {};
+    const fees = (summary.fees || []).map(f => ({
+      type: f.feeType,
+      amount: parseFloat(f.amount && f.amount.value) || 0,
+      discount: parseFloat(f.promotionalDiscount && f.promotionalDiscount.value) || 0,
+    }));
+    const total = fees.reduce((sum, f) => sum + Math.max(0, f.amount - f.discount), 0);
+    return json({ ok: true, prepared: true, total: Math.round(total * 100) / 100, fees: fees.filter(f => f.amount > 0 || f.discount > 0), raw: summary }, 200, cors);
+  } catch (e) {
+    return json({ error: e.message }, 500, cors);
+  }
+}
+
+// POST /ebay-discard { itemId } — removes the unpublished records a Review left behind.
+// Never touches a card that's live or scheduled, or one with a published (ended) listing record.
+export async function handleEbayDiscard(request, env, cors) {
+  try {
+    const { itemId } = await request.json();
+    if (!itemId) return json({ error: 'missing itemId' }, 400, cors);
+    const token = await getAccessToken(env);
+    if (!token) return json({ error: 'not_authenticated' }, 401, cors);
+    const r = await ebay(token, 'GET', `/offer?sku=${encodeURIComponent(itemId)}&marketplace_id=${MARKETPLACE}`);
+    const offers = r.ok && r.data && Array.isArray(r.data.offers) ? r.data.offers : [];
+    if (offers.some(o => o.status === 'PUBLISHED')) {
+      // A listing record exists (live, scheduled or ended) — only drop unpublished offers.
+      for (const o of offers.filter(o => o.status !== 'PUBLISHED')) await ebay(token, 'DELETE', `/offer/${o.offerId}`);
+      return json({ ok: true, removed: 'unpublished_offers_only' }, 200, cors);
+    }
+    // Nothing was ever published for this SKU: delete the inventory item (removes its offers too).
+    const del = await ebay(token, 'DELETE', `/inventory_item/${encodeURIComponent(itemId)}`);
+    return json({ ok: del.ok || del.status === 404, removed: 'inventory_item' }, 200, cors);
   } catch (e) {
     return json({ error: e.message }, 500, cors);
   }
