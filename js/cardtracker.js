@@ -845,7 +845,7 @@ function ctOpenCard(idx) {
         }
         if (ctIsInHand(c)) {
           const ep = ctTargetPrice(c.purchasePrice, 'ebay');
-          return `<div class="scard"><div class="slbl">eBay Target Price</div><div class="sval">${ep ? '$'+ep.toFixed(2) : '—'}</div></div>`;
+          return `<div class="scard sc-target"><div class="slbl">eBay Target Price</div><div class="sval">${ep ? '$'+ep.toFixed(2) : '—'}</div></div>`;
         }
         const cp = ctTargetPrice(c.purchasePrice, 'comc');
         return `<div class="scard"><div class="slbl">COMC Target Price</div><div class="sval">${cp ? '$'+cp.toFixed(2) : '—'}</div></div>`;
@@ -858,7 +858,7 @@ function ctOpenCard(idx) {
         }
         if (ctIsInHand(c)) {
           const pp = ctTargetPrice(c.purchasePrice, 'paypal');
-          return `<div class="scard"><div class="slbl">PayPal Target Price</div><div class="sval">${pp ? '$'+pp.toFixed(2) : '—'}</div></div>`;
+          return `<div class="scard sc-target"><div class="slbl">PayPal Target Price</div><div class="sval">${pp ? '$'+pp.toFixed(2) : '—'}</div></div>`;
         }
         return `<div class="scard"><div class="slbl">Sale Date</div><div class="sval">—</div></div>`;
       })()}

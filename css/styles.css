@@ -509,6 +509,8 @@ body {
 
 /* stat grid inside modal */
 .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+/* Mobile (2 columns): put eBay + PayPal target prices side by side on the last row. */
+.sgrid .sc-target { order: 1; }
 .scard {
   background: var(--surf);
   border: 1px solid var(--bdr);
@@ -957,6 +959,7 @@ body {
   .rfab { bottom: 28px; right: 28px; }
 
   .sgrid { grid-template-columns: 1fr 1fr 1fr; }
+  .sgrid .sc-target { order: 0; }
 
   .sb-sticky-reset { top: 0; }
 
