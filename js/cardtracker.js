@@ -15,6 +15,33 @@ let ctFilterSerial = false;      // checked = only serial-numbered
 let ctFilterGraded = false;      // checked = only graded
 let ctFilterInHand = false;      // checked = only in-hand
 let ctFilterListed = 'all';      // 'all' | 'exclude' | 'only' (tagged Listed)
+let ctFilterTagsAny = [];        // OR within category (set by the Ready to List shortcut)
+
+// Shortcut: in hand, not sold, not listed, tagged To Sell or PC Bench.
+const CT_READY_TAGS = ['To Sell', 'PC Bench'];
+function ctReadyToListActive() {
+  return ctFilterSold === 'exclude' && ctFilterInHand && ctFilterListed === 'exclude'
+    && ctFilterTagsAny.length === CT_READY_TAGS.length && CT_READY_TAGS.every(t => ctFilterTagsAny.includes(t));
+}
+function ctToggleReadyToList() {
+  if (ctReadyToListActive()) {
+    ctFilterSold = 'all'; ctFilterInHand = false; ctFilterListed = 'all'; ctFilterTagsAny = [];
+  } else {
+    ctFilterSold = 'exclude'; ctFilterInHand = true; ctFilterListed = 'exclude'; ctFilterTagsAny = CT_READY_TAGS.slice();
+  }
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+function ctClearTagsAny() {
+  ctFilterTagsAny = [];
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+function ctReadyToListButtonHTML(extraClass, style) {
+  return `<button class="schip${extraClass ? ' ' + extraClass : ''}${ctReadyToListActive() ? ' on' : ''}" onclick="ctToggleReadyToList()"${style ? ` style="${style}"` : ''}>Ready to List</button>`;
+}
 
 function ctOpenSearch(query) {
   ctQuery = query;
@@ -432,6 +459,7 @@ function ctFiltersActiveCount() {
   if (ctFilterSerial) n++;
   if (ctFilterGraded) n++;
   if (ctFilterTags.length) n++;
+  if (ctFilterTagsAny.length) n++;
   if (ctFilterSports.length) n++;
   if (ctFilterYears.length) n++;
   if (ctFilterSets.length) n++;
@@ -449,6 +477,10 @@ function ctFilterPanelHTML(scope) {
       <div class="mname" style="font-size:18px;margin-bottom:0">Filters</div>
       <button onclick="ctResetFilters()" style="padding:6px 12px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Reset</button>
     </div>
+
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Shortcut</div>
+    <div style="margin-bottom:${ctFilterTagsAny.length ? '8px' : '20px'}">${ctReadyToListButtonHTML('', 'width:100%;padding:8px;font-size:11px')}</div>
+    ${ctFilterTagsAny.length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--tx2);margin-bottom:20px"><span>Tagged any of: ${ctFilterTagsAny.join(', ')}</span><button onclick="ctClearTagsAny()" style="background:none;border:none;color:var(--tx3);font-size:16px;cursor:pointer;padding:0 4px">×</button></div>` : ''}
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sold</div>
     <div style="display:flex;gap:6px;margin-bottom:20px">
@@ -475,10 +507,10 @@ function ctFilterPanelHTML(scope) {
       <span style="font-size:14px;color:var(--tx)">Graded</span>
     </label>
 
+    ${ctPickerHTML('tags', scope)}
     ${ctPickerHTML('sports', scope)}
     ${ctPickerHTML('years', scope)}
     ${ctPickerHTML('sets', scope)}
-    ${ctPickerHTML('tags', scope)}
   `;
 }
 
@@ -505,6 +537,7 @@ function ctResetFilters() {
   ctFilterSerial = false;
   ctFilterGraded = false;
   ctFilterTags = [];
+  ctFilterTagsAny = [];
   ctFilterSports = [];
   ctFilterYears = [];
   ctFilterSets = [];
@@ -754,6 +787,10 @@ function ctFilterCategoryMatch(c) {
   if (ctFilterTags.length) {
     const cardTags = ctGetTags(c);
     if (!ctFilterTags.every(t => cardTags.includes(t))) return false;
+  }
+  if (ctFilterTagsAny.length) {
+    const cardTags = ctGetTags(c);
+    if (!ctFilterTagsAny.some(t => cardTags.includes(t))) return false;
   }
 
   return true;
@@ -1072,6 +1109,7 @@ function ctRenderBody() {
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
                 <div class="srow-t" style="margin-bottom:0">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
                 <div style="display:flex;gap:6px">
+                  ${ctReadyToListButtonHTML('ct-filter-mobile-btn')}
                   ${ctFilterButtonHTML()}
                   ${ctViewToggleHTML()}
                 </div>
