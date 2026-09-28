@@ -476,6 +476,24 @@ async function ctLoadScanIndex(force) {
   }
 }
 
+const ctPrefetched = new Set(); // thumbnail URLs already requested this session
+let ctPrefetchTimer = null;
+function ctPrefetchThumbs(list) {
+  clearTimeout(ctPrefetchTimer);
+  // Short delay so the current page's own thumbnails get the network first.
+  ctPrefetchTimer = setTimeout(() => {
+    for (const c of list) {
+      const scan = c && c.itemId ? ctScanCache[c.itemId] : null;
+      const src = scan?.front?.thumbSm || scan?.front?.thumb;
+      if (!src || ctPrefetched.has(src)) continue;
+      ctPrefetched.add(src);
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+    }
+  }, 400);
+}
+
 // Kept for callers; thumbnails no longer need per-page lookups.
 function ctFetchScansForPage() {
   ctLoadScanIndex(false);
@@ -1188,6 +1206,11 @@ function ctRenderBody() {
     const startIdx = (ctPage - 1) * CT_PAGE_SIZE;
     const matches = allMatches.slice(startIdx, startIdx + CT_PAGE_SIZE);
     ctFetchScansForPage(matches.map(c => c.itemId));
+    // Warm the browser cache with the next (and previous) page's thumbnails so page turns are instant.
+    ctPrefetchThumbs([
+      ...allMatches.slice(startIdx + CT_PAGE_SIZE, startIdx + 2 * CT_PAGE_SIZE),
+      ...allMatches.slice(Math.max(0, startIdx - CT_PAGE_SIZE), startIdx)
+    ]);
     body.innerHTML = `
       <div class="ct-body-row">
         <div class="ct-filter-sidebar" style="flex-shrink:0;width:240px">
