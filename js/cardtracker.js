@@ -109,8 +109,7 @@ function ctSetPage(p) {
   document.getElementById('ct-body')?.scrollIntoView({ block: 'start' });
 }
 
-let ctScanCache = {};
-let ctScanRetryAt = {}; // itemId -> timestamp of last "not found" live recheck
+let ctScanCache = {}; // itemId -> { front, back } built from the photo index (see ctLoadScanIndex)
 let ctTagCache = {};
 let ctTagsLoaded = false;
 let ctPendingCache = {};
@@ -409,62 +408,76 @@ async function ctRemoveTag(idx, tag) {
   } catch (e) {}
 }
 
-const CT_SCAN_RETRY_COOLDOWN_MS = 120000; // don't live-recheck the same empty scan more than once per 2 min
+// ── Photo index ── one list of every card's front/back Drive photo, kept on this device.
+// Thumbnails come straight from it (no per-page lookups). On app open we ask the worker for
+// the index version and only re-download when it changed (Settings → Refresh all photos,
+// or ⋮ → Refresh Scans on a card).
+const CT_SCAN_INDEX_LS = 'ctScanIndex';
+let ctScanIndex = null;          // { version, map: { itemId: [frontId, backId, fromComc] } }
+let ctScanIndexChecked = false;  // version checked with the worker this session
 
-async function ctFetchScansForPage(itemIds) {
-  const ids = [...new Set(itemIds.filter(Boolean))];
-  const now = Date.now();
+function ctScanFromEntry(entry) {
+  const side = id => id ? {
+    id,
+    link: `https://drive.google.com/file/d/${id}/view`,
+    thumb: `https://drive.google.com/thumbnail?id=${id}&sz=w800`,
+    thumbSm: `https://drive.google.com/thumbnail?id=${id}&sz=w200`
+  } : null;
+  return entry ? { front: side(entry[0]), back: side(entry[1]), comc: !!entry[2] } : null;
+}
 
-  // Never seen this session — ask normally, so the backend can serve its own
-  // (fast) cache for cards that already have a known scan.
-  const firstTime = ids.filter(id => !(id in ctScanCache));
+function ctApplyScanIndex(index) {
+  ctScanIndex = index && index.map ? index : { version: null, map: {} };
+  ctScanCache = {};
+  for (const [id, entry] of Object.entries(ctScanIndex.map)) ctScanCache[id] = ctScanFromEntry(entry);
+}
 
-  // Seen before and came back empty — only these get a live Drive recheck,
-  // throttled so it isn't refired on every render.
-  const retry = ids.filter(id => {
-    const cached = ctScanCache[id];
-    if (!cached || cached.front || cached.back) return false;
-    const last = ctScanRetryAt[id] || 0;
-    return now - last >= CT_SCAN_RETRY_COOLDOWN_MS;
-  });
+function ctSaveScanIndexLocal() {
+  try { localStorage.setItem(CT_SCAN_INDEX_LS, JSON.stringify(ctScanIndex)); } catch (e) {}
+}
 
-  if (!firstTime.length && !retry.length) return;
+function ctHydrateScanIndex() {
+  if (ctScanIndex) return;
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(CT_SCAN_INDEX_LS) || 'null'); } catch (e) {}
+  ctApplyScanIndex(local);
+}
 
-  let foundNew = false;
-
-  async function runBatch(batchIds, fresh) {
-    if (!batchIds.length) return;
-    try {
-      const res = await fetch(`${WORKER_URL}/scan-batch`, {
+// Downloads the index only when the worker has a newer version than this device.
+async function ctLoadScanIndex(force) {
+  ctHydrateScanIndex();
+  if (ctScanIndexChecked && !force) return;
+  ctScanIndexChecked = true;
+  try {
+    const vRes = await fetch(`${WORKER_URL}/scan-index-version`);
+    let { version } = await vRes.json();
+    if (!version) {
+      // No index on the worker yet (first run) — build it once automatically.
+      const ids = (typeof cards !== 'undefined' ? cards : []).map(c => c.itemId).filter(Boolean);
+      if (!ids.length) { ctScanIndexChecked = false; return; } // cards not loaded yet; retry on next render
+      const rb = await fetch(`${WORKER_URL}/scan-index-rebuild`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-        body: JSON.stringify({ itemIds: batchIds, fresh })
+        body: JSON.stringify({ itemIds: ids })
       });
-      if (!res.ok) throw new Error(`scan-batch: HTTP ${res.status}`);
-      const data = await res.json();
-      batchIds.forEach(id => {
-        const wasCached = id in ctScanCache;
-        const result = data[id];
-        if (!wasCached || (result && (result.front || result.back))) foundNew = true;
-        if (fresh) ctScanRetryAt[id] = now;
-      });
-      Object.assign(ctScanCache, data);
-    } catch (e) {
-      batchIds.forEach(id => {
-        if (!(id in ctScanCache)) { ctScanCache[id] = { front: null, back: null }; foundNew = true; }
-        if (fresh) ctScanRetryAt[id] = now;
-      });
+      const rbData = await rb.json();
+      if (!rb.ok || !rbData.ok) throw new Error(rbData.error || `HTTP ${rb.status}`);
+      version = rbData.version;
     }
+    if (version === ctScanIndex.version && !force) return;
+    const res = await fetch(`${WORKER_URL}/scan-index`);
+    const index = await res.json();
+    ctApplyScanIndex(index);
+    ctSaveScanIndexLocal();
+    if (typeof section !== 'undefined' && section === 'cardtracker') ctRenderBody();
+  } catch (e) {
+    ctScanIndexChecked = false; // try again next time
   }
+}
 
-  await Promise.all([
-    runBatch(firstTime, false),
-    runBatch(retry, true)
-  ]);
-
-  // Only repaint when something actually changed — otherwise this would
-  // re-trigger itself via ctRenderBody() every time, in a tight fetch loop.
-  if (foundNew) ctRenderBody();
+// Kept for callers; thumbnails no longer need per-page lookups.
+function ctFetchScansForPage() {
+  ctLoadScanIndex(false);
 }
 
 function ctThumbHTML(itemId) {
@@ -1060,15 +1073,11 @@ async function ctSaveMetadata(idx) {
 async function ctLoadScans(itemId, force) {
   const box = document.getElementById('ct-scans');
   if (!box) return;
-  box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">${force ? 'Refreshing scans...' : 'Loading scans...'}</div>`;
-  try {
-    const res = await fetch(`${WORKER_URL}/scan?id=${encodeURIComponent(itemId)}${force ? '&debug=1' : ''}`);
-    const data = await res.json();
+  const render = scan => {
     if (!document.getElementById('ct-scans')) return;
-    const result = force ? (data.cachedResult || {}) : data;
-    const shots = [result.front, result.back].filter(Boolean);
+    const shots = scan ? [scan.front, scan.back].filter(Boolean) : [];
     if (!shots.length) {
-      box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">No scans found</div>`;
+      box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">No scans found — ⋮ → Refresh Scans, or Settings → Refresh all photos</div>`;
       return;
     }
     box.innerHTML = `
@@ -1080,8 +1089,28 @@ async function ctLoadScans(itemId, force) {
         `).join('')}
       </div>
     `;
+  };
+
+  ctHydrateScanIndex();
+  if (!force) { render(ctScanCache[itemId]); return; }
+
+  // Live Drive check for this one card, saved into the shared index.
+  box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Refreshing scans...</div>`;
+  try {
+    const res = await fetch(`${WORKER_URL}/scan-index-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+      body: JSON.stringify({ itemId })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (data.entry) { ctScanIndex.map[itemId] = data.entry; ctScanCache[itemId] = ctScanFromEntry(data.entry); }
+    else { delete ctScanIndex.map[itemId]; delete ctScanCache[itemId]; }
+    ctScanIndex.version = data.version;
+    ctSaveScanIndexLocal();
+    render(ctScanCache[itemId]);
   } catch (e) {
-    box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Couldn't load scans</div>`;
+    box.innerHTML = `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Couldn't refresh scans</div>`;
   }
 }
 

@@ -1,3 +1,4 @@
+import { getIndexedFileId } from './scan-index.js';
 // ── cardmeta.js — card scans, tags/In-Hand, COMC tracking, sheet overrides
 
 export async function handleScan(request, env, cors) {
@@ -446,10 +447,14 @@ export async function handleCardImage(request, env, cors) {
     }
     const [, itemId, side] = match;
 
-    const cacheKey = `scan:${itemId}`;
+    // Photo index first (same photo the app shows); fall back to the per-card lookup.
     let scanData;
-    const cached = await env.CACHE.get(cacheKey);
-    if (cached) {
+    const indexedId = await getIndexedFileId(env, itemId, side);
+    const cacheKey = `scan:${itemId}`;
+    const cached = indexedId === undefined ? await env.CACHE.get(cacheKey) : null;
+    if (indexedId !== undefined) {
+      scanData = { [side]: indexedId ? { id: indexedId } : null };
+    } else if (cached) {
       scanData = JSON.parse(cached);
     } else {
       const token = await getGoogleAccessToken(env);

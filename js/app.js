@@ -18,6 +18,7 @@ function clearInactiveSection(prevSection, newSection) {
     home: 'home-root',
     cardtracker: 'cardtracker-root',
     portfolio: 'portfolio-root',
+    settings: 'settings-root',
     searchresults: 'sr-root',
     searchbuilder: 'sb-root',
     prospects: 'list',
@@ -47,14 +48,16 @@ function setSection(s) {
   const isHome  = s === 'home';
   const isCT    = s === 'cardtracker';
   const isPort  = s === 'portfolio';
-  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome || isCT || isPort) ? 'none' : '';
+  const isSet   = s === 'settings';
+  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome || isCT || isPort || isSet) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? 'block' : 'none';
   document.getElementById('sr-root').style.display = isSR ? 'block' : 'none';
   document.getElementById('home-root').style.display = isHome ? 'block' : 'none';
   document.getElementById('cardtracker-root').style.display = isCT ? 'block' : 'none';
   document.getElementById('portfolio-root').style.display = isPort ? 'block' : 'none';
-  document.getElementById('list').style.display = (isSB || isSR || isHome || isCT || isPort) ? 'none' : '';
-  document.querySelector('.meta').style.display = (isSB || isSR || isHome || isCT || isPort) ? 'none' : '';
+  document.getElementById('settings-root').style.display = isSet ? 'block' : 'none';
+  document.getElementById('list').style.display = (isSB || isSR || isHome || isCT || isPort || isSet) ? 'none' : '';
+  document.querySelector('.meta').style.display = (isSB || isSR || isHome || isCT || isPort || isSet) ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
@@ -81,6 +84,9 @@ function setSection(s) {
   } else if (isPort) {
     document.getElementById('cntlbl').textContent = '';
     renderPortfolio();
+  } else if (isSet) {
+    document.getElementById('cntlbl').textContent = '';
+    renderSettings();
   } else {
     document.getElementById('cntlbl').textContent = '';
     if (!prospectDataLoaded) {
@@ -153,3 +159,5 @@ if (digestParam) {
   setSection('home');
 }
 loadCardData();
+// Check the photo index version once at startup, so a refresh from another device shows up.
+if (typeof ctLoadScanIndex === 'function') ctLoadScanIndex(false);

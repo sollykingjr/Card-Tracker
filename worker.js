@@ -14,6 +14,7 @@ import {
   handleCardImage
 } from './worker/cardmeta.js';
 import { handleDebugRawWatchlist } from './worker/debug.js';
+import { handleScanIndexVersion, handleScanIndexGet, handleScanIndexRebuild, handleScanIndexUpdate } from './worker/scan-index.js';
 import { handleEbayPublish, handleEbayListingStatus, handleEbayFeePreview, handleEbayDiscard } from './worker/ebay-publish.js';
 
 
@@ -35,6 +36,8 @@ const PROTECTED_ROUTES = new Set([
   'POST:/card-override',
   'POST:/card-override-pending-clear',
   'POST:/ebay-publish',
+  'POST:/scan-index-rebuild',
+  'POST:/scan-index-update',
   'POST:/ebay-fee-preview',
   'POST:/ebay-discard',
   'GET:/ebay-listing-status',
@@ -124,6 +127,10 @@ export default {
     if (path === '/card-override-pending-all' && request.method === 'GET') return handleCardOverridePendingAll(env, cors);
     if (path === '/card-override-pending-clear' && request.method === 'POST') return handleCardOverridePendingClear(request, env, cors);
     if (path === '/ebay-publish' && request.method === 'POST') return handleEbayPublish(request, env, cors);
+    if (path === '/scan-index-version' && request.method === 'GET') return handleScanIndexVersion(env, cors);
+    if (path === '/scan-index' && request.method === 'GET') return handleScanIndexGet(env, cors);
+    if (path === '/scan-index-rebuild' && request.method === 'POST') return handleScanIndexRebuild(request, env, cors);
+    if (path === '/scan-index-update' && request.method === 'POST') return handleScanIndexUpdate(request, env, cors);
     if (path === '/ebay-fee-preview' && request.method === 'POST') return handleEbayFeePreview(request, env, cors);
     if (path === '/ebay-discard' && request.method === 'POST') return handleEbayDiscard(request, env, cors);
     if (path === '/ebay-listing-status' && request.method === 'GET') return handleEbayListingStatus(request, env, cors);
