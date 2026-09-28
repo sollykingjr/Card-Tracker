@@ -15,6 +15,7 @@ let ctFilterSerial = false;      // checked = only serial-numbered
 let ctFilterGraded = false;      // checked = only graded
 let ctFilterInHand = false;      // checked = only in-hand
 let ctFilterListed = 'all';      // 'all' | 'exclude' | 'only' (tagged Listed)
+let ctFilterPhoto = 'all';       // 'all' | 'own' (your scan) | 'comc' (COMC image only) | 'none' (no photo)
 let ctFilterTagsAny = [];        // OR within category (set by the Ready to List shortcut)
 
 // ── Filter shortcuts ── one preset of filters per tile. To add one, add an entry here.
@@ -513,6 +514,7 @@ function ctFiltersActiveCount() {
   if (ctFilterGraded) n++;
   if (ctFilterTags.length) n++;
   if (ctFilterTagsAny.length) n++;
+  if (ctFilterPhoto !== 'all') n++;
   if (ctFilterSports.length) n++;
   if (ctFilterYears.length) n++;
   if (ctFilterSets.length) n++;
@@ -548,6 +550,14 @@ function ctFilterPanelHTML(scope) {
       <button class="schip${ctFilterInHand?' on':''}" onclick="ctToggleFilterInHand()" style="padding:8px;font-size:11px">In Hand Only</button>
       <button class="schip${ctFilterListed==='exclude'?' on':''}" onclick="ctSetFilterListed('exclude')" style="padding:8px;font-size:11px">Exclude eBay Listings</button>
       <button class="schip${ctFilterListed==='only'?' on':''}" onclick="ctSetFilterListed('only')" style="padding:8px;font-size:11px">eBay Listings Only</button>
+    </div>
+
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Photo</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px">
+      <button class="schip${ctFilterPhoto==='all'?' on':''}" onclick="ctSetFilterPhoto('all')" style="padding:8px;font-size:11px">All</button>
+      <button class="schip${ctFilterPhoto==='own'?' on':''}" onclick="ctSetFilterPhoto('own')" style="padding:8px;font-size:11px">My Scan</button>
+      <button class="schip${ctFilterPhoto==='comc'?' on':''}" onclick="ctSetFilterPhoto('comc')" style="padding:8px;font-size:11px">COMC Only</button>
+      <button class="schip${ctFilterPhoto==='none'?' on':''}" onclick="ctSetFilterPhoto('none')" style="padding:8px;font-size:11px">No Photo</button>
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
@@ -591,6 +601,7 @@ function ctResetFilters() {
   ctFilterGraded = false;
   ctFilterTags = [];
   ctFilterTagsAny = [];
+  ctFilterPhoto = 'all';
   ctFilterSports = [];
   ctFilterYears = [];
   ctFilterSets = [];
@@ -608,6 +619,13 @@ function ctToggleFilterInHand() {
 
 function ctSetFilterListed(val) {
   ctFilterListed = val;
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+
+function ctSetFilterPhoto(val) {
+  ctFilterPhoto = val;
   ctPage = 1;
   ctRenderFilterContent();
   ctRenderBody();
@@ -832,6 +850,14 @@ function ctFilterCategoryMatch(c) {
   if (ctFilterInHand && !ctIsInHand(c)) return false;
   if (ctFilterListed === 'exclude' && ctGetTags(c).includes('Listed')) return false;
   if (ctFilterListed === 'only' && !ctGetTags(c).includes('Listed')) return false;
+
+  if (ctFilterPhoto !== 'all') {
+    const scan = c.itemId ? ctScanCache[c.itemId] : null;
+    const hasPhoto = !!(scan && (scan.front || scan.back));
+    if (ctFilterPhoto === 'none' && hasPhoto) return false;
+    if (ctFilterPhoto === 'own' && !(hasPhoto && !scan.comc)) return false;
+    if (ctFilterPhoto === 'comc' && !(hasPhoto && scan.comc)) return false;
+  }
 
   if (ctFilterSports.length && !ctFilterSports.includes(c.sport)) return false;
   if (ctFilterYears.length && !ctFilterYears.includes(String(c.year))) return false;
