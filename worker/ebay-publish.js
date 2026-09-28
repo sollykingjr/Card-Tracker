@@ -11,7 +11,8 @@ const MAX_SCHEDULE_MS = 21 * 24 * 60 * 60 * 1000;
 
 // Business policies — IDs are the ones already shown in the app's shipping dropdown.
 const RETURN_POLICY_ID = '238602691017';  // Mascot - No returns accepted
-const PAYMENT_POLICY_ID = '239080495017'; // eBay Managed Payments BIN
+const PAYMENT_POLICY_ID = '239080495017';         // eBay Managed Payments BIN (immediate pay — fixed price only)
+const AUCTION_PAYMENT_POLICY_ID = '242811229017'; // eBay Managed Payments Auction NO BIN
 
 // Package weight/size per shipping policy (decimals are allowed in this API).
 const PWE_PACKAGE = {
@@ -328,7 +329,7 @@ export async function handleEbayPublish(request, env, cors) {
       pricingSummary: isAuction ? { auctionStartPrice: price } : { price },
       listingPolicies: {
         fulfillmentPolicyId: shippingPolicyId,
-        paymentPolicyId: PAYMENT_POLICY_ID,
+        paymentPolicyId: isAuction ? AUCTION_PAYMENT_POLICY_ID : PAYMENT_POLICY_ID,
         returnPolicyId: RETURN_POLICY_ID
       }
     };
