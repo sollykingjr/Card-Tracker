@@ -15,7 +15,7 @@ let ctFilterSerial = false;      // checked = only serial-numbered
 let ctFilterGraded = false;      // checked = only graded
 let ctFilterInHand = false;      // checked = only in-hand
 let ctFilterListed = 'all';      // 'all' | 'exclude' | 'only' (tagged Listed)
-let ctFilterPhoto = 'all';       // 'all' | 'own' (your scan) | 'comc' (COMC image only) | 'none' (no photo)
+let ctFilterPhoto = 'all';       // 'all' | 'none' (no photo) | 'needscan' (in hand, no scan of yours)
 let ctFilterTagsAny = [];        // OR within category (set by the Ready to List shortcut)
 
 // ── Filter shortcuts ── one preset of filters per tile. To add one, add an entry here.
@@ -553,11 +553,10 @@ function ctFilterPanelHTML(scope) {
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Photo</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px">
-      <button class="schip${ctFilterPhoto==='all'?' on':''}" onclick="ctSetFilterPhoto('all')" style="padding:8px;font-size:11px">All</button>
-      <button class="schip${ctFilterPhoto==='own'?' on':''}" onclick="ctSetFilterPhoto('own')" style="padding:8px;font-size:11px">My Scan</button>
-      <button class="schip${ctFilterPhoto==='comc'?' on':''}" onclick="ctSetFilterPhoto('comc')" style="padding:8px;font-size:11px">COMC Only</button>
-      <button class="schip${ctFilterPhoto==='none'?' on':''}" onclick="ctSetFilterPhoto('none')" style="padding:8px;font-size:11px">No Photo</button>
+    <div style="display:flex;gap:6px;margin-bottom:20px">
+      <button class="schip${ctFilterPhoto==='all'?' on':''}" onclick="ctSetFilterPhoto('all')" style="flex:1;padding:8px;font-size:11px">All</button>
+      <button class="schip${ctFilterPhoto==='none'?' on':''}" onclick="ctSetFilterPhoto('none')" style="flex:1;padding:8px;font-size:11px">No Photo</button>
+      <button class="schip${ctFilterPhoto==='needscan'?' on':''}" onclick="ctSetFilterPhoto('needscan')" style="flex:1;padding:8px;font-size:11px">In Hand · Needs Scan</button>
     </div>
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Card Attributes</div>
@@ -854,9 +853,10 @@ function ctFilterCategoryMatch(c) {
   if (ctFilterPhoto !== 'all') {
     const scan = c.itemId ? ctScanCache[c.itemId] : null;
     const hasPhoto = !!(scan && (scan.front || scan.back));
+    const hasOwnScan = hasPhoto && !scan.comc;
     if (ctFilterPhoto === 'none' && hasPhoto) return false;
-    if (ctFilterPhoto === 'own' && !(hasPhoto && !scan.comc)) return false;
-    if (ctFilterPhoto === 'comc' && !(hasPhoto && scan.comc)) return false;
+    // In hand but no scan of yours yet (COMC image or no photo at all).
+    if (ctFilterPhoto === 'needscan' && (hasOwnScan || !ctIsInHand(c))) return false;
   }
 
   if (ctFilterSports.length && !ctFilterSports.includes(c.sport)) return false;
