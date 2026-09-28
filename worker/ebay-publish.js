@@ -195,7 +195,7 @@ async function promoteListing(token, env, listingId, rate) {
 export function buildInventoryItem(l, itemId, shippingPolicyId, cond, imageSides) {
   cond = cond || buildConditionAndDescriptors(l);
   const item = {
-    availability: { shipToLocationAvailability: { quantity: parseInt(l.quantity, 10) || 1 } },
+    availability: { shipToLocationAvailability: { quantity: 1 } }, // one card per SKU
     condition: cond.condition,
     conditionDescriptors: cond.conditionDescriptors,
     product: {
@@ -301,7 +301,7 @@ export async function handleEbayPublish(request, env, cors) {
     if (locErr) return json({ error: locErr }, 502, cors);
 
     const sku = itemId;
-    const qty = parseInt(l.quantity, 10) || 1;
+    const qty = 1; // each card is its own SKU
 
     // 1) Inventory item
     const item = buildInventoryItem(l, itemId, shippingPolicyId, cond, sides);

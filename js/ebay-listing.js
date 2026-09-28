@@ -232,7 +232,6 @@ async function ebayOpenListingForm(itemId, keepDraft) {
       <input type="hidden" id="el-cardType" value="${l.cardType || 'sports'}">
       ${ebayField('Title', 'el-title', l.title)}
       ${ebayField('Price', 'el-price', l.price, { type: 'number' })}
-      ${ebayField('Quantity', 'el-quantity', l.quantity, { type: 'number' })}
       <div style="margin-bottom:12px">
         <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Format</div>
         <select id="el-format" onchange="ebayToggleFormatFields()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-family:inherit">
@@ -305,7 +304,7 @@ function ebayCollectForm(itemId) {
     game: cardType === 'tcg' ? val('el-game') : '',
     title: val('el-title').trim(),
     price: val('el-price'),
-    quantity: val('el-quantity') || 1,
+    quantity: 1, // one card per SKU
     format: val('el-format'),
     allowOffers: val('el-format') === 'FixedPrice' && checked('el-allowOffers'),
     offerAuto: val('el-offerAuto'),
