@@ -21,7 +21,7 @@ let ctFilterTagsAny = [];        // OR within category (set by the Ready to List
 // Fields a shortcut doesn't list stay at their defaults ('all' / off / none).
 const CT_SHORTCUTS = [
   { key: 'ready', label: 'Ready to List', sold: 'exclude', inHand: true, listed: 'exclude', tagsAny: ['To Sell', 'PC Bench'] },
-  { key: 'pc',    label: 'PC',            tagsAny: ['PC'] },
+  { key: 'pc',    label: 'PC',            inHand: true, tagsAny: ['PC'] },
 ];
 let ctShortcutsOpen = false; // mobile dropdown
 
