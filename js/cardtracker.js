@@ -17,20 +17,47 @@ let ctFilterInHand = false;      // checked = only in-hand
 let ctFilterListed = 'all';      // 'all' | 'exclude' | 'only' (tagged Listed)
 let ctFilterTagsAny = [];        // OR within category (set by the Ready to List shortcut)
 
-// Shortcut: in hand, not sold, not listed, tagged To Sell or PC Bench.
-const CT_READY_TAGS = ['To Sell', 'PC Bench'];
-function ctReadyToListActive() {
-  return ctFilterSold === 'exclude' && ctFilterInHand && ctFilterListed === 'exclude'
-    && ctFilterTagsAny.length === CT_READY_TAGS.length && CT_READY_TAGS.every(t => ctFilterTagsAny.includes(t));
+// ── Filter shortcuts ── one preset of filters per tile. To add one, add an entry here.
+// Fields a shortcut doesn't list stay at their defaults ('all' / off / none).
+const CT_SHORTCUTS = [
+  { key: 'ready', label: 'Ready to List', sold: 'exclude', inHand: true, listed: 'exclude', tagsAny: ['To Sell', 'PC Bench'] },
+  { key: 'pc',    label: 'PC',            tagsAny: ['PC'] },
+];
+let ctShortcutsOpen = false; // mobile dropdown
+
+function ctShortcutState(sc) {
+  return { sold: sc.sold || 'all', inHand: !!sc.inHand, listed: sc.listed || 'all', tagsAny: sc.tagsAny || [] };
 }
-function ctToggleReadyToList() {
-  if (ctReadyToListActive()) {
-    ctFilterSold = 'all'; ctFilterInHand = false; ctFilterListed = 'all'; ctFilterTagsAny = [];
-  } else {
-    ctFilterSold = 'exclude'; ctFilterInHand = true; ctFilterListed = 'exclude'; ctFilterTagsAny = CT_READY_TAGS.slice();
-  }
+function ctActiveShortcut() {
+  return CT_SHORTCUTS.find(sc => {
+    const st = ctShortcutState(sc);
+    return ctFilterSold === st.sold && ctFilterInHand === st.inHand && ctFilterListed === st.listed
+      && ctFilterTagsAny.length === st.tagsAny.length && st.tagsAny.every(t => ctFilterTagsAny.includes(t));
+  }) || null;
+}
+function ctApplyShortcutFields(st) {
+  ctFilterSold = st.sold; ctFilterInHand = st.inHand; ctFilterListed = st.listed; ctFilterTagsAny = st.tagsAny.slice();
+}
+// Tapping the active shortcut clears it; tapping another replaces it. Other filters are kept.
+function ctToggleShortcut(key) {
+  const sc = CT_SHORTCUTS.find(x => x.key === key);
+  const active = ctActiveShortcut();
+  if (!sc || (active && active.key === key)) ctApplyShortcutFields(ctShortcutState({}));
+  else ctApplyShortcutFields(ctShortcutState(sc));
+  ctShortcutsOpen = false;
   ctPage = 1;
   ctRenderFilterContent();
+  ctRenderBody();
+}
+function ctClearShortcut() {
+  ctApplyShortcutFields(ctShortcutState({}));
+  ctShortcutsOpen = false;
+  ctPage = 1;
+  ctRenderFilterContent();
+  ctRenderBody();
+}
+function ctToggleShortcutsMenu() {
+  ctShortcutsOpen = !ctShortcutsOpen;
   ctRenderBody();
 }
 function ctClearTagsAny() {
@@ -39,8 +66,21 @@ function ctClearTagsAny() {
   ctRenderFilterContent();
   ctRenderBody();
 }
-function ctReadyToListButtonHTML(extraClass, style) {
-  return `<button class="schip${extraClass ? ' ' + extraClass : ''}${ctReadyToListActive() ? ' on' : ''}" onclick="ctToggleReadyToList()"${style ? ` style="${style}"` : ''}>Ready to List</button>`;
+function ctShortcutTilesHTML(includeClear) {
+  const active = ctActiveShortcut();
+  const tiles = CT_SHORTCUTS.map(sc =>
+    `<button class="schip${active && active.key === sc.key ? ' on' : ''}" onclick="ctToggleShortcut('${sc.key}')" style="padding:10px 8px;font-size:12px">${sc.label}</button>`);
+  if (includeClear && active) tiles.push(`<button class="schip" onclick="ctClearShortcut()" style="padding:10px 8px;font-size:12px;color:var(--tx3)">Clear</button>`);
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${tiles.join('')}</div>`;
+}
+// Mobile bubble: shows the active shortcut's name when one is on.
+function ctShortcutsButtonHTML() {
+  const active = ctActiveShortcut();
+  return `<button class="schip ct-filter-mobile-btn${active || ctShortcutsOpen ? ' on' : ''}" onclick="ctToggleShortcutsMenu()">${active ? active.label : 'Shortcuts'} ${ctShortcutsOpen ? '▴' : '▾'}</button>`;
+}
+function ctShortcutsDropdownHTML() {
+  if (!ctShortcutsOpen) return '';
+  return `<div class="ct-filter-mobile-btn" style="margin-top:10px">${ctShortcutTilesHTML(true)}</div>`;
 }
 
 function ctOpenSearch(query) {
@@ -478,8 +518,8 @@ function ctFilterPanelHTML(scope) {
       <button onclick="ctResetFilters()" style="padding:6px 12px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Reset</button>
     </div>
 
-    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Shortcut</div>
-    <div style="margin-bottom:${ctFilterTagsAny.length ? '8px' : '20px'}">${ctReadyToListButtonHTML('', 'width:100%;padding:8px;font-size:11px')}</div>
+    <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Shortcuts</div>
+    <div style="margin-bottom:${ctFilterTagsAny.length ? '8px' : '20px'}">${ctShortcutTilesHTML(false)}</div>
     ${ctFilterTagsAny.length ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--tx2);margin-bottom:20px"><span>Tagged any of: ${ctFilterTagsAny.join(', ')}</span><button onclick="ctClearTagsAny()" style="background:none;border:none;color:var(--tx3);font-size:16px;cursor:pointer;padding:0 4px">×</button></div>` : ''}
 
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sold</div>
@@ -1109,11 +1149,12 @@ function ctRenderBody() {
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
                 <div class="srow-t" style="margin-bottom:0">${allMatches.length} result${allMatches.length===1?'':'s'}${totalPages > 1 ? ` · Page ${ctPage} of ${totalPages}` : ''}</div>
                 <div style="display:flex;gap:6px">
-                  ${ctReadyToListButtonHTML('ct-filter-mobile-btn')}
+                  ${ctShortcutsButtonHTML()}
                   ${ctFilterButtonHTML()}
                   ${ctViewToggleHTML()}
                 </div>
               </div>
+              ${ctShortcutsDropdownHTML()}
               ${ctPaginationHTML(ctPage, totalPages)}
             </div>
             <div class="ct-list-scroll">
