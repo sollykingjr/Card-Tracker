@@ -399,6 +399,8 @@ export async function handleEbayPublish(request, env, cors) {
 export async function handleEbayFeePreview(request, env, cors) {
   try {
     const body = await request.json();
+    // eBay's get_listing_fees only supports fixed-price offers.
+    if (body && body.listing && body.listing.format === 'Auction') return json({ ok: true, na: true, total: 0, fees: [] }, 200, cors);
     const prep = await prepareListing(env, body);
     if (prep.fail) return json(prep.fail.body, prep.fail.status, cors);
     const r = await ebay(prep.token, 'POST', '/offer/get_listing_fees', { offers: [{ offerId: prep.offerId }] });

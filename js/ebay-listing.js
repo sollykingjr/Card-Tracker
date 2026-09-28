@@ -499,7 +499,8 @@ function ebayRenderFeeLine(blocked) {
     } else {
       el.innerHTML = '<span style="color:var(--up)">$0.00 · free</span>';
     }
-  } else if (f.state === 'error') el.innerHTML = '<span style="color:var(--tx3)">Unavailable</span>';
+  } else if (f.state === 'na') el.innerHTML = '<span style="color:var(--tx3)">Not available for auctions</span>';
+  else if (f.state === 'error') el.innerHTML = '<span style="color:var(--tx3)">Unavailable</span>';
   else el.innerHTML = '<span style="color:var(--tx3)">Checking…</span>';
 }
 
@@ -528,7 +529,8 @@ function ebayReviewListing(itemId, useDraft) {
   ebayDraft = { itemId, listing: l };
   ebayScanState = { front: 'loading', back: 'loading' };
   ebayLiveState = { state: 'loading' };
-  ebayFeeState = { state: 'idle' };
+  // eBay's fee estimate only supports fixed-price listings.
+  ebayFeeState = l.format === 'Auction' ? { state: 'na' } : { state: 'idle' };
   try { localStorage.setItem('ebayShippingPolicyId', l.shippingPolicyId); } catch (e) {}
   ebayCheckLiveStatus(itemId);
 
