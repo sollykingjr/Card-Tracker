@@ -160,6 +160,11 @@ function seGo() {
   if (navigator.clipboard) navigator.clipboard.writeText(q).catch(() => {});
   const url = searchUrl[platform](q);
   closeSearchEditor();
-  if (platform === 'ebay') window.open(url, '_blank');
-  else ctOpenExternal(url);
+  if (platform === 'ebay') {
+    // On the iPhone Home Screen app a plain new-tab link hands off to the eBay app; elsewhere reuse one eBay tab.
+    const w = window.open(url, ctIsIOSHomeScreenApp() ? '_blank' : 'ebay-search');
+    if (w) { try { w.focus(); } catch (e) {} }
+  } else {
+    ctOpenExternal(url, platform + '-search');
+  }
 }

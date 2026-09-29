@@ -913,15 +913,23 @@ function ctCopyName(idx, btn) {
 // Opens a URL outside the app. On an iPhone/iPad Home Screen web app, links normally open
 // in iOS's in-app viewer (separate login, can't hand off to apps), so use the x-safari-
 // scheme to open real Safari instead. Everywhere else, a normal new tab.
-function ctOpenExternal(url) {
+function ctIsIOSHomeScreenApp() {
   const ua = navigator.userAgent || '';
   const isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   const standalone = window.navigator.standalone === true ||
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-  if (isIOS && standalone && /^https:\/\//.test(url)) {
+  return isIOS && standalone;
+}
+
+// tabName: reuse one tab per site (e.g. 'cardladder') instead of opening a new one each time.
+// Browsers only reuse a tab this app opened and that's still open; otherwise a new tab opens.
+// (From the iPhone Home Screen app, Safari always opens a new tab — iOS doesn't allow targeting one.)
+function ctOpenExternal(url, tabName) {
+  if (ctIsIOSHomeScreenApp() && /^https:\/\//.test(url)) {
     window.location.href = 'x-safari-' + url;
   } else {
-    window.open(url, '_blank');
+    const w = window.open(url, tabName || '_blank');
+    if (w && tabName) { try { w.focus(); } catch (e) {} }
   }
 }
 
