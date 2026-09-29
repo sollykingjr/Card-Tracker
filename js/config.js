@@ -6,6 +6,16 @@ const BASE        = `https://sheets.googleapis.com/v4/spreadsheets/${SID}/values
 const TRACKER_BASE= `https://sheets.googleapis.com/v4/spreadsheets/${TRACKER_SID}/values/`;
 const APP_KEY      = 'c18429c7ca75017087511834d1a3d5664bc017a3afb8e5853052251ddd58ae93';
 
+// ── Search text folding ─────────────────────────────────────────────────────────
+// Lowercases and strips accents so plain letters match accented names
+// ("jokic" finds "Jokić", "acuna" finds "Acuña"). Also maps letters that don't
+// decompose (đ, ł, ø, ß, æ, œ, ı) to their closest plain spelling.
+const FOLD_EXTRA = { 'đ': 'd', 'ð': 'd', 'ł': 'l', 'ø': 'o', 'ß': 'ss', 'æ': 'ae', 'œ': 'oe', 'ı': 'i', 'þ': 'th' };
+function foldText(v) {
+  return String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đðłøßæœıþ]/g, ch => FOLD_EXTRA[ch]);
+}
+
 // ── Team name lookup ───────────────────────────────────────────────────────────
 const TEAM_NAMES = {
   ARI:'Arizona Diamondbacks',ATL:'Atlanta Braves',BAL:'Baltimore Orioles',

@@ -820,8 +820,8 @@ function sbOnSearch(val) {
   if (!dd) return;
   if (!val || val.length < 2) { dd.style.display = 'none'; return; }
   if (!_sbAllPlayers) _sbAllPlayers = sbGetAllPlayerNames();
-  const q = val.toLowerCase();
-  const matches = _sbAllPlayers.filter(p => p.name.toLowerCase().includes(q)).slice(0, 20);
+  const q = foldText(val);
+  const matches = _sbAllPlayers.filter(p => foldText(p.name).includes(q)).slice(0, 20);
   if (!matches.length) { dd.style.display = 'none'; return; }
   dd.innerHTML = matches.map(p =>
     `<div class="sb-dd-item" onmousedown="sbAddPlayer('${p.name.replace(/'/g,"\\'")}','${p.source}')">

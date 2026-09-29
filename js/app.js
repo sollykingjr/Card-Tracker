@@ -5,10 +5,10 @@ let tab = 'all', brf = 'all', posf = 'all', q = '', sortBy = 'default';
 // ── Search helper ─────────────────────────────────────────────────────────────
 const matchQ = (name, team) => {
   if (!q) return true;
-  const t = q.toLowerCase();
-  return (name || '').toLowerCase().includes(t) ||
-         (team || '').toLowerCase().includes(t) ||
-         (TEAM_NAMES[team || ''] || '').toLowerCase().includes(t);
+  const t = foldText(q);
+  return foldText(name).includes(t) ||
+         foldText(team).includes(t) ||
+         foldText(TEAM_NAMES[team || '']).includes(t);
 };
 
 // ── Section switcher ──────────────────────────────────────────────────────────

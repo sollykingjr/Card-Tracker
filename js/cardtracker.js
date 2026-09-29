@@ -302,7 +302,7 @@ function ctFilterTagSuggestions(idx) {
 
   const already = new Set((ctTagCache[c.itemId] || []).map(t => t.toLowerCase()));
   const available = ctAllTags().filter(t => !already.has(t.toLowerCase()));
-  const matches = val ? available.filter(t => t.toLowerCase().includes(val)) : available;
+  const matches = val ? available.filter(t => foldText(t).includes(foldText(val))) : available;
   const exactExists = available.some(t => t.toLowerCase() === val);
 
   let html = matches.map(t => `
@@ -346,7 +346,7 @@ function ctFilterTagSuggestions(idx) {
 
   const already = new Set((ctTagCache[c.itemId] || []).map(t => t.toLowerCase()));
   const available = ctAllTags().filter(t => !already.has(t.toLowerCase()));
-  const matches = val ? available.filter(t => t.toLowerCase().includes(val)) : available;
+  const matches = val ? available.filter(t => foldText(t).includes(foldText(val))) : available;
   const exactExists = available.some(t => t.toLowerCase() === val);
 
   let html = matches.map(t => `
@@ -703,7 +703,7 @@ function ctPickerFilterSuggestions(key, scope) {
   const val = input.value.trim().toLowerCase();
   const selected = p.getSelected();
   const available = p.getOptions().filter(v => !selected.includes(v));
-  const matches = val ? available.filter(v => v.toLowerCase().includes(val)) : available;
+  const matches = val ? available.filter(v => foldText(v).includes(foldText(val))) : available;
 
   if (!matches.length) {
     dd.style.display = 'none';
@@ -842,17 +842,17 @@ function ctParseQueryGroups(q) {
   const groupRe = /\(([^)]*)\)/g;
   let m;
   while ((m = groupRe.exec(q)) !== null) {
-    const terms = m[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const terms = m[1].split(',').map(s => foldText(s.trim())).filter(Boolean);
     if (terms.length) groups.push(terms);
   }
   const remaining = q.replace(groupRe, ' ');
-  remaining.split(/\s+/).map(s => s.trim().toLowerCase()).filter(Boolean).forEach(s => groups.push([s]));
+  remaining.split(/\s+/).map(s => foldText(s.trim())).filter(Boolean).forEach(s => groups.push([s]));
   return groups;
 }
 
 function ctMatches(c, q) {
-  const hay = [c.playerDisplay, c.fullCard, c.itemId, c.serialNo, c.sport, c.year, c.set, c.variation, c.version, c.cardNo, c.grade]
-    .filter(Boolean).join(' ').toLowerCase();
+  const hay = foldText([c.playerDisplay, c.fullCard, c.itemId, c.serialNo, c.sport, c.year, c.set, c.variation, c.version, c.cardNo, c.grade]
+    .filter(Boolean).join(' '));
   const groups = ctParseQueryGroups(q);
   if (!groups.length) return true;
   return groups.every(orGroup => orGroup.some(term => hay.includes(term)));

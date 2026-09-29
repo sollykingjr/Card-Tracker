@@ -1232,7 +1232,7 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
 
   // Filter by search text
   if (filterText) {
-    items = items.filter(item => item.title.toLowerCase().includes(filterText));
+    items = items.filter(item => foldText(item.title).includes(foldText(filterText)));
   }
 
   // Sort
