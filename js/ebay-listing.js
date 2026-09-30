@@ -24,8 +24,8 @@ function ebayBuildDefaultListing(c) {
     allowOffers: true,
     offerAuto: '',
     offerMin: '',
-    action: 'scheduled',
-    schedule: ebayLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)), // default: 1 hour from now
+    action: 'live',
+    schedule: '', // filled with 8 PM when Scheduled is picked
     description: 'Please see scan for condition. Please reach out with any questions.',
     condition: 'Excellent',
     sport: c.sport || '',
@@ -135,13 +135,40 @@ function ebayRenderActionFields(l) {
     </div>
     <div id="el-schedule-wrap" style="margin-bottom:12px;display:${action === 'scheduled' ? 'block' : 'none'}">
       <div style="${labelStyle}">Start Time (max 3 weeks out)</div>
-      <input type="datetime-local" id="el-schedule" value="${l.schedule || ''}" min="${min}" max="${max}" style="${inputStyle}">
+      <input type="datetime-local" id="el-schedule" value="${(action === 'scheduled' && (l.schedule || ebayDefaultScheduleValue())) || ''}" min="${min}" max="${max}" style="${inputStyle}">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px">
+        ${[[-60, '−1 hr'], [-1, '−1 min'], [1, '+1 min'], [60, '+1 hr']].map(([m, label]) =>
+          `<button type="button" onclick="ebayNudgeSchedule(${m})" style="height:34px;border:1px solid var(--bdr2);border-radius:8px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${label}</button>`).join('')}
+      </div>
     </div>`;
+}
+
+// Default start: 8:00 PM today, or 8:00 PM tomorrow if today's 8 PM has passed.
+function ebayDefaultScheduleValue() {
+  const d = new Date();
+  d.setHours(20, 0, 0, 0);
+  if (d.getTime() <= Date.now() + 5 * 60 * 1000) d.setDate(d.getDate() + 1);
+  return ebayLocalInputValue(d);
 }
 
 function ebayToggleScheduleField() {
   const wrap = document.getElementById('el-schedule-wrap');
-  if (wrap) wrap.style.display = document.getElementById('el-action').value === 'scheduled' ? 'block' : 'none';
+  const scheduled = document.getElementById('el-action').value === 'scheduled';
+  if (wrap) wrap.style.display = scheduled ? 'block' : 'none';
+  const input = document.getElementById('el-schedule');
+  if (scheduled && input) {
+    const cur = input.value ? new Date(input.value) : null;
+    if (!cur || isNaN(cur) || cur.getTime() <= Date.now()) input.value = ebayDefaultScheduleValue();
+  }
+}
+
+// +/- buttons: shift the start time by N minutes (spreads auction end times).
+function ebayNudgeSchedule(minutes) {
+  const input = document.getElementById('el-schedule');
+  if (!input) return;
+  const base = input.value ? new Date(input.value) : new Date(ebayDefaultScheduleValue());
+  if (isNaN(base)) return;
+  input.value = ebayLocalInputValue(new Date(base.getTime() + minutes * 60 * 1000));
 }
 
 // Returns an error string, or null if the listing's action/schedule is publishable right now.
