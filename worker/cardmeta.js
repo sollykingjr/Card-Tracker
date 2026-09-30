@@ -492,9 +492,10 @@ export async function handleCardImage(request, env, cors) {
     if (!imgRes.ok) {
       return new Response('Could not fetch image', { status: 502, headers: cors });
     }
-    // Stream straight through instead of loading the whole (often large) scan into memory.
-    return new Response(imgRes.body, {
-      headers: { ...cors, 'Content-Type': imgRes.headers.get('Content-Type') || 'image/jpeg', 'Cache-Control': 'public, max-age=604800' }
+    // Send the whole file with a known length (the format eBay's photo importer has always accepted).
+    const imageBuffer = await imgRes.arrayBuffer();
+    return new Response(imageBuffer, {
+      headers: { ...cors, 'Content-Type': 'image/jpeg', 'Content-Length': String(imageBuffer.byteLength), 'Cache-Control': 'public, max-age=604800' }
     });
   } catch(e) {
     return new Response(`Error: ${e.message}`, { status: 500, headers: cors });
