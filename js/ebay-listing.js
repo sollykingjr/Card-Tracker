@@ -569,12 +569,22 @@ function ebayReviewListing(itemId, useDraft) {
   const offers = !l.allowOffers ? 'Off'
     : [l.offerAuto ? `auto-accept $${ebayMoney(l.offerAuto)?.toFixed(2)}` : null, l.offerMin ? `min $${ebayMoney(l.offerMin)?.toFixed(2)}` : null].filter(Boolean).join(' · ') || 'On';
   const cond = l.isGraded ? `${l.grader} ${l.grade}` : (l.condition || '—');
-  const img = side => `https://card-app.maxcsolomon.workers.dev/card-image/${encodeURIComponent(itemId)}-${side}.jpg`;
-  const scanBox = side => `
+  // Same photos as the card modal: Drive thumbnails from the photo index. Only cards not in the
+  // index fall back to the worker's full-size link (the one eBay pulls from).
+  if (typeof ctHydrateScanIndex === 'function') ctHydrateScanIndex();
+  const indexed = (typeof ctScanCache !== 'undefined' && ctScanCache[itemId]) || null;
+  const img = side => indexed
+    ? (indexed[side] ? indexed[side].thumb : '')
+    : `https://card-app.maxcsolomon.workers.dev/card-image/${encodeURIComponent(itemId)}-${side}.jpg`;
+  const scanBox = side => {
+    const src = img(side);
+    if (!src) setTimeout(() => ebayScanLoaded(side, false), 0); // indexed, but no photo for this side
+    return `
     <div style="flex:1;aspect-ratio:5/7;border:1px solid var(--bdr2);border-radius:8px;overflow:hidden;background:var(--surf2)">
-      <img id="el-scan-${side}" src="${img(side)}" alt="${side}" style="width:100%;height:100%;object-fit:contain;display:block"
+      <img id="el-scan-${side}" src="${src}" alt="${side}" style="width:100%;height:100%;object-fit:contain;display:block"
         onload="ebayScanLoaded('${side}', true)" onerror="ebayScanLoaded('${side}', false)">
     </div>`;
+  };
   const line = (label, value) => `
     <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)">
       <div style="font-size:13px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">${label}</div>

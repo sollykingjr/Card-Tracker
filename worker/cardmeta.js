@@ -476,7 +476,8 @@ export async function handleCardImage(request, env, cors) {
         front: front ? { id: front.id, link: front.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${front.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${front.id}&sz=w200` } : null,
         back: back ? { id: back.id, link: back.webViewLink, thumb: `https://drive.google.com/thumbnail?id=${back.id}&sz=w800`, thumbSm: `https://drive.google.com/thumbnail?id=${back.id}&sz=w200` } : null
       };
-      await env.CACHE.put(cacheKey, JSON.stringify(scanData), { expirationTtl: 604800 });
+      // Only remember a result that found something — a brand-new scan may not be searchable yet.
+      if (front || back) await env.CACHE.put(cacheKey, JSON.stringify(scanData), { expirationTtl: 604800 });
     }
 
     const fileInfo = scanData[side];
@@ -491,9 +492,9 @@ export async function handleCardImage(request, env, cors) {
     if (!imgRes.ok) {
       return new Response('Could not fetch image', { status: 502, headers: cors });
     }
-    const imageBuffer = await imgRes.arrayBuffer();
-    return new Response(imageBuffer, {
-      headers: { ...cors, 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' }
+    // Stream straight through instead of loading the whole (often large) scan into memory.
+    return new Response(imgRes.body, {
+      headers: { ...cors, 'Content-Type': imgRes.headers.get('Content-Type') || 'image/jpeg', 'Cache-Control': 'public, max-age=604800' }
     });
   } catch(e) {
     return new Response(`Error: ${e.message}`, { status: 500, headers: cors });
