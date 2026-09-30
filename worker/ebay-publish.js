@@ -340,23 +340,17 @@ async function prepareListing(env, body) {
   if (!isAuction) offer.availableQuantity = qty;
   if (listingStartDate) offer.listingStartDate = listingStartDate;
 
-  let offerId;
-  let prior = status.offer;
-  if (prior && prior.status === 'PUBLISHED') {
-    // Old listing ended without selling — remove its offer and start a fresh listing.
-    const del = await ebay(token, 'DELETE', `/offer/${prior.offerId}`);
-    if (!del.ok && del.status !== 404) return fail(502, { error: stepError('offer_delete_ended', del) });
-    prior = null;
-  }
+  // Any existing offer here is either an ended listing or an unpublished leftover (e.g. from a
+  // fee check). Replace it rather than update it — eBay won't switch an offer between
+  // fixed price and auction.
+  const prior = status.offer;
   if (prior) {
-    offerId = prior.offerId;
-    const upd = await ebay(token, 'PUT', `/offer/${offerId}`, offer);
-    if (!upd.ok) return fail(502, { error: stepError('offer_update', upd) });
-  } else {
-    const created = await ebay(token, 'POST', '/offer', offer);
-    if (!created.ok) return fail(502, { error: stepError('offer_create', created) });
-    offerId = created.data.offerId;
+    const del = await ebay(token, 'DELETE', `/offer/${prior.offerId}`);
+    if (!del.ok && del.status !== 404) return fail(502, { error: stepError('offer_replace', del) });
   }
+  const created = await ebay(token, 'POST', '/offer', offer);
+  if (!created.ok) return fail(502, { error: stepError('offer_create', created) });
+  const offerId = created.data.offerId;
 
   return { ok: true, token, offerId, listingStartDate, l, mode };
 }
