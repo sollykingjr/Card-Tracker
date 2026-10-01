@@ -8,6 +8,7 @@ let emlLoading = false;
 let emlError = '';
 let emlFetchedAt = null;
 let emlFilter = 'all';     // 'all' | 'active' | 'scheduled'
+let emlSource = 'all';     // 'all' | 'app' | 'trading' (where it was posted)
 let emlQuery = '';
 let emlBanner = '';
 let emlDetail = null;      // listing being edited (from /ebay-listing-detail)
@@ -64,6 +65,7 @@ async function emlLoadNow() {
 
 function emlMatches(l) {
   if (emlFilter !== 'all' && l.status !== emlFilter) return false;
+  if (emlSource !== 'all' && l.source !== emlSource) return false;
   if (!emlQuery) return true;
   const qf = foldText(emlQuery);
   return foldText(l.title).includes(qf) || String(l.sku || '').toLowerCase().includes(qf.toLowerCase()) || String(l.listingId).includes(emlQuery);
@@ -74,8 +76,19 @@ function renderEbayListings() {
   if (!root) return;
   if (!emlLoaded && !emlLoading && !emlError) { emlLoad(); return; }
 
-  const counts = { all: emlListings.length, active: 0, scheduled: 0 };
-  for (const l of emlListings) counts[l.status] = (counts[l.status] || 0) + 1;
+  // Each row's counts respect the other row's selection.
+  const counts = { all: 0, active: 0, scheduled: 0 };
+  for (const l of emlListings) {
+    if (emlSource !== 'all' && l.source !== emlSource) continue;
+    counts.all++; counts[l.status] = (counts[l.status] || 0) + 1;
+  }
+  const srcCounts = { app: 0, trading: 0 };
+  for (const l of emlListings) {
+    if (emlFilter !== 'all' && l.status !== emlFilter) continue;
+    if (l.source) srcCounts[l.source]++;
+  }
+  const hasSource = emlListings.some(l => l.source);
+  const srcSeg = (key, label) => `<button onclick="emlSetSource('${key}')" style="flex:1;height:34px;border:1px solid ${emlSource === key ? 'var(--acc-bdr)' : 'var(--bdr2)'};border-radius:9px;background:${emlSource === key ? 'var(--acc-bg)' : 'var(--surf2)'};color:${emlSource === key ? 'var(--acc)' : 'var(--tx2)'};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${label} ${srcCounts[key]}</button>`;
   const seg = (key, label) => `<button onclick="emlSetFilter('${key}')" style="flex:1;height:34px;border:1px solid ${emlFilter === key ? 'var(--acc-bdr)' : 'var(--bdr2)'};border-radius:9px;background:${emlFilter === key ? 'var(--acc-bg)' : 'var(--surf2)'};color:${emlFilter === key ? 'var(--acc)' : 'var(--tx2)'};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${label} ${counts[key] || 0}</button>`;
 
   const shown = emlListings.filter(emlMatches);
@@ -97,6 +110,7 @@ function renderEbayListings() {
       <input id="eml-search" type="search" placeholder="Search title, Item ID or listing #" value="${searchVal}" oninput="emlOnSearch(this.value)"
         style="width:100%;box-sizing:border-box;height:40px;padding:0 12px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:16px;font-family:inherit;margin-bottom:10px">
       <div style="display:flex;gap:6px;margin-bottom:6px">${seg('all', 'All')}${seg('active', 'Live')}${seg('scheduled', 'Scheduled')}</div>
+      ${hasSource ? `<div style="display:flex;gap:6px;margin-bottom:6px">${srcSeg('app', 'Posted via App')}${srcSeg('trading', 'Posted via Seller Hub')}</div>` : ''}
       ${emlFetchedAt ? `<div style="font-size:11px;color:var(--tx3);margin-bottom:10px">Updated ${emlFmtTime(emlFetchedAt)}</div>` : ''}
       <div id="eml-list">${body}</div>
     </div>`;
@@ -117,11 +131,23 @@ function emlRowHtml(l) {
       ${img}
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:600;color:var(--tx);line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${emlEsc(l.title)}</div>
-        <div style="font-size:12px;color:var(--tx3);margin-top:3px">${fmt}${when ? ' · ' + when : ''}${l.watchCount ? ` · ${l.watchCount} watching` : ''}</div>
+        <div style="font-size:12px;color:var(--tx3);margin-top:3px">${emlSourceBadge(l.source)}${fmt}${when ? ' · ' + when : ''}${l.watchCount ? ` · ${l.watchCount} watching` : ''}</div>
         ${l.sku ? `<div style="font-size:11px;color:var(--tx3);margin-top:2px">${emlEsc(l.sku)}</div>` : ''}
       </div>
       <div style="font-size:15px;font-weight:700;color:var(--tx);flex-shrink:0">$${(l.price || 0).toFixed(2)}</div>
     </div>`;
+}
+
+function emlSourceBadge(src) {
+  if (!src) return '';
+  const app = src === 'app';
+  return `<span style="display:inline-block;padding:1px 6px;margin-right:6px;border-radius:6px;font-size:10px;font-weight:800;letter-spacing:.03em;border:1px solid ${app ? 'var(--acc-bdr)' : 'var(--bdr2)'};background:${app ? 'var(--acc-bg)' : 'var(--surf2)'};color:${app ? 'var(--acc)' : 'var(--tx2)'}">${app ? 'APP' : 'SELLER HUB'}</span>`;
+}
+
+// Tapping the selected one again turns it off.
+function emlSetSource(src) {
+  emlSource = emlSource === src ? 'all' : src;
+  renderEbayListings();
 }
 
 function emlSetFilter(f) {
@@ -208,7 +234,7 @@ function emlRenderEdit() {
       ${d.images && d.images[0] ? `<img src="${emlEsc(d.images[0])}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0">` : ''}
       <div style="min-width:0">
         <div style="font-size:13px;color:var(--tx2);font-weight:600">${emlEsc(status)}</div>
-        <div style="font-size:12px;color:var(--tx3);margin-top:2px">#${emlEsc(d.listingId)}${d.sku ? ' · ' + emlEsc(d.sku) : ''}${d.watchCount ? ` · ${d.watchCount} watching` : ''}</div>
+        <div style="font-size:12px;color:var(--tx3);margin-top:2px">${emlSourceBadge(d.source)}#${emlEsc(d.listingId)}${d.sku ? ' · ' + emlEsc(d.sku) : ''}${d.watchCount ? ` · ${d.watchCount} watching` : ''}</div>
         ${d.url ? `<a href="${emlEsc(d.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--acc);font-weight:700;text-decoration:none">View on eBay ↗</a>` : ''}
       </div>
     </div>

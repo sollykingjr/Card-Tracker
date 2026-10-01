@@ -114,12 +114,26 @@ async function fetchList(token, listTag) {
   return { items };
 }
 
+// SKUs this app has created on eBay (Inventory API). Listings with these SKUs were posted by the app.
+// Returns null if eBay can't be reached, so the list still loads without the App/Seller Hub split.
+async function fetchAppSkus(token) {
+  const skus = new Set();
+  for (let offset = 0; offset < 10000; offset += 200) {
+    const r = await ebay(token, 'GET', `/inventory_item?limit=200&offset=${offset}`);
+    if (!r.ok) return null;
+    const items = (r.data && r.data.inventoryItems) || [];
+    for (const it of items) if (it.sku) skus.add(String(it.sku));
+    if (items.length < 200 || !(r.data && r.data.next)) break;
+  }
+  return skus;
+}
+
 // GET /ebay-my-listings → { ok, listings: [...] } (scheduled first, then active)
 export async function handleEbayMyListings(request, env, cors) {
   try {
     const token = await getAccessToken(env);
     if (!token) return json({ error: 'not_authenticated', authUrl: '/auth' }, 401, cors);
-    const [scheduled, active] = await Promise.all([fetchList(token, 'ScheduledList'), fetchList(token, 'ActiveList')]);
+    const [scheduled, active, appSkus] = await Promise.all([fetchList(token, 'ScheduledList'), fetchList(token, 'ActiveList'), fetchAppSkus(token).catch(() => null)]);
     if (scheduled.error) return json({ error: scheduled.error }, 502, cors);
     if (active.error) return json({ error: active.error }, 502, cors);
     const seen = new Set();
@@ -127,6 +141,7 @@ export async function handleEbayMyListings(request, env, cors) {
     for (const it of [...scheduled.items, ...active.items]) {
       if (!it.listingId || seen.has(it.listingId)) continue;
       seen.add(it.listingId);
+      it.source = appSkus ? (it.sku && appSkus.has(it.sku) ? 'app' : 'trading') : null;
       listings.push(it);
     }
     return json({ ok: true, listings, fetchedAt: new Date().toISOString() }, 200, cors);
