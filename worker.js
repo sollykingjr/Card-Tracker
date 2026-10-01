@@ -16,6 +16,7 @@ import {
 import { handleDebugRawWatchlist } from './worker/debug.js';
 import { handleScanIndexVersion, handleScanIndexGet, handleScanIndexRebuild, handleScanIndexUpdate } from './worker/scan-index.js';
 import { handleEbayPublish, handleEbayListingStatus, handleEbayFeePreview, handleEbayDiscard } from './worker/ebay-publish.js';
+import { handleEbayMyListings, handleEbayListingDetail, handleEbayListingUpdate, handleEbayListingEnd } from './worker/ebay-listings.js';
 
 
 
@@ -41,6 +42,10 @@ const PROTECTED_ROUTES = new Set([
   'POST:/ebay-fee-preview',
   'POST:/ebay-discard',
   'GET:/ebay-listing-status',
+  'GET:/ebay-my-listings',
+  'GET:/ebay-listing-detail',
+  'POST:/ebay-listing-update',
+  'POST:/ebay-listing-end',
   'GET:/test-promotions',
   'GET:/comc-pulled-invalidate-scans',
 ]);
@@ -134,6 +139,10 @@ export default {
     if (path === '/ebay-fee-preview' && request.method === 'POST') return handleEbayFeePreview(request, env, cors);
     if (path === '/ebay-discard' && request.method === 'POST') return handleEbayDiscard(request, env, cors);
     if (path === '/ebay-listing-status' && request.method === 'GET') return handleEbayListingStatus(request, env, cors);
+    if (path === '/ebay-my-listings' && request.method === 'GET') return handleEbayMyListings(request, env, cors);
+    if (path === '/ebay-listing-detail' && request.method === 'GET') return handleEbayListingDetail(request, env, cors);
+    if (path === '/ebay-listing-update' && request.method === 'POST') return handleEbayListingUpdate(request, env, cors);
+    if (path === '/ebay-listing-end' && request.method === 'POST') return handleEbayListingEnd(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);
     return new Response('card-app worker running', { headers: cors });

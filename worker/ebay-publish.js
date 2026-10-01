@@ -5,7 +5,7 @@ import { refreshAccessToken } from './ebay-watchlist.js';
 import { fetchLiveListings } from './ebay-selling.js';
 
 const API = 'https://api.ebay.com/sell/inventory/v1';
-const MARKETPLACE = 'EBAY_US';
+export const MARKETPLACE = 'EBAY_US';
 const LOCATION_KEY = 'home-10022';
 const MAX_SCHEDULE_MS = 21 * 24 * 60 * 60 * 1000;
 
@@ -19,7 +19,7 @@ const PWE_PACKAGE = {
   weight: { value: 1, unit: 'OUNCE' },
   dimensions: { length: 6, width: 4, height: 0.2, unit: 'INCH' }
 };
-const PACKAGE_BY_POLICY = {
+export const PACKAGE_BY_POLICY = {
   '254806132017': PWE_PACKAGE, // PWE - Not Flat Rate
   '251924633017': PWE_PACKAGE, // PWE Free Shipping
   '239080494017': {            // Calculated Bubble Mailers
@@ -49,13 +49,13 @@ const UNGRADED_TCG_IDS = {
   'Near mint or better': '400010', 'Excellent': '400015', 'Very good': '400016', 'Poor': '400017'
 };
 
-function json(data, status, cors) {
+export function json(data, status, cors) {
   return new Response(JSON.stringify(data), {
     status, headers: { ...cors, 'Content-Type': 'application/json' }
   });
 }
 
-async function getAccessToken(env) {
+export async function getAccessToken(env) {
   let token = await env.CACHE.get('ebay_access_token');
   if (token) return token;
   const refresh = await env.CACHE.get('ebay_refresh_token');
@@ -63,7 +63,7 @@ async function getAccessToken(env) {
   return refreshAccessToken(refresh, env);
 }
 
-async function ebay(token, method, path, body) {
+export async function ebay(token, method, path, body) {
   const res = await fetch(`${API}${path}`, {
     method,
     headers: {
@@ -80,7 +80,7 @@ async function ebay(token, method, path, body) {
   return { ok: res.ok, status: res.status, data };
 }
 
-function stepError(step, r) {
+export function stepError(step, r) {
   const errs = (r.data && r.data.errors) || [];
   const msg = errs.map(e => `${e.errorId}: ${e.longMessage || e.message}`).join(' | ') || `HTTP ${r.status}`;
   return { step, status: r.status, message: msg, errors: errs };

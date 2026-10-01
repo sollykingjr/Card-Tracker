@@ -19,6 +19,7 @@ function clearInactiveSection(prevSection, newSection) {
     cardtracker: 'cardtracker-root',
     portfolio: 'portfolio-root',
     settings: 'settings-root',
+    ebaylistings: 'ebaylistings-root',
     searchresults: 'sr-root',
     searchbuilder: 'sb-root',
     prospects: 'list',
@@ -49,15 +50,17 @@ function setSection(s) {
   const isCT    = s === 'cardtracker';
   const isPort  = s === 'portfolio';
   const isSet   = s === 'settings';
-  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome || isCT || isPort || isSet) ? 'none' : '';
+  const isEL    = s === 'ebaylistings';
+  document.getElementById('prospects-section').style.display = (isWatch || isSB || isSR || isHome || isCT || isPort || isSet || isEL) ? 'none' : '';
   document.getElementById('sb-root').style.display = isSB ? 'block' : 'none';
   document.getElementById('sr-root').style.display = isSR ? 'block' : 'none';
   document.getElementById('home-root').style.display = isHome ? 'block' : 'none';
   document.getElementById('cardtracker-root').style.display = isCT ? 'block' : 'none';
   document.getElementById('portfolio-root').style.display = isPort ? 'block' : 'none';
   document.getElementById('settings-root').style.display = isSet ? 'block' : 'none';
-  document.getElementById('list').style.display = (isSB || isSR || isHome || isCT || isPort || isSet) ? 'none' : '';
-  document.querySelector('.meta').style.display = (isSB || isSR || isHome || isCT || isPort || isSet) ? 'none' : '';
+  document.getElementById('ebaylistings-root').style.display = isEL ? 'block' : 'none';
+  document.getElementById('list').style.display = (isSB || isSR || isHome || isCT || isPort || isSet || isEL) ? 'none' : '';
+  document.querySelector('.meta').style.display = (isSB || isSR || isHome || isCT || isPort || isSet || isEL) ? 'none' : '';
   document.getElementById('sortchips').innerHTML = '';
 
   window.scrollTo(0, 0);
@@ -87,6 +90,9 @@ function setSection(s) {
   } else if (isSet) {
     document.getElementById('cntlbl').textContent = '';
     renderSettings();
+  } else if (isEL) {
+    document.getElementById('cntlbl').textContent = '';
+    renderEbayListings();
   } else {
     document.getElementById('cntlbl').textContent = '';
     if (!prospectDataLoaded) {

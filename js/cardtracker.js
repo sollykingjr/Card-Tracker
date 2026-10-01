@@ -974,6 +974,7 @@ function ctOpenCard(idx) {
       <div class="ct-menu-item" onclick="ctRefreshScans()">Refresh Scans</div>
       <div class="ct-menu-item" onclick="ctShowEditMetadata(${idx})">Edit Metadata</div>
       <div class="ct-menu-item" onclick="ebayOpenListingForm('${(c.itemId||'').replace(/'/g,"\\'")}')">List on eBay</div>
+      ${ctGetTags(c).includes('Listed') ? `<div class="ct-menu-item" onclick="emlOpenForCard('${(c.itemId||'').replace(/'/g,"\\'")}')">Edit eBay listing</div>` : ''}
     </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
     <div class="mitemid">${c.itemId || '—'}</div>
