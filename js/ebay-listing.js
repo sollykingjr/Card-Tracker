@@ -262,6 +262,9 @@ async function ebayOpenListingForm(itemId, keepDraft) {
       </div>
       <input type="hidden" id="el-cardType" value="${l.cardType || 'sports'}">
       ${ebayField('Title', 'el-title', l.title)}
+      <div style="margin:-6px 0 12px;display:flex;justify-content:flex-end">
+        <button type="button" onclick="ebayOpenTitleEditor('${itemId.replace(/'/g, "\\'")}')" style="padding:5px 10px;border:1px solid var(--acc-bdr);border-radius:8px;background:var(--acc-bg);color:var(--acc);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Suggest title</button>
+      </div>
       ${ebayField('Price', 'el-price', l.price, { type: 'number' })}
       <div style="margin-bottom:12px">
         <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Format</div>
@@ -310,6 +313,23 @@ async function ebayOpenListingForm(itemId, keepDraft) {
   `;
 
   ebayShowScreen(html);
+}
+
+// Title editor: same chips / Suggested cleanup as the site searches, applied to the listing title.
+function ebayOpenTitleEditor(itemId) {
+  const c = cards.find(x => x.itemId === itemId) || {};
+  const input = document.getElementById('el-title');
+  const original = c.fullCard || c.playerDisplay || (input ? input.value : '');
+  openSearchEditor({
+    text: original,
+    startText: input ? input.value : '',
+    playerHint: c.playerDisplay || '',
+    heading: 'Edit Title',
+    applyLabel: 'Use as Title',
+    fullLabel: 'Original',
+    maxLen: 80,
+    onApply: t => { const el = document.getElementById('el-title'); if (el) el.value = t; }
+  });
 }
 
 function ebaySetCardType(type) {

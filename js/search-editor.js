@@ -81,12 +81,17 @@ function seStorageSet(key, val) {
 }
 
 // Opens the editor. opts: { platform, text, key, playerHint }
+// Title mode (listing form): { text, startText, onApply, heading, applyLabel, fullLabel, maxLen }
 function openSearchEditor(opts) {
   const full = String(opts.text || '').trim();
-  if (!full || !SE_PLATFORMS[opts.platform]) return;
+  const onApply = typeof opts.onApply === 'function' ? opts.onApply : null;
+  if (!full || (!onApply && !SE_PLATFORMS[opts.platform])) return;
   const player = seFindPlayer(full, opts.playerHint);
-  seState = { platform: opts.platform, full, player, key: opts.key || '' };
-  const start = (seState.key && seStorageGet(seState.key)) || full;
+  seState = { platform: opts.platform, full, player, key: opts.key || '', onApply, maxLen: opts.maxLen || 0 };
+  const start = (opts.startText && String(opts.startText).trim()) || (seState.key && seStorageGet(seState.key)) || full;
+  const heading = opts.heading || `Search ${SE_PLATFORMS[opts.platform]}`;
+  const applyLabel = opts.applyLabel || `Search ${SE_PLATFORMS[opts.platform]}`;
+  const fullLabel = opts.fullLabel || 'Full name';
 
   document.getElementById('search-editor')?.remove();
   const wrap = document.createElement('div');
@@ -96,17 +101,18 @@ function openSearchEditor(opts) {
   wrap.innerHTML = `
     <div style="background:var(--bg2);width:100%;max-width:600px;max-height:88vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px 18px 28px;border:1px solid var(--bdr2);border-bottom:none;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div style="font-size:16px;font-weight:700;color:var(--tx)">Search ${SE_PLATFORMS[opts.platform]}</div>
+        <div style="font-size:16px;font-weight:700;color:var(--tx)">${heading}</div>
         <button onclick="closeSearchEditor()" style="background:none;border:none;color:var(--tx3);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
       </div>
       <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Tap to remove</div>
       <div id="se-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
       <textarea id="se-text" rows="2" oninput="seRenderChips()" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:16px;font-family:inherit;resize:vertical"></textarea>
+      ${seState.maxLen ? '<div id="se-count" style="font-size:12px;color:var(--tx3);margin-top:4px;text-align:right"></div>' : ''}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button onclick="seApply('suggested')" style="${btn2}">Suggested</button>
-        <button onclick="seApply('full')" style="${btn2}">Full name</button>
+        <button onclick="seApply('full')" style="${btn2}">${fullLabel}</button>
       </div>
-      <button onclick="seGo()" style="width:100%;height:46px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:10px">Search ${SE_PLATFORMS[opts.platform]}</button>
+      <button onclick="seGo()" style="width:100%;height:46px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:10px">${applyLabel}</button>
     </div>`;
   wrap.addEventListener('click', e => { if (e.target === wrap) closeSearchEditor(); });
   document.body.appendChild(wrap);
@@ -124,6 +130,12 @@ function seRenderChips() {
   const input = document.getElementById('se-text');
   if (!box || !input || !seState) return;
   const tokens = seTokenize(input.value, seState.player);
+  const count = document.getElementById('se-count');
+  if (count && seState.maxLen) {
+    const n = input.value.replace(/\s+/g, ' ').trim().length;
+    count.textContent = `${n}/${seState.maxLen} characters`;
+    count.style.color = n > seState.maxLen ? 'var(--dn)' : 'var(--tx3)';
+  }
   box.innerHTML = '';
   tokens.forEach((tok, i) => {
     const chip = document.createElement('button');
@@ -154,6 +166,7 @@ function seGo() {
   if (!input || !seState) return;
   const q = input.value.replace(/\s+/g, ' ').trim();
   if (!q) return;
+  if (seState.onApply) { const fn = seState.onApply; closeSearchEditor(); fn(q); return; }
   const { platform, key } = seState;
   if (key) seStorageSet(key, q);
   // Copy and open inside the same tap (opening after an await gets blocked on iOS).
