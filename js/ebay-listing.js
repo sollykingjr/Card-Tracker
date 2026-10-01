@@ -387,6 +387,14 @@ function ebayRunChecks(itemId, l) {
 
   if (!l.shippingPolicyId) blocks.push('Shipping policy is missing');
 
+  // Shipping sanity check: under $20 usually goes PWE, $20+ shouldn't.
+  const PWE_POLICY_IDS = ['254806132017', '251924633017'];
+  if (l.shippingPolicyId && price !== null && price > 0) {
+    const isPWE = PWE_POLICY_IDS.includes(l.shippingPolicyId);
+    if (price < 20 && !isPWE) warns.push(`Under $20 but shipping is ${ebayShippingLabel(l.shippingPolicyId)} (not PWE)`);
+    if (price >= 20 && isPWE) warns.push(`$20 or more but shipping is ${ebayShippingLabel(l.shippingPolicyId)}`);
+  }
+
   const sched = ebayScheduleProblem(l);
   if (sched) blocks.push(sched);
 
