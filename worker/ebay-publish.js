@@ -44,6 +44,10 @@ const GRADE_IDS = {
 const UNGRADED_IDS = {
   'Near mint or better': '400010', 'Excellent': '400011', 'Very good': '400012', 'Poor': '400013'
 };
+// TCG cards (category 183454) use eBay's played-scale values for the same descriptor.
+const UNGRADED_TCG_IDS = {
+  'Near mint or better': '400010', 'Excellent': '400015', 'Very good': '400016', 'Poor': '400017'
+};
 
 function json(data, status, cors) {
   return new Response(JSON.stringify(data), {
@@ -109,7 +113,8 @@ function buildConditionAndDescriptors(l) {
       ]
     };
   }
-  const condId = UNGRADED_IDS[l.condition] || UNGRADED_IDS['Excellent'];
+  const table = l.cardType === 'tcg' ? UNGRADED_TCG_IDS : UNGRADED_IDS;
+  const condId = table[l.condition] || table['Excellent'];
   return { condition: 'USED_VERY_GOOD', conditionDescriptors: [{ name: '40001', values: [condId] }] };
 }
 
