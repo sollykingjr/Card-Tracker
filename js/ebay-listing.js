@@ -7,6 +7,7 @@ function ebayGuessGraderGrade(gradeText) {
   return { grader: '', grade: t };
 }
 
+
 const EBAY_TCG_GAMES = ['Pokémon', 'Yu-Gi-Oh!', 'Magic: The Gathering', 'Lorcana', 'One Piece', 'Other'];
 
 function ebayBuildDefaultListing(c) {
