@@ -4,6 +4,8 @@ const TRACKER_SID = '12sNofzPwhb8uR68hT_bJNiLD2MrM0rdoQMPXGTlx2_s';
 const KEY         = 'AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE';
 const BASE        = `https://sheets.googleapis.com/v4/spreadsheets/${SID}/values/`;
 const TRACKER_BASE= `https://sheets.googleapis.com/v4/spreadsheets/${TRACKER_SID}/values/`;
+// Card database (new data pipeline). Only the staging test app uses it until cutover.
+const CARD_DB_URL = location.hostname === 'card-app-staging.maxcsolomon.workers.dev' ? location.origin : null;
 const APP_KEY      = 'c18429c7ca75017087511834d1a3d5664bc017a3afb8e5853052251ddd58ae93';
 
 // ── Search text folding ─────────────────────────────────────────────────────────

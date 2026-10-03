@@ -727,6 +727,29 @@ async function writeBackup(env) {
     netProfitAllCards: (sum.net / 100).toFixed(2), sheet: `https://docs.google.com/spreadsheets/d/${BACKUP_SID}` };
 }
 
+// ── APP CARD FEED (same 22 columns the app reads from Card Cost Tracker Final) ─
+// Dates as M/D/YYYY[ H:MM] and Profit % as "12.34%" so the app's existing parsers work unchanged
+// (Safari can't parse "YYYY-MM-DD HH:MM", and date-only ISO strings would shift a day in Eastern time).
+const appDate = v => {
+  if (!v) return '';
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+  if (!m) return String(v);
+  const d = `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}/${m[1]}`;
+  return m[4] ? `${d} ${parseInt(m[4], 10)}:${m[5]}` : d;
+};
+
+async function appCards(env) {
+  const { results } = await env.DB.prepare(`SELECT * FROM cards ORDER BY COALESCE(date_sold, refund_date, date_purchased) DESC, item_id`).all();
+  const values = results.map(c => {
+    const r = finalRow(c);
+    r[14] = r[14] === '' ? '' : (r[14] * 100).toFixed(2) + '%';
+    r[15] = appDate(r[15]);
+    r[16] = appDate(r[16]);
+    return r.map(v => (v === null || v === undefined) ? '' : String(v));
+  });
+  return { source: 'card-tracker-db', count: values.length, values };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -753,7 +776,14 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (url.pathname === '/cards') {
+      try {
+        const res = json(await appCards(env));
+        res.headers.set('Access-Control-Allow-Origin', '*');
+        return res;
+      } catch (e) { return json({ error: e.message }, 500); }
+    }
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {

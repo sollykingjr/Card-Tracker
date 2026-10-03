@@ -231,12 +231,16 @@ function saveCardsToCache() {
 
 async function loadCardData() {
   document.getElementById('cntlbl').textContent='Loading...';
-  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>'+(CARD_DB_URL?'Loading cards...':'Fetching from Google Sheets...')+'</div>';
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
-    const cR = await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
-      .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
+    // Card data source: the new card database when running as the staging test app,
+    // otherwise the Card Cost Tracker Final sheet (live app, until cutover).
+    const cR = CARD_DB_URL
+      ? await fetch(`${CARD_DB_URL}/cards`).then(r=>r.ok?r.json().then(d=>d.values||[]):[])
+      : await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
+          .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
 
     cards = cR.filter(r=>r[7]).map(r=>({
       itemId:cl(r[0]),
@@ -278,7 +282,7 @@ async function loadProspectData() {
   if (prospectDataLoaded) return;
   prospectDataLoaded = true;
   document.getElementById('cntlbl').textContent='Loading...';
-  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>'+(CARD_DB_URL?'Loading cards...':'Fetching from Google Sheets...')+'</div>';
   document.getElementById('rfab').classList.add('spin');
   try {
     const [pR,h2,p1,oh2,op1,hsR,bsR,pmR] = await fetchBatch([
