@@ -1,7 +1,7 @@
 // ── review-page.js — STAGING test page for the "needs file name" queue
 export const REVIEW_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Needs File Name</title>
+<title>Card Intake</title>
 <style>
   :root{--bg:#f6f6f4;--card:#fff;--ink:#1d1d1b;--muted:#6b6b66;--line:#e2e2dc;--accent:#c5050c;--ok:#1f7a3f;--warn:#a15c00}
   @media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1f1f1d;--ink:#ecece8;--muted:#9a9a93;--line:#33332f;--ok:#4cbb74;--warn:#e6a23c}}
@@ -13,6 +13,8 @@ export const REVIEW_HTML = `<!doctype html>
   .title{font-weight:600}.meta{color:var(--muted);font-size:13px;margin:4px 0 8px}
   .cost{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:10px}.cost b{font-variant-numeric:tabular-nums}
   .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--warn);color:#fff;margin-left:6px}
+  input{width:100%;margin-top:8px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+  summary{cursor:pointer}
   select{width:100%;margin-top:8px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
   textarea{width:100%;min-height:54px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
   table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}td{padding:3px 4px;border-bottom:1px solid var(--line)}td:first-child{color:var(--muted);width:120px}
@@ -21,7 +23,20 @@ export const REVIEW_HTML = `<!doctype html>
   .done{color:var(--ok);font-weight:600}.err{color:var(--accent);font-size:13px}.empty{color:var(--muted);text-align:center;padding:40px 0}
 </style></head><body>
 <header><h1>Needs file name</h1><span class="count" id="count"></span></header>
-<main id="list"><p class="empty">Loading…</p></main>
+<main>
+<details class="card" id="manual"><summary class="title">+ Add a card manually</summary>
+  <textarea id="m-name" placeholder="Paste file name" oninput="mPreview()"></textarea>
+  <table id="m-prev"></table>
+  <select id="m-sport" onchange="mGate()"><option value="">Sport…</option></select>
+  <input id="m-price" inputmode="decimal" placeholder="Purchase price (e.g. 12.50)" oninput="mGate()">
+  <input id="m-from" placeholder="Where you bought it" oninput="mGate()">
+  <input id="m-date" type="date">
+  <div class="err" id="m-err"></div>
+  <div class="row"><button class="primary" id="m-btn" disabled onclick="mSave()">Add card</button></div>
+  <div id="m-done"></div>
+</details>
+<div id="list"><p class="empty">Loading…</p></div>
+</main>
 <script>
 const KEY = new URLSearchParams(location.search).get('key') || '';
 const q = p => p + (p.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(KEY);
@@ -32,6 +47,8 @@ let SPORTS = [];
 const ready = {};
 async function load() {
   SPORTS = await (await fetch(q('/sports'))).json().catch(() => []);
+  document.getElementById('m-sport').innerHTML = '<option value="">Sport…</option>' + SPORTS.map(x => '<option>' + esc(x) + '</option>').join('');
+  document.getElementById('m-date').value = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const r = await fetch(q('/pending')); const d = await r.json();
   const list = document.getElementById('list');
   if (d.error) { list.innerHTML = '<p class="err">' + esc(d.error) + '</p>'; return; }
@@ -80,6 +97,34 @@ async function skip(id) {
   const d = await post('/pending/skip', { item_id: id });
   if (d.error) { document.getElementById('e-' + id).textContent = d.error; return; }
   document.getElementById('c-' + id).innerHTML = '<span class="muted">Skipped</span>';
+}
+let mReady = false, mTimer;
+function mPreview() {
+  clearTimeout(mTimer);
+  mTimer = setTimeout(async () => {
+    const name = document.getElementById('m-name').value, t = document.getElementById('m-prev');
+    if (!name.trim()) { t.innerHTML = ''; mReady = false; mGate(); return; }
+    const d = await (await fetch(q('/parse?name=' + encodeURIComponent(name)))).json();
+    t.innerHTML = FIELDS.map(([k, l]) => '<tr><td>' + l + '</td><td>' + (d[k] ? esc(d[k]) : '—') + '</td></tr>').join('');
+    mReady = !!d.player_name;
+    const sel = document.getElementById('m-sport');
+    if (d.suggested_sport && !sel.value) sel.value = d.suggested_sport;
+    mGate();
+  }, 200);
+}
+function mGate() {
+  const ok = mReady && document.getElementById('m-sport').value && document.getElementById('m-price').value.trim() && document.getElementById('m-from').value.trim();
+  document.getElementById('m-btn').disabled = !ok;
+}
+async function mSave() {
+  const body = { file_name: document.getElementById('m-name').value, sport: document.getElementById('m-sport').value,
+    price: document.getElementById('m-price').value, purchased_from: document.getElementById('m-from').value, date: document.getElementById('m-date').value };
+  const d = await post('/manual-add', body);
+  if (d.error) { document.getElementById('m-err').textContent = d.error; return; }
+  document.getElementById('m-err').textContent = '';
+  document.getElementById('m-done').innerHTML = '<span class="done">Added · ID ' + d.added + ' · $' + d.purchasePrice + '</span>';
+  ['m-name', 'm-price', 'm-from'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-prev').innerHTML = ''; mReady = false; mGate();
 }
 load();
 </script></body></html>`;

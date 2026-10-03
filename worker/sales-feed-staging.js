@@ -543,6 +543,27 @@ async function runSaleImport(env, days = LOOKBACK_DAYS) {
   return sum;
 }
 
+// ── MANUAL ADD (cards bought outside eBay / COMC) ─────────────────────────────
+async function manualAdd(env, b) {
+  const fileName = String(b.file_name || '').trim();
+  const f = parseFileName(fileName);
+  if (!f.player_name) throw new Error('could not read a player name from that file name');
+  const sport = String(b.sport || '').trim();
+  if (!sport) throw new Error('choose a sport');
+  const priceC = cents(b.price);
+  if (priceC == null || priceC < 0) throw new Error('enter a purchase price');
+  const from = String(b.purchased_from || '').trim();
+  if (!from) throw new Error('enter where you bought it');
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : toEastern(new Date().toISOString()).slice(0, 10);
+  const itemId = await newItemId(env);
+  await env.DB.prepare(`INSERT INTO cards (item_id, source, status, file_name, sport, year, set_name, variation, version, card_no, player_name,
+    qty_manufactured, grade, purchase_item_cents, purchase_price_cents, date_purchased, purchased_from)
+    VALUES (?, 'manual', 'owned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+    itemId, fileName, sport, f.year, f.set_name, f.variation, f.version, f.card_no, f.player_name, f.qty_manufactured, f.grade,
+    priceC, priceC, date, from).run();
+  return { added: itemId, parsed: f, sport, purchasePrice: (priceC / 100).toFixed(2), purchasedFrom: from, datePurchased: date };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -564,7 +585,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -597,6 +618,7 @@ export default {
         const b = await request.json();
         return json(await confirmPending(env, b.item_id, b.file_name || '', b.sport));
       }
+      if (url.pathname === '/manual-add' && request.method === 'POST') return json(await manualAdd(env, await request.json()));
       if (url.pathname === '/pending/skip' && request.method === 'POST') {
         const b = await request.json();
         return json(await skipPending(env, b.item_id));
