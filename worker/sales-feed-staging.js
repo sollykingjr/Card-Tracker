@@ -165,36 +165,59 @@ async function fetchPurchaseOrders(env, days = LOOKBACK_DAYS) {
   return orders;
 }
 
+// Per card: item price and tax exactly as eBay reports them per transaction;
+// the order's total shipping is split evenly across all cards (remainder on the last card).
+function txnTaxCents(t) {
+  const sources = [tag(t, 'eBayCollectAndRemitTaxes'), tag(t, 'Taxes')].filter(Boolean);
+  for (const src of sources) {
+    const v = tag(src, 'TotalTaxAmount');
+    if (v != null) return toCents(v);
+  }
+  return null;
+}
+
 function purchaseOrderToCards(orderXml) {
   const orderId = tag(orderXml, 'OrderID');
   const status = tag(orderXml, 'OrderStatus');
   const seller = tag(orderXml, 'SellerUserID') || tag(tag(orderXml, 'Seller') || '', 'UserID') || '';
   const created = tag(orderXml, 'CreatedTime');
   const totalC = toCents(tag(orderXml, 'Total'));
-  const shippingC = toCents(tag(tag(orderXml, 'ShippingServiceSelected') || '', 'ShippingServiceCost'));
   const txns = tags(orderXml, 'Transaction');
-  // One entry per card (quantity > 1 expands into separate cards)
+  let shippingC = toCents(tag(tag(orderXml, 'ShippingServiceSelected') || '', 'ShippingServiceCost'));
+  if (!shippingC) shippingC = txns.reduce((s, t) => s + toCents(tag(t, 'ActualShippingCost')), 0);
+
   const cards = [];
+  let taxFromEbay = true;
   for (const t of txns) {
     const item = tag(t, 'Item') || '';
     const qty = parseInt(tag(t, 'QuantityPurchased') || '1', 10) || 1;
+    const lineTaxC = txnTaxCents(t);
+    if (lineTaxC == null) taxFromEbay = false;
     for (let i = 0; i < qty; i++) {
-      cards.push({ itemId: tag(item, 'ItemID'), title: tag(item, 'Title'), priceC: toCents(tag(t, 'TransactionPrice')) });
+      // a multi-quantity line's tax is spread across its units
+      const unitTaxC = lineTaxC == null ? null : Math.floor(lineTaxC / qty) + (i === qty - 1 ? lineTaxC - Math.floor(lineTaxC / qty) * qty : 0);
+      cards.push({ itemId: tag(item, 'ItemID'), title: tag(item, 'Title'), priceC: toCents(tag(t, 'TransactionPrice')), taxC: unitTaxC });
     }
   }
-  const itemsC = cards.reduce((s, c) => s + c.priceC, 0);
-  const extraC = Math.max(0, totalC - itemsC);           // shipping + tax for the whole order
-  const taxC = Math.max(0, extraC - shippingC);
   const n = cards.length || 1;
-  const split = (c, i) => Math.floor(c / n) + (i === n - 1 ? c - Math.floor(c / n) * n : 0);
+  const itemsC = cards.reduce((s, c) => s + c.priceC, 0);
+  // Fallback only if eBay gave no per-line tax: derive order tax and split evenly
+  if (!taxFromEbay) {
+    const orderTaxC = Math.max(0, totalC - itemsC - shippingC);
+    cards.forEach((c, i) => { c.taxC = Math.floor(orderTaxC / n) + (i === n - 1 ? orderTaxC - Math.floor(orderTaxC / n) * n : 0); });
+  }
+  const taxC = cards.reduce((s, c) => s + c.taxC, 0);
+  const shipShare = i => Math.floor(shippingC / n) + (i === n - 1 ? shippingC - Math.floor(shippingC / n) * n : 0);
   const f = c => (c / 100).toFixed(2);
   return {
     orderId, status, seller, created,
-    orderTotal: f(totalC), orderItems: f(itemsC), orderShipping: f(shippingC), orderTax: f(taxC), cardCount: cards.length,
-    cards: cards.map((c, i) => {
-      const sh = split(shippingC, i), tx = split(taxC, i);
-      return { itemId: c.itemId, title: c.title, itemPrice: f(c.priceC), shippingShare: f(sh), taxShare: f(tx), purchasePrice: f(c.priceC + sh + tx) };
-    })
+    orderTotalReported: f(totalC), orderItems: f(itemsC), orderShipping: f(shippingC), orderTax: f(taxC),
+    orderTotalComputed: f(itemsC + shippingC + taxC), taxSource: taxFromEbay ? 'ebay-per-card' : 'derived-even-split',
+    cardCount: cards.length,
+    cards: cards.map((c, i) => ({
+      itemId: c.itemId, title: c.title, itemPrice: f(c.priceC), shippingShare: f(shipShare(i)),
+      tax: f(c.taxC), purchasePrice: f(c.priceC + shipShare(i) + c.taxC)
+    }))
   };
 }
 
