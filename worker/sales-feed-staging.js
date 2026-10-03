@@ -73,18 +73,8 @@ async function sheetsFetch(env, path, init = {}) {
   return data;
 }
 
-// Creates the test tab (headers + currency format on C:F) if it doesn't exist yet.
-async function ensureTab(env) {
-  const meta = await sheetsFetch(env, '?fields=sheets.properties');
-  if (meta.sheets.some(s => s.properties.title === TAB)) return false;
-  const added = await sheetsFetch(env, ':batchUpdate', {
-    method: 'POST',
-    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: TAB } } }] })
-  });
-  const sheetId = added.replies[0].addSheet.properties.sheetId;
-  await sheetsFetch(env, `/values/${encodeURIComponent(`'${TAB}'!A1:L1`)}?valueInputOption=RAW`, {
-    method: 'PUT', body: JSON.stringify({ values: [HEADERS] })
-  });
+// $ format on Order Cost..Shipping (C:F), all data rows. Idempotent.
+async function applyCurrencyFormat(env, sheetId) {
   await sheetsFetch(env, ':batchUpdate', {
     method: 'POST',
     body: JSON.stringify({ requests: [{ repeatCell: {
@@ -93,7 +83,22 @@ async function ensureTab(env) {
       fields: 'userEnteredFormat.numberFormat'
     } }] })
   });
-  return true;
+}
+
+// Creates the test tab (headers) if it doesn't exist yet. Returns { created, sheetId }.
+async function ensureTab(env) {
+  const meta = await sheetsFetch(env, '?fields=sheets.properties');
+  const found = meta.sheets.find(s => s.properties.title === TAB);
+  if (found) return { created: false, sheetId: found.properties.sheetId };
+  const added = await sheetsFetch(env, ':batchUpdate', {
+    method: 'POST',
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: TAB } } }] })
+  });
+  const sheetId = added.replies[0].addSheet.properties.sheetId;
+  await sheetsFetch(env, `/values/${encodeURIComponent(`'${TAB}'!A1:L1`)}?valueInputOption=RAW`, {
+    method: 'PUT', body: JSON.stringify({ values: [HEADERS] })
+  });
+  return { created: true, sheetId };
 }
 
 async function runSalesFeed(env, { dryRun = false } = {}) {
@@ -101,7 +106,7 @@ async function runSalesFeed(env, { dryRun = false } = {}) {
   if (dryRun) {
     return { dryRun: true, ordersFound: orders.length, sample: orders.slice(0, 3).map(orderToRow) };
   }
-  const tabCreated = await ensureTab(env);
+  const { created: tabCreated, sheetId } = await ensureTab(env);
   const existing = await sheetsFetch(env, `/values/${encodeURIComponent(`'${TAB}'!A:A`)}`);
   const seen = new Set((existing.values || []).map(r => r[0]));
   const newRows = orders.filter(o => !seen.has(o.orderId))
@@ -109,9 +114,10 @@ async function runSalesFeed(env, { dryRun = false } = {}) {
     .map(orderToRow);
   if (newRows.length) {
     await sheetsFetch(env,
-      `/values/${encodeURIComponent(`'${TAB}'!A:L`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      `/values/${encodeURIComponent(`'${TAB}'!A:L`)}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE`,
       { method: 'POST', body: JSON.stringify({ values: newRows }) });
   }
+  await applyCurrencyFormat(env, sheetId);
   return { tabCreated, ordersFound: orders.length, appended: newRows.length, appendedOrderIds: newRows.map(r => r[0]) };
 }
 
