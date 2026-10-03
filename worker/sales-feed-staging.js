@@ -7,6 +7,7 @@ import { refreshAccessToken } from './ebay-watchlist.js';
 import { getGoogleAccessTokenForSheets } from './cardmeta.js';
 import { parseFileName } from './parse-file-name.js';
 import { REVIEW_HTML } from './review-page.js';
+import { parseCsv, comcCard, comcDate, toCentsStr } from './comc-import.js';
 
 const SHEET_ID = '1hl_68NZEqcsVxM_sgIhggR2ABc2s5QEjdbFB3-7yhg4';
 const TAB = 'Sales (API)';
@@ -598,6 +599,74 @@ async function refundCard(env, itemId, type) {
   return { itemId, action: type, previousSale: before };
 }
 
+// ── COMC CSV IMPORT ───────────────────────────────────────────────────────────
+// type=purchases: adds COMC purchases whose ItemID isn't in the data yet.
+// type=sales: marks owned cards sold; adds sold-only cards (consignment) that aren't in the data;
+//             same-day repeats are skipped; conflicts go to sale_review. Safe to re-upload.
+async function runComcImport(env, type, csvText, commit) {
+  const rows = parseCsv(csvText);
+  if (!rows.length) throw new Error('no rows found in that file');
+  const need = type === 'purchases' ? ['ItemID', 'Set Name', 'Description', 'Purchase Price', 'Date Sold', 'Purchased From']
+    : ['ItemID', 'Set Name', 'Description', 'Sale Price', 'Transaction Fee', 'Promotion Fee', 'Date Sold', 'Purchased By'];
+  const missing = need.filter(h => !(h in rows[0]));
+  if (missing.length) throw new Error(`this doesn't look like a COMC ${type} file (missing: ${missing.join(', ')})`);
+
+  const { results } = await env.DB.prepare(`SELECT item_id, status, date_sold FROM cards`).all();
+  const have = new Map(results.map(r => [r.item_id, r]));
+  const out = { type, rowsInFile: rows.length, alreadyInData: 0, toAdd: [], toMarkSold: [], toReview: [] };
+  const stmts = [];
+
+  for (const r of rows) {
+    const c = comcCard(r);
+    if (!c.item_id) continue;
+    const existing = have.get(c.item_id);
+    if (type === 'purchases') {
+      if (existing) { out.alreadyInData++; continue; }
+      const price = toCentsStr(r['Purchase Price']), date = comcDate(r['Date Sold']);
+      out.toAdd.push({ itemId: c.item_id, card: [c.year, c.set_name, c.variation, c.player_name].filter(Boolean).join(' '), price: (price / 100).toFixed(2), date });
+      stmts.push(env.DB.prepare(`INSERT INTO cards (item_id, source, status, sport, year, set_name, variation, version, card_no, player_name,
+        serial_no, qty_manufactured, purchase_item_cents, purchase_price_cents, date_purchased, purchased_from)
+        VALUES (?, 'comc', 'owned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(c.item_id, c.sport, c.year, c.set_name, c.variation, c.version,
+        c.card_no, c.player_name, c.serial_no, c.qty_manufactured, price, price, date, r['Purchased From'] || null));
+      continue;
+    }
+    // sales
+    const sale = toCentsStr(r['Sale Price']), fees = (toCentsStr(r['Transaction Fee']) || 0) + (toCentsStr(r['Promotion Fee']) || 0);
+    const soldAt = comcDate(r['Date Sold']), buyer = r['Purchased By'] || null;
+    const label = [c.year, c.set_name, c.variation, c.player_name].filter(Boolean).join(' ');
+    if (existing && existing.status === 'sold') {
+      if (sameDay(existing.date_sold, soldAt)) { out.alreadyInData++; continue; }
+      out.toReview.push({ itemId: c.item_id, card: label, reason: `already marked sold on ${existing.date_sold}` });
+      stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO sale_review (order_id, sku, reason, title, sale_date, sale_price_cents, sale_tax_cents,
+        sale_fees_cents, sale_shipping_cents, purchased_by) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?)`).bind(
+        `COMC:${r['Batch #'] || soldAt}`, c.item_id, `COMC sale, card already marked sold on ${existing.date_sold}`, label, soldAt, sale, fees, buyer));
+      continue;
+    }
+    if (existing && existing.status !== 'owned') {
+      out.toReview.push({ itemId: c.item_id, card: label, reason: `card status is ${existing.status}` });
+      continue;
+    }
+    if (existing) {
+      out.toMarkSold.push({ itemId: c.item_id, card: label, sale: (sale / 100).toFixed(2), fees: (fees / 100).toFixed(2), date: soldAt });
+      stmts.push(env.DB.prepare(`UPDATE cards SET status = 'sold', sale_price_cents = ?, sale_tax_cents = 0, sale_fees_cents = ?, sale_shipping_cents = 0,
+        date_sold = ?, purchased_by = ?, updated_at = datetime('now') WHERE item_id = ?`).bind(sale, fees, soldAt, buyer, c.item_id));
+    } else {
+      const cost = toCentsStr(r['Purchase Price']);
+      out.toAdd.push({ itemId: c.item_id, card: label, sale: (sale / 100).toFixed(2), date: soldAt, note: 'sold card not in data yet' });
+      stmts.push(env.DB.prepare(`INSERT INTO cards (item_id, source, status, sport, year, set_name, variation, version, card_no, player_name,
+        serial_no, qty_manufactured, purchase_price_cents, sale_price_cents, sale_tax_cents, sale_fees_cents, sale_shipping_cents, date_sold, purchased_by)
+        VALUES (?, 'comc', 'sold', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`).bind(c.item_id, c.sport, c.year, c.set_name, c.variation,
+        c.version, c.card_no, c.player_name, c.serial_no, c.qty_manufactured, cost, sale, fees, soldAt, buyer));
+    }
+  }
+  if (commit) for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  return {
+    committed: !!commit, type, rowsInFile: out.rowsInFile, alreadyInData: out.alreadyInData,
+    added: out.toAdd.length, markedSold: out.toMarkSold.length, sentToReview: out.toReview.length,
+    addedSample: out.toAdd.slice(0, 15), markedSoldSample: out.toMarkSold.slice(0, 15), review: out.toReview
+  };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -619,7 +688,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -651,6 +720,11 @@ export default {
       if (url.pathname === '/pending/confirm' && request.method === 'POST') {
         const b = await request.json();
         return json(await confirmPending(env, b.item_id, b.file_name || '', b.sport));
+      }
+      if (url.pathname === '/comc-import' && request.method === 'POST') {
+        const type = url.searchParams.get('type');
+        if (!['purchases', 'sales'].includes(type)) return json({ error: 'type must be purchases or sales' }, 400);
+        return json(await runComcImport(env, type, await request.text(), url.searchParams.get('commit') === '1'));
       }
       if (url.pathname === '/card-search') return json(await cardSearch(env, url.searchParams.get('q')));
       if (url.pathname === '/card-refund' && request.method === 'POST') {

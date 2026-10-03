@@ -35,6 +35,13 @@ export const REVIEW_HTML = `<!doctype html>
   <div class="row"><button class="primary" id="m-btn" disabled onclick="mSave()">Add card</button></div>
   <div id="m-done"></div>
 </details>
+<details class="card" id="comc"><summary class="title">Upload COMC file</summary>
+  <select id="c-type"><option value="purchases">Purchase history</option><option value="sales">Sales history</option></select>
+  <input id="c-file" type="file" accept=".csv,text/csv">
+  <div class="row"><button id="c-check" onclick="cRun(false)">Check file</button><button class="primary" id="c-go" disabled onclick="cRun(true)">Import</button></div>
+  <div class="err" id="c-err"></div>
+  <div id="c-out"></div>
+</details>
 <details class="card" id="refund"><summary class="title">Refund / cancel a sale</summary>
   <input id="r-q" placeholder="Search by Item ID or player" oninput="rSearch()">
   <div id="r-list"></div>
@@ -154,6 +161,26 @@ async function rAct(id, type) {
   const d = await post('/card-refund', { item_id: id, type });
   if (d.error) { document.getElementById('re-' + id).textContent = d.error; return; }
   document.getElementById('r-' + id).innerHTML = '<span class="done">' + (type === 'cancelled' ? 'Sale cleared · back to owned' : 'Marked refunded · card gone') + ' · ID ' + id + '</span>';
+}
+let cChecked = null;
+async function cRun(commit) {
+  const f = document.getElementById('c-file').files[0], type = document.getElementById('c-type').value;
+  const err = document.getElementById('c-err'), out = document.getElementById('c-out'), go = document.getElementById('c-go');
+  err.textContent = '';
+  if (!f) { err.textContent = 'Choose a CSV file first'; return; }
+  if (commit && cChecked !== f.name + type) { err.textContent = 'Check the file first'; return; }
+  if (commit && !confirm('Import this file into your data?')) return;
+  out.innerHTML = '<p class="meta">Working…</p>';
+  const r = await fetch(q('/comc-import?type=' + type + (commit ? '&commit=1' : '')), { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: await f.text() });
+  const d = await r.json();
+  if (d.error) { out.innerHTML = ''; err.textContent = d.error; return; }
+  const list = (arr, fmt) => arr.length ? '<ul>' + arr.map(x => '<li>' + esc(fmt(x)) + '</li>').join('') + '</ul>' : '';
+  out.innerHTML = '<p class="' + (commit ? 'done' : 'meta') + '">' + (commit ? 'Imported' : 'Preview (nothing saved yet)') + ' · ' + d.rowsInFile + ' rows in file · ' +
+    d.alreadyInData + ' already in data · ' + d.added + ' to add' + (type === 'sales' ? ' · ' + d.markedSold + ' to mark sold' : '') + ' · ' + d.sentToReview + ' for review</p>' +
+    list(d.addedSample, x => 'Add ' + x.itemId + ' ' + x.card + (x.price ? ' $' + x.price : '') + (x.sale ? ' sold $' + x.sale : '') + ' ' + (x.date || '')) +
+    list(d.markedSoldSample, x => 'Sold ' + x.itemId + ' ' + x.card + ' $' + x.sale + ' (fees $' + x.fees + ') ' + x.date) +
+    list(d.review, x => 'Review ' + x.itemId + ' ' + x.card + ': ' + x.reason);
+  if (commit) { cChecked = null; go.disabled = true; } else { cChecked = f.name + type; go.disabled = false; }
 }
 load();
 </script></body></html>`;
