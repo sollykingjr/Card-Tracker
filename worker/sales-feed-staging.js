@@ -129,9 +129,9 @@ const tags = (xml, name) => [...xml.matchAll(new RegExp(`<${name}[^>]*>([\\s\\S]
 const num = v => (v == null || v === '' ? 0 : parseFloat(v));
 const toCents = v => Math.round(num(v) * 100);
 
-async function fetchPurchaseOrders(env) {
+async function fetchPurchaseOrders(env, days = LOOKBACK_DAYS) {
   const token = await getEbayToken(env);
-  const from = new Date(Date.now() - LOOKBACK_DAYS * 86400000).toISOString();
+  const from = new Date(Date.now() - days * 86400000).toISOString();
   const to = new Date().toISOString();
   const orders = [];
   for (let page = 1; page <= 20; page++) {
@@ -198,8 +198,8 @@ function purchaseOrderToCards(orderXml) {
   };
 }
 
-async function runPurchasesTest(env) {
-  const raw = await fetchPurchaseOrders(env);
+async function runPurchasesTest(env, days) {
+  const raw = await fetchPurchaseOrders(env, days);
   const orders = raw.map(purchaseOrderToCards);
   const skipped = orders.filter(o => o.seller === 'comc_consignment' || o.status === 'Cancelled');
   const kept = orders.filter(o => !skipped.includes(o));
@@ -227,7 +227,7 @@ export default {
     if (url.pathname !== '/sales-feed-run' && url.pathname !== '/purchases-test') return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
-      if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env));
+      if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env, Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS))));
       return json(await runSalesFeed(env, { dryRun: url.searchParams.get('dry') === '1' }));
     } catch (e) {
       return json({ error: e.message }, 500);
