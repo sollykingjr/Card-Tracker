@@ -27,7 +27,7 @@ name = "card-app-staging"
 main = "worker/sales-feed-staging.js"
 
 [env.staging.triggers]
-crons = ["30 * * * *"]
+crons = ["0 11,23 * * *"]
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
