@@ -5,6 +5,8 @@
 // Never touches the 'Sales' tab. Deployed only from the sales-feed branch.
 import { refreshAccessToken } from './ebay-watchlist.js';
 import { getGoogleAccessTokenForSheets } from './cardmeta.js';
+import { parseFileName } from './parse-file-name.js';
+import { REVIEW_HTML } from './review-page.js';
 
 const SHEET_ID = '1hl_68NZEqcsVxM_sgIhggR2ABc2s5QEjdbFB3-7yhg4';
 const TAB = 'Sales (API)';
@@ -432,6 +434,30 @@ async function listPending(env) {
     purchasePrice: (r.purchase_price_cents / 100).toFixed(2) })) };
 }
 
+// ── REVIEW QUEUE ACTIONS ──────────────────────────────────────────────────────
+async function confirmPending(env, itemId, fileName) {
+  const row = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE item_id = ? AND status = 'pending'`).bind(itemId).first();
+  if (!row) throw new Error('not found or already handled');
+  const f = parseFileName(fileName);
+  if (!f.player_name) throw new Error('could not read a player name from that file name');
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO cards (item_id, source, status, file_name, sport, year, set_name, variation, version, card_no, player_name,
+      qty_manufactured, grade, purchase_item_cents, purchase_shipping_cents, purchase_tax_cents, purchase_price_cents,
+      date_purchased, purchased_from, purchase_order_id, purchase_ebay_item_id)
+      VALUES (?, 'ebay', 'owned', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+      row.item_id, fileName.trim(), f.year, f.set_name, f.variation, f.version, f.card_no, f.player_name, f.qty_manufactured, f.grade,
+      row.item_cents, row.shipping_cents, row.tax_cents, row.purchase_price_cents, row.date_purchased, row.seller, row.order_id, row.ebay_item_id),
+    env.DB.prepare(`UPDATE pending_metadata SET status = 'done' WHERE item_id = ?`).bind(itemId)
+  ]);
+  return { confirmed: itemId, parsed: f };
+}
+
+async function skipPending(env, itemId) {
+  const r = await env.DB.prepare(`UPDATE pending_metadata SET status = 'skipped' WHERE item_id = ? AND status = 'pending'`).bind(itemId).run();
+  if (!r.meta.changes) throw new Error('not found or already handled');
+  return { skipped: itemId };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -448,7 +474,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -461,6 +487,16 @@ export default {
       if (url.pathname === '/purchase-import') {
         const days = Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
         return json(await runPurchaseImport(env, days));
+      }
+      if (url.pathname === '/review') return new Response(REVIEW_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      if (url.pathname === '/parse') return json(parseFileName(url.searchParams.get('name') || ''));
+      if (url.pathname === '/pending/confirm' && request.method === 'POST') {
+        const b = await request.json();
+        return json(await confirmPending(env, b.item_id, b.file_name || ''));
+      }
+      if (url.pathname === '/pending/skip' && request.method === 'POST') {
+        const b = await request.json();
+        return json(await skipPending(env, b.item_id));
       }
       if (url.pathname === '/pending') return json(await listPending(env));
       if (url.pathname === '/baseline-import') return json(await runBaselineImport(env, { dryRun: url.searchParams.get('commit') !== '1' }));
