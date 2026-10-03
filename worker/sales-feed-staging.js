@@ -28,9 +28,9 @@ async function getEbayToken(env) {
   return token;
 }
 
-async function fetchOrders(env) {
+async function fetchOrders(env, days = LOOKBACK_DAYS) {
   const token = await getEbayToken(env);
-  const since = new Date(Date.now() - LOOKBACK_DAYS * 86400000).toISOString();
+  const since = new Date(Date.now() - days * 86400000).toISOString();
   const orders = [];
   let url = `https://api.ebay.com/sell/fulfillment/v1/order?limit=200&filter=${encodeURIComponent(`creationdate:[${since}..]`)}`;
   for (let page = 0; url && page < 10; page++) {
@@ -458,12 +458,101 @@ async function skipPending(env, itemId) {
   return { skipped: itemId };
 }
 
+// ── SALE IMPORTER (eBay sales → cards) ────────────────────────────────────────
+// One eBay order is processed once (ebay_orders). Cancelled orders are recorded and ignored;
+// unpaid / cancel-requested orders are left for a later run. Each line item is matched to a
+// card by Custom SKU (= Item ID). Anything that can't be applied cleanly goes to sale_review.
+const sameDay = (a, b) => {
+  if (!a || !b) return false;
+  const d = x => new Date(String(x).replace(' ', 'T').slice(0, 10) + 'T00:00:00Z').getTime();
+  return Math.abs(d(a) - d(b)) <= 86400000;   // within a day (UTC vs Eastern drift)
+};
+
+function saleLines(o) {
+  const lines = o.lineItems || [];
+  const ocC = toCents(o.totalFeeBasisAmount?.value), feesC = toCents(o.totalMarketplaceFee?.value);
+  const baseC = lines.reduce((s, l) => s + toCents(l.lineItemCost?.value), 0) || 1;
+  let ocLeft = ocC, feeLeft = feesC;
+  return lines.map((l, i) => {
+    const last = i === lines.length - 1, share = toCents(l.lineItemCost?.value) / baseC;
+    const oc = last ? ocLeft : Math.round(ocC * share), fee = last ? feeLeft : Math.round(feesC * share);
+    ocLeft -= oc; feeLeft -= fee;
+    return {
+      sku: (l.sku || '').trim(), title: l.title || '',
+      sale_price_cents: oc, sale_fees_cents: fee,
+      sale_tax_cents: (l.ebayCollectAndRemitTaxes || []).reduce((s, t) => s + toCents(t.amount?.value), 0),
+      sale_shipping_cents: toCents(l.deliveryCost?.shippingCost?.value),
+      purchased_by: l.purchaseMarketplaceId || ''
+    };
+  });
+}
+
+async function runSaleImport(env, days = LOOKBACK_DAYS) {
+  const orders = await fetchOrders(env, days);
+  const sum = { ordersFound: orders.length, alreadyProcessed: 0, waiting: [], cancelled: [], recorded: [], sameSaleAlreadyInData: [], sentToReview: [] };
+  for (const o of orders) {
+    const done = await env.DB.prepare(`SELECT 1 FROM ebay_orders WHERE order_id = ? AND role = 'sale'`).bind(o.orderId).first();
+    if (done) { sum.alreadyProcessed++; continue; }
+    const cancelState = o.cancelStatus?.cancelState;
+    const pay = o.orderPaymentStatus;
+    const stmts = [];
+    let outcome = 'recorded';
+    if (cancelState === 'CANCELED' || pay === 'FULLY_REFUNDED') {
+      outcome = cancelState === 'CANCELED' ? 'cancelled' : 'refunded';
+      sum.cancelled.push({ orderId: o.orderId, outcome });
+    } else if (cancelState === 'CANCEL_REQUESTED' || (pay && pay !== 'PAID' && pay !== 'PARTIALLY_REFUNDED')) {
+      sum.waiting.push({ orderId: o.orderId, cancelState, pay });
+      continue;                                   // not recorded: re-checked next run
+    } else {
+      const soldAt = toEastern(o.creationDate);
+      for (const line of saleLines(o)) {
+        const review = reason => {
+          stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO sale_review (order_id, sku, reason, title, sale_date, sale_price_cents,
+            sale_tax_cents, sale_fees_cents, sale_shipping_cents, purchased_by) VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(
+            o.orderId, line.sku || '', reason, line.title, soldAt, line.sale_price_cents, line.sale_tax_cents,
+            line.sale_fees_cents, line.sale_shipping_cents, line.purchased_by));
+          sum.sentToReview.push({ orderId: o.orderId, sku: line.sku, title: line.title, reason });
+        };
+        if (!line.sku) { review('no Custom SKU on listing'); continue; }
+        const card = await env.DB.prepare(`SELECT item_id, status, date_sold, sale_price_cents, sale_tax_cents FROM cards WHERE item_id = ?`).bind(line.sku).first();
+        if (!card) { review('no card with this Item ID'); continue; }
+        if (card.status === 'sold') {
+          if (sameDay(card.date_sold, soldAt)) {
+            // Same sale already in the data: fill in eBay's breakdown if it was missing and the price agrees
+            if (card.sale_tax_cents == null && card.sale_price_cents === line.sale_price_cents) {
+              stmts.push(env.DB.prepare(`UPDATE cards SET sale_tax_cents = ?, sale_fees_cents = ?, sale_shipping_cents = ?, sale_order_id = ?,
+                updated_at = datetime('now') WHERE item_id = ?`).bind(line.sale_tax_cents, line.sale_fees_cents, line.sale_shipping_cents, o.orderId, card.item_id));
+            }
+            sum.sameSaleAlreadyInData.push({ orderId: o.orderId, itemId: card.item_id });
+          } else review(`card already marked sold on ${card.date_sold}`);
+          continue;
+        }
+        if (card.status !== 'owned') { review(`card status is ${card.status}`); continue; }
+        stmts.push(env.DB.prepare(`UPDATE cards SET status = 'sold', sale_price_cents = ?, sale_tax_cents = ?, sale_fees_cents = ?,
+          sale_shipping_cents = ?, date_sold = ?, purchased_by = ?, sale_order_id = ?, updated_at = datetime('now') WHERE item_id = ?`).bind(
+          line.sale_price_cents, line.sale_tax_cents, line.sale_fees_cents, line.sale_shipping_cents, soldAt, line.purchased_by, o.orderId, card.item_id));
+        const net = line.sale_price_cents - line.sale_tax_cents - line.sale_fees_cents - line.sale_shipping_cents;
+        sum.recorded.push({ orderId: o.orderId, itemId: card.item_id, title: line.title, proceeds: (net / 100).toFixed(2) });
+      }
+    }
+    stmts.push(env.DB.prepare(`INSERT INTO ebay_orders (order_id, role, status, total_cents) VALUES (?, 'sale', ?, ?)`)
+      .bind(o.orderId, outcome, toCents(o.totalFeeBasisAmount?.value)));
+    await env.DB.batch(stmts);
+  }
+  return sum;
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
       await runSalesFeed(env);
     } catch (e) {
       console.error('sales-feed-staging cron failed:', e.message);
+    }
+    try {
+      await runSaleImport(env);
+    } catch (e) {
+      console.error('sale-import cron failed:', e.message);
     }
     try {
       await runPurchaseImport(env);
@@ -474,7 +563,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -497,6 +586,14 @@ export default {
       if (url.pathname === '/pending/skip' && request.method === 'POST') {
         const b = await request.json();
         return json(await skipPending(env, b.item_id));
+      }
+      if (url.pathname === '/sale-import') {
+        const days = Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
+        return json(await runSaleImport(env, days));
+      }
+      if (url.pathname === '/sale-review') {
+        const { results } = await env.DB.prepare(`SELECT * FROM sale_review WHERE status = 'open' ORDER BY sale_date`).all();
+        return json({ open: results.length, rows: results });
       }
       if (url.pathname === '/pending') return json(await listPending(env));
       if (url.pathname === '/baseline-import') return json(await runBaselineImport(env, { dryRun: url.searchParams.get('commit') !== '1' }));

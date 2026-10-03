@@ -37,3 +37,19 @@ CREATE TABLE pending_metadata (
 CREATE INDEX idx_cards_status ON cards(status);
 CREATE INDEX idx_cards_purchase_order ON cards(purchase_order_id);
 CREATE INDEX idx_pending_status ON pending_metadata(status);
+
+-- Sales that couldn't be applied automatically (added 2026-10-03)
+CREATE TABLE sale_review (
+  order_id TEXT NOT NULL,
+  sku TEXT,
+  reason TEXT NOT NULL,
+  title TEXT,
+  sale_date TEXT,
+  sale_price_cents INTEGER, sale_tax_cents INTEGER, sale_fees_cents INTEGER, sale_shipping_cents INTEGER,
+  purchased_by TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved','dismissed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (order_id, sku)
+);
+-- Net profit rule: rows with sale_tax_cents set use sale - tax - fees - shipping - purchase;
+-- untouched baseline rows (sale_tax_cents NULL) keep the legacy sale - purchase - |sale_fees|.
