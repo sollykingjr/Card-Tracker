@@ -19,3 +19,16 @@ id = "23e104faac8545dcb39b9283bf368a9b"
 
 [limits]
 cpu_ms = 30000
+
+# ── Staging Worker (sales-feed branch only) ───────────────────────────────────
+# Separate Worker with its own entry file: runs none of the production crons.
+[env.staging]
+name = "card-app-staging"
+main = "worker/sales-feed-staging.js"
+
+[env.staging.triggers]
+crons = ["30 * * * *"]
+
+[[env.staging.kv_namespaces]]
+binding = "CACHE"
+id = "23e104faac8545dcb39b9283bf368a9b"
