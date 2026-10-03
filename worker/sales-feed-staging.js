@@ -246,9 +246,9 @@ const BASELINE_MAP = {
   'Qty Manufactured': 'qty_manufactured', 'Grade': 'grade',
   'Purchase Price': 'purchase_price_cents', 'Sale Price': 'sale_price_cents', 'Sale Fees': 'sale_fees_cents',
   'Date Purchased': 'date_purchased', 'Purchased From': 'purchased_from',
-  'Purchased By': 'purchased_by', 'Date Sold': 'date_sold'
+  'Purchased By': 'purchased_by', 'Date Sold': 'date_sold', 'Transaction Date': 'transaction_date'
 };
-const BASELINE_DERIVED = ['Net Profit', 'Profit %', 'Days Owned', 'Full Card', 'Transaction Date'];
+const BASELINE_DERIVED = ['Net Profit', 'Profit %', 'Days Owned', 'Full Card'];
 
 async function readTrackerFinal(env) {
   const range = encodeURIComponent(`'${TRACKER_TAB}'!A1:Z100000`);
@@ -272,6 +272,8 @@ function mapBaselineRows(values) {
   const header = (values[0] || []).map(h => String(h).trim());
   const idx = {};
   header.forEach((h, i) => { if (BASELINE_MAP[h]) idx[BASELINE_MAP[h]] = i; });
+  idx.__days = header.indexOf('Days Owned') >= 0 ? header.indexOf('Days Owned') : null;
+  idx.__full = header.indexOf('Full Card') >= 0 ? header.indexOf('Full Card') : null;
   const unmapped = header.filter(h => h && !BASELINE_MAP[h] && !BASELINE_DERIVED.includes(h));
   const missingCols = Object.keys(BASELINE_MAP).filter(h => !header.includes(h));
   const rows = [];
@@ -282,6 +284,8 @@ function mapBaselineRows(values) {
     for (const col of Object.values(BASELINE_MAP)) {
       card[col] = col.endsWith('_cents') ? cents(get(col)) : text(get(col));
     }
+    card._daysOwned = idx.__days == null ? null : r[idx.__days];
+    card._fullCard = idx.__full == null ? null : r[idx.__full];
     card.source = 'baseline';
     card.status = (card.sale_price_cents != null || card.date_sold) ? 'sold' : 'owned';
     rows.push(card);
@@ -306,7 +310,10 @@ async function runBaselineImport(env, { dryRun = true } = {}) {
     duplicateItemIds: { count: dupes.length, sample: [...new Set(dupes)].slice(0, 20) },
     statusCounts: { owned: rows.filter(c => c.status === 'owned').length, sold: rows.filter(c => c.status === 'sold').length },
     totals: { purchasePrice: sum('purchase_price_cents').toFixed(2), salePrice: sum('sale_price_cents').toFixed(2), saleFees: sum('sale_fees_cents').toFixed(2) },
-    sample: rows.slice(0, 3)
+    sample: rows.slice(0, 3),
+    soldSample: rows.filter(c => c.status === 'sold').slice(0, 3),
+    duplicateDetail: [...new Set(dupes)].slice(0, 6).map(id => rows.filter(c => c.item_id === id)
+      .map(c => ({ item_id: c.item_id, fullCard: c._fullCard, purchase: c.purchase_price_cents, sale: c.sale_price_cents, purchasedFrom: c.purchased_from, datePurchased: c.date_purchased, transactionDate: c.transaction_date })))
   };
   if (dryRun) return report;
   throw new Error('Real import not enabled yet — run with dry=1');
