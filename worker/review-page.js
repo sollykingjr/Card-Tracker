@@ -35,6 +35,10 @@ export const REVIEW_HTML = `<!doctype html>
   <div class="row"><button class="primary" id="m-btn" disabled onclick="mSave()">Add card</button></div>
   <div id="m-done"></div>
 </details>
+<details class="card" id="refund"><summary class="title">Refund / cancel a sale</summary>
+  <input id="r-q" placeholder="Search by Item ID or player" oninput="rSearch()">
+  <div id="r-list"></div>
+</details>
 <div id="list"><p class="empty">Loading…</p></div>
 </main>
 <script>
@@ -125,6 +129,31 @@ async function mSave() {
   document.getElementById('m-done').innerHTML = '<span class="done">Added · ID ' + d.added + ' · $' + d.purchasePrice + '</span>';
   ['m-name', 'm-price', 'm-from'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('m-prev').innerHTML = ''; mReady = false; mGate();
+}
+let rTimer;
+const money = c => c == null ? '—' : '$' + (c / 100).toFixed(2);
+function cardName(c) { return [c.year, c.set_name, c.variation, c.card_no ? '#' + c.card_no : '', c.player_name, c.qty_manufactured ? '/' + c.qty_manufactured : '', c.grade].filter(Boolean).join(' '); }
+function rSearch() {
+  clearTimeout(rTimer);
+  rTimer = setTimeout(async () => {
+    const v = document.getElementById('r-q').value.trim(), box = document.getElementById('r-list');
+    if (v.length < 2) { box.innerHTML = ''; return; }
+    const d = await (await fetch(q('/card-search?q=' + encodeURIComponent(v)))).json();
+    if (!d.rows || !d.rows.length) { box.innerHTML = '<p class="empty">No cards found.</p>'; return; }
+    box.innerHTML = d.rows.map(c => '<div class="card" id="r-' + c.item_id + '"><div class="title">' + esc(cardName(c)) + '</div>' +
+      '<div class="meta">ID ' + c.item_id + ' · ' + c.status + (c.status === 'sold' ? ' · sold ' + esc(c.date_sold || '') + ' for ' + money(c.sale_price_cents) : '') +
+      (c.status === 'refunded' ? ' · refunded ' + esc(c.refund_date || '') : '') + ' · cost ' + money(c.purchase_price_cents) + '</div>' +
+      (c.status === 'sold' ? '<div class="row"><button onclick="rAct(\\'' + c.item_id + '\\',\\'cancelled\\')">Cancelled — still have it</button>' +
+        '<button onclick="rAct(\\'' + c.item_id + '\\',\\'gone\\')">Refunded — card gone</button></div>' : '') +
+      '<div class="err" id="re-' + c.item_id + '"></div></div>').join('');
+  }, 250);
+}
+async function rAct(id, type) {
+  const msg = type === 'cancelled' ? 'Clear this sale and put the card back to owned?' : 'Mark this sale refunded and the card gone (counts as a loss)?';
+  if (!confirm(msg)) return;
+  const d = await post('/card-refund', { item_id: id, type });
+  if (d.error) { document.getElementById('re-' + id).textContent = d.error; return; }
+  document.getElementById('r-' + id).innerHTML = '<span class="done">' + (type === 'cancelled' ? 'Sale cleared · back to owned' : 'Marked refunded · card gone') + ' · ID ' + id + '</span>';
 }
 load();
 </script></body></html>`;

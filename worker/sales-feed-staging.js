@@ -564,6 +564,40 @@ async function manualAdd(env, b) {
   return { added: itemId, parsed: f, sport, purchasePrice: (priceC / 100).toFixed(2), purchasedFrom: from, datePurchased: date };
 }
 
+// ── CARD LOOKUP + REFUND / CANCEL ACTIONS ─────────────────────────────────────
+async function cardSearch(env, qRaw) {
+  const q = String(qRaw || '').trim();
+  if (q.length < 2) return { rows: [] };
+  const { results } = await env.DB.prepare(`SELECT item_id, status, year, set_name, variation, card_no, player_name, qty_manufactured, grade,
+      purchase_price_cents, sale_price_cents, date_sold, purchased_by, refund_date FROM cards
+    WHERE item_id = ?1 OR player_name LIKE ?2 ORDER BY (status = 'sold') DESC, date_sold DESC LIMIT 25`).bind(q, `%${q}%`).all();
+  return { rows: results };
+}
+
+const SALE_COLS = ['sale_price_cents', 'sale_tax_cents', 'sale_fees_cents', 'sale_shipping_cents', 'date_sold', 'purchased_by', 'sale_order_id'];
+
+async function refundCard(env, itemId, type) {
+  const card = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?`).bind(itemId).first();
+  if (!card) throw new Error('card not found');
+  if (card.status !== 'sold') throw new Error(`card is ${card.status}, not sold`);
+  const before = Object.fromEntries(SALE_COLS.map(k => [k, card[k]]));
+  const today = toEastern(new Date().toISOString()).slice(0, 10);
+  let stmt;
+  if (type === 'cancelled') {
+    // Sale undone, card back in inventory (not relisted)
+    stmt = env.DB.prepare(`UPDATE cards SET status = 'owned', ${SALE_COLS.map(k => `${k} = NULL`).join(', ')}, updated_at = datetime('now') WHERE item_id = ?`).bind(itemId);
+  } else if (type === 'gone') {
+    // Refunded and the card is gone: no sale money, purchase cost stays as a loss
+    stmt = env.DB.prepare(`UPDATE cards SET status = 'refunded', sale_price_cents = 0, sale_tax_cents = 0, sale_fees_cents = 0, sale_shipping_cents = 0,
+      refund_date = ?, updated_at = datetime('now') WHERE item_id = ?`).bind(today, itemId);
+  } else throw new Error('unknown action');
+  await env.DB.batch([
+    stmt,
+    env.DB.prepare(`INSERT INTO card_events (item_id, event, details) VALUES (?, ?, ?)`).bind(itemId, `refund_${type}`, JSON.stringify({ before, at: today }))
+  ]);
+  return { itemId, action: type, previousSale: before };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -585,7 +619,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -617,6 +651,11 @@ export default {
       if (url.pathname === '/pending/confirm' && request.method === 'POST') {
         const b = await request.json();
         return json(await confirmPending(env, b.item_id, b.file_name || '', b.sport));
+      }
+      if (url.pathname === '/card-search') return json(await cardSearch(env, url.searchParams.get('q')));
+      if (url.pathname === '/card-refund' && request.method === 'POST') {
+        const b = await request.json();
+        return json(await refundCard(env, b.item_id, b.type));
       }
       if (url.pathname === '/manual-add' && request.method === 'POST') return json(await manualAdd(env, await request.json()));
       if (url.pathname === '/pending/skip' && request.method === 'POST') {
