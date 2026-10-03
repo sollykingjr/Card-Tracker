@@ -65,9 +65,9 @@ function orderToRow(o) {
   ];
 }
 
-async function sheetsFetch(env, path, init = {}) {
+async function sheetsFetch(env, path, init = {}, spreadsheetId = SHEET_ID) {
   const gToken = await getGoogleAccessTokenForSheets(env);
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}${path}`, {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${gToken}`, 'Content-Type': 'application/json', ...(init.headers || {}) }
   });
@@ -667,6 +667,66 @@ async function runComcImport(env, type, csvText, commit) {
   };
 }
 
+// ── BACKUP SHEET (rewritten after each scheduled run) ─────────────────────────
+const BACKUP_SID = '1h5BT7MXGR1i_w0glZEImcfkdjjkZMcICiMEkieovW24';
+const FINAL_HEADERS = ['ItemID', 'Sport', 'Year', 'Set', 'Variation', 'Version', 'Card No', 'Player Name', 'Serial No', 'Qty Manufactured',
+  'Purchase Price', 'Sale Price', 'Sale Fees', 'Net Profit', 'Profit %', 'Date Purchased', 'Transaction Date', 'Purchased From',
+  'Purchased By', 'Days Owned', 'Grade', 'Full Card'];
+const ALL_COLS = ['item_id', 'legacy_item_id', 'source', 'status', 'file_name', 'sport', 'year', 'set_name', 'variation', 'version', 'card_no',
+  'player_name', 'serial_no', 'qty_manufactured', 'grade', 'purchase_item_cents', 'purchase_shipping_cents', 'purchase_tax_cents',
+  'purchase_price_cents', 'date_purchased', 'purchased_from', 'purchase_order_id', 'purchase_ebay_item_id', 'sale_price_cents',
+  'sale_tax_cents', 'sale_fees_cents', 'sale_shipping_cents', 'date_sold', 'purchased_by', 'sale_order_id', 'refund_date', 'created_at', 'updated_at'];
+
+const dollars = c => (c == null ? '' : Math.round(c) / 100);
+const isSoldLike = c => c.status === 'sold' || c.status === 'refunded';
+// Deductions from the sale: new model (tax recorded) = tax + fees + shipping; untouched history = |old Sale Fees|
+const saleDeductions = c => c.sale_tax_cents != null
+  ? (c.sale_tax_cents || 0) + (c.sale_fees_cents || 0) + (c.sale_shipping_cents || 0)
+  : Math.abs(c.sale_fees_cents || 0);
+const netProfitCents = c => (c.sale_price_cents || 0) - (c.purchase_price_cents || 0) - saleDeductions(c);
+const daysBetween = (a, b) => {
+  if (!a || !b) return '';
+  const t = x => Date.parse(String(x).slice(0, 10) + 'T00:00:00Z');
+  const d = Math.round((t(b) - t(a)) / 86400000);
+  return Number.isFinite(d) ? d : '';
+};
+const fullCard = c => [c.year, c.set_name, c.variation, c.card_no ? '#' + c.card_no : null, c.version, c.player_name,
+  c.qty_manufactured ? '/' + c.qty_manufactured : null, c.grade].filter(x => x != null && String(x).trim() !== '').join(' ');
+
+function finalRow(c) {
+  const sold = isSoldLike(c);
+  const net = netProfitCents(c);
+  const profitPct = sold && c.sale_price_cents != null && c.purchase_price_cents ? Math.round((net / c.purchase_price_cents) * 10000) / 10000 : '';
+  return [c.item_id, c.sport, c.year, c.set_name, c.variation, c.version, c.card_no, c.player_name, c.serial_no, c.qty_manufactured,
+    dollars(c.purchase_price_cents), dollars(c.sale_price_cents), sold ? dollars(saleDeductions(c)) : '', dollars(net), profitPct,
+    c.date_purchased, sold ? (c.date_sold || c.refund_date) : c.date_purchased, c.purchased_from, c.purchased_by,
+    sold ? daysBetween(c.date_purchased, c.date_sold || c.refund_date) : '', c.grade, fullCard(c)].map(v => v ?? '');
+}
+
+async function ensureBackupTabs(env) {
+  const meta = await sheetsFetch(env, '?fields=sheets.properties', {}, BACKUP_SID);
+  const titles = meta.sheets.map(s => s.properties.title);
+  const add = ['Card Cost Tracker Final', 'All Data'].filter(t => !titles.includes(t));
+  if (add.length) await sheetsFetch(env, ':batchUpdate', { method: 'POST',
+    body: JSON.stringify({ requests: add.map(title => ({ addSheet: { properties: { title } } })) }) }, BACKUP_SID);
+}
+
+async function writeBackup(env) {
+  const { results } = await env.DB.prepare(`SELECT * FROM cards ORDER BY COALESCE(date_sold, refund_date, date_purchased) DESC, item_id`).all();
+  await ensureBackupTabs(env);
+  const finalValues = [FINAL_HEADERS, ...results.map(finalRow)];
+  const allValues = [[...ALL_COLS, 'backed_up_at'], ...results.map((c, i) => [...ALL_COLS.map(k => c[k] ?? ''), i === 0 ? new Date().toISOString() : ''])];
+  await sheetsFetch(env, '/values:batchClear', { method: 'POST',
+    body: JSON.stringify({ ranges: ["'Card Cost Tracker Final'!A:Z", "'All Data'!A:AZ"] }) }, BACKUP_SID);
+  await sheetsFetch(env, '/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: [
+    { range: "'Card Cost Tracker Final'!A1", values: finalValues },
+    { range: "'All Data'!A1", values: allValues }
+  ] }) }, BACKUP_SID);
+  const sum = results.reduce((a, c) => { a.net += netProfitCents(c); a[c.status] = (a[c.status] || 0) + 1; return a; }, { net: 0 });
+  return { rowsWritten: results.length, statusCounts: Object.fromEntries(Object.entries(sum).filter(([k]) => k !== 'net')),
+    netProfitAllCards: (sum.net / 100).toFixed(2), sheet: `https://docs.google.com/spreadsheets/d/${BACKUP_SID}` };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -684,11 +744,16 @@ export default {
     } catch (e) {
       console.error('purchase-import cron failed:', e.message);
     }
+    try {
+      await writeBackup(env);
+    } catch (e) {
+      console.error('backup cron failed:', e.message);
+    }
   },
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -726,6 +791,7 @@ export default {
         if (!['purchases', 'sales'].includes(type)) return json({ error: 'type must be purchases or sales' }, 400);
         return json(await runComcImport(env, type, await request.text(), url.searchParams.get('commit') === '1'));
       }
+      if (url.pathname === '/backup-run') return json(await writeBackup(env));
       if (url.pathname === '/card-search') return json(await cardSearch(env, url.searchParams.get('q')));
       if (url.pathname === '/card-refund' && request.method === 'POST') {
         const b = await request.json();
