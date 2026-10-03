@@ -322,7 +322,7 @@ async function runBaselineImport(env, { dryRun = true } = {}) {
 // "10/3/26 11:35" or "9/29/2026" → "2026-10-03 11:35" / "2026-09-29"; anything else kept as-is
 function normDate(v) {
   if (!v) return null;
-  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})(?:\s+(\d{1,2}):(\d{2}))?/);
   if (!m) return String(v).trim();
   const yyyy = m[3].length === 2 ? `20${m[3]}` : m[3];
   const d = `${yyyy}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
