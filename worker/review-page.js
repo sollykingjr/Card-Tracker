@@ -13,6 +13,7 @@ export const REVIEW_HTML = `<!doctype html>
   .title{font-weight:600}.meta{color:var(--muted);font-size:13px;margin:4px 0 8px}
   .cost{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:10px}.cost b{font-variant-numeric:tabular-nums}
   .badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--warn);color:#fff;margin-left:6px}
+  select{width:100%;margin-top:8px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
   textarea{width:100%;min-height:54px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
   table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}td{padding:3px 4px;border-bottom:1px solid var(--line)}td:first-child{color:var(--muted);width:120px}
   .row{display:flex;gap:8px;margin-top:8px}button{flex:1;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
@@ -27,7 +28,10 @@ const q = p => p + (p.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(K
 const FIELDS = [['year','Year'],['set_name','Set'],['variation','Variation'],['card_no','Card No'],['version','Version'],['player_name','Player'],['qty_manufactured','Qty Mfg'],['grade','Grade']];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let timers = {};
+let SPORTS = [];
+const ready = {};
 async function load() {
+  SPORTS = await (await fetch(q('/sports'))).json().catch(() => []);
   const r = await fetch(q('/pending')); const d = await r.json();
   const list = document.getElementById('list');
   if (d.error) { list.innerHTML = '<p class="err">' + esc(d.error) + '</p>'; return; }
@@ -39,6 +43,7 @@ async function load() {
       <div class="meta">\${esc(r.seller)} · \${esc(r.date_purchased)} · ID \${r.item_id}</div>
       <div class="cost"><span>Item <b>$\${r.item}</b></span><span>Ship <b>$\${r.shipping}</b></span><span>Tax <b>$\${r.tax}</b></span><span>Total <b>$\${r.purchasePrice}</b></span></div>
       <textarea placeholder="Paste file name" oninput="preview('\${r.item_id}', this.value)"></textarea>
+      <select id="s-\${r.item_id}" onchange="gate('\${r.item_id}')"><option value="">Sport…</option>\${SPORTS.map(x => '<option>' + esc(x) + '</option>').join('')}</select>
       <table id="p-\${r.item_id}"></table>
       <div class="err" id="e-\${r.item_id}"></div>
       <div class="row"><button onclick="skip('\${r.item_id}')">Skip</button><button class="primary" id="b-\${r.item_id}" disabled onclick="confirmCard('\${r.item_id}')">Confirm</button></div>
@@ -48,11 +53,17 @@ function preview(id, name) {
   clearTimeout(timers[id]);
   timers[id] = setTimeout(async () => {
     const t = document.getElementById('p-' + id), b = document.getElementById('b-' + id);
-    if (!name.trim()) { t.innerHTML = ''; b.disabled = true; return; }
+    if (!name.trim()) { t.innerHTML = ''; ready[id] = false; gate(id); return; }
     const d = await (await fetch(q('/parse?name=' + encodeURIComponent(name)))).json();
     t.innerHTML = FIELDS.map(([k, l]) => '<tr><td>' + l + '</td><td>' + (d[k] ? esc(d[k]) : '—') + '</td></tr>').join('');
-    b.disabled = !d.player_name;
+    ready[id] = !!d.player_name;
+    const sel = document.getElementById('s-' + id);
+    if (d.suggested_sport && !sel.value) sel.value = d.suggested_sport;
+    gate(id);
   }, 200);
+}
+function gate(id) {
+  document.getElementById('b-' + id).disabled = !(ready[id] && document.getElementById('s-' + id).value);
 }
 async function post(path, body) {
   const r = await fetch(q(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -60,7 +71,8 @@ async function post(path, body) {
 }
 async function confirmCard(id) {
   const name = document.querySelector('#c-' + id + ' textarea').value;
-  const d = await post('/pending/confirm', { item_id: id, file_name: name });
+  const sport = document.getElementById('s-' + id).value;
+  const d = await post('/pending/confirm', { item_id: id, file_name: name, sport });
   if (d.error) { document.getElementById('e-' + id).textContent = d.error; return; }
   document.getElementById('c-' + id).innerHTML = '<span class="done">Added · ' + esc(name) + '</span>';
 }

@@ -435,17 +435,18 @@ async function listPending(env) {
 }
 
 // ── REVIEW QUEUE ACTIONS ──────────────────────────────────────────────────────
-async function confirmPending(env, itemId, fileName) {
+async function confirmPending(env, itemId, fileName, sport) {
   const row = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE item_id = ? AND status = 'pending'`).bind(itemId).first();
   if (!row) throw new Error('not found or already handled');
   const f = parseFileName(fileName);
   if (!f.player_name) throw new Error('could not read a player name from that file name');
+  if (!sport || !String(sport).trim()) throw new Error('choose a sport');
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO cards (item_id, source, status, file_name, sport, year, set_name, variation, version, card_no, player_name,
       qty_manufactured, grade, purchase_item_cents, purchase_shipping_cents, purchase_tax_cents, purchase_price_cents,
       date_purchased, purchased_from, purchase_order_id, purchase_ebay_item_id)
-      VALUES (?, 'ebay', 'owned', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
-      row.item_id, fileName.trim(), f.year, f.set_name, f.variation, f.version, f.card_no, f.player_name, f.qty_manufactured, f.grade,
+      VALUES (?, 'ebay', 'owned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+      row.item_id, fileName.trim(), String(sport).trim(), f.year, f.set_name, f.variation, f.version, f.card_no, f.player_name, f.qty_manufactured, f.grade,
       row.item_cents, row.shipping_cents, row.tax_cents, row.purchase_price_cents, row.date_purchased, row.seller, row.order_id, row.ebay_item_id),
     env.DB.prepare(`UPDATE pending_metadata SET status = 'done' WHERE item_id = ?`).bind(itemId)
   ]);
@@ -563,7 +564,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -578,10 +579,23 @@ export default {
         return json(await runPurchaseImport(env, days));
       }
       if (url.pathname === '/review') return new Response(REVIEW_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-      if (url.pathname === '/parse') return json(parseFileName(url.searchParams.get('name') || ''));
+      if (url.pathname === '/parse') {
+        const f = parseFileName(url.searchParams.get('name') || '');
+        let suggested_sport = null;
+        if (f.player_name) {
+          const r = await env.DB.prepare(`SELECT sport, COUNT(*) n FROM cards WHERE LOWER(player_name) = LOWER(?) AND sport IS NOT NULL
+            GROUP BY sport ORDER BY n DESC LIMIT 1`).bind(f.player_name).first();
+          suggested_sport = r ? r.sport : null;
+        }
+        return json({ ...f, suggested_sport });
+      }
+      if (url.pathname === '/sports') {
+        const { results } = await env.DB.prepare(`SELECT sport FROM cards WHERE sport IS NOT NULL GROUP BY sport ORDER BY COUNT(*) DESC`).all();
+        return json(results.map(r => r.sport));
+      }
       if (url.pathname === '/pending/confirm' && request.method === 'POST') {
         const b = await request.json();
-        return json(await confirmPending(env, b.item_id, b.file_name || ''));
+        return json(await confirmPending(env, b.item_id, b.file_name || '', b.sport));
       }
       if (url.pathname === '/pending/skip' && request.method === 'POST') {
         const b = await request.json();
