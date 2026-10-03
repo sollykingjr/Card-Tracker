@@ -121,6 +121,98 @@ async function runSalesFeed(env, { dryRun = false } = {}) {
   return { tabCreated, ordersFound: orders.length, appended: newRows.length, appendedOrderIds: newRows.map(r => r[0]) };
 }
 
+// ── PURCHASES (read-only test) ────────────────────────────────────────────────
+// Trading API GetOrders as buyer. Splits each order's shipping + tax evenly across
+// its cards (rounding remainder on the last card). Skips comc_consignment.
+const tag = (xml, name) => { const m = xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`)); return m ? m[1] : null; };
+const tags = (xml, name) => [...xml.matchAll(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'g'))].map(m => m[1]);
+const num = v => (v == null || v === '' ? 0 : parseFloat(v));
+const toCents = v => Math.round(num(v) * 100);
+
+async function fetchPurchaseOrders(env) {
+  const token = await getEbayToken(env);
+  const from = new Date(Date.now() - LOOKBACK_DAYS * 86400000).toISOString();
+  const to = new Date().toISOString();
+  const orders = [];
+  for (let page = 1; page <= 20; page++) {
+    const body = `<?xml version="1.0" encoding="utf-8"?>
+<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <OrderRole>Buyer</OrderRole>
+  <OrderStatus>All</OrderStatus>
+  <CreateTimeFrom>${from}</CreateTimeFrom>
+  <CreateTimeTo>${to}</CreateTimeTo>
+  <Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${page}</PageNumber></Pagination>
+</GetOrdersRequest>`;
+    const res = await fetch('https://api.ebay.com/ws/api.dll', {
+      method: 'POST',
+      headers: {
+        'X-EBAY-API-SITEID': '0',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        'X-EBAY-API-CALL-NAME': 'GetOrders',
+        'X-EBAY-API-IAF-TOKEN': token,
+        'Content-Type': 'text/xml'
+      },
+      body
+    });
+    const xml = await res.text();
+    const ack = tag(xml, 'Ack');
+    if (ack !== 'Success' && ack !== 'Warning') {
+      throw new Error(`GetOrders ${res.status} ${ack}: ${tag(xml, 'LongMessage') || xml.slice(0, 300)}`);
+    }
+    orders.push(...tags(xml, 'Order'));
+    if (tag(xml, 'HasMoreOrders') !== 'true') break;
+  }
+  return orders;
+}
+
+function purchaseOrderToCards(orderXml) {
+  const orderId = tag(orderXml, 'OrderID');
+  const status = tag(orderXml, 'OrderStatus');
+  const seller = tag(orderXml, 'SellerUserID') || tag(tag(orderXml, 'Seller') || '', 'UserID') || '';
+  const created = tag(orderXml, 'CreatedTime');
+  const totalC = toCents(tag(orderXml, 'Total'));
+  const shippingC = toCents(tag(tag(orderXml, 'ShippingServiceSelected') || '', 'ShippingServiceCost'));
+  const txns = tags(orderXml, 'Transaction');
+  // One entry per card (quantity > 1 expands into separate cards)
+  const cards = [];
+  for (const t of txns) {
+    const item = tag(t, 'Item') || '';
+    const qty = parseInt(tag(t, 'QuantityPurchased') || '1', 10) || 1;
+    for (let i = 0; i < qty; i++) {
+      cards.push({ itemId: tag(item, 'ItemID'), title: tag(item, 'Title'), priceC: toCents(tag(t, 'TransactionPrice')) });
+    }
+  }
+  const itemsC = cards.reduce((s, c) => s + c.priceC, 0);
+  const extraC = Math.max(0, totalC - itemsC);           // shipping + tax for the whole order
+  const taxC = Math.max(0, extraC - shippingC);
+  const n = cards.length || 1;
+  const split = (c, i) => Math.floor(c / n) + (i === n - 1 ? c - Math.floor(c / n) * n : 0);
+  const f = c => (c / 100).toFixed(2);
+  return {
+    orderId, status, seller, created,
+    orderTotal: f(totalC), orderItems: f(itemsC), orderShipping: f(shippingC), orderTax: f(taxC), cardCount: cards.length,
+    cards: cards.map((c, i) => {
+      const sh = split(shippingC, i), tx = split(taxC, i);
+      return { itemId: c.itemId, title: c.title, itemPrice: f(c.priceC), shippingShare: f(sh), taxShare: f(tx), purchasePrice: f(c.priceC + sh + tx) };
+    })
+  };
+}
+
+async function runPurchasesTest(env) {
+  const raw = await fetchPurchaseOrders(env);
+  const orders = raw.map(purchaseOrderToCards);
+  const skipped = orders.filter(o => o.seller === 'comc_consignment' || o.status === 'Cancelled');
+  const kept = orders.filter(o => !skipped.includes(o));
+  return {
+    dryRun: true,
+    ordersFound: orders.length,
+    skipped: skipped.map(o => ({ orderId: o.orderId, seller: o.seller, status: o.status })),
+    ordersKept: kept.length,
+    cardsKept: kept.reduce((s, o) => s + o.cardCount, 0),
+    orders: kept
+  };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -132,9 +224,10 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname !== '/sales-feed-run') return json({ error: 'not found' }, 404);
+    if (url.pathname !== '/sales-feed-run' && url.pathname !== '/purchases-test') return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
+      if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env));
       return json(await runSalesFeed(env, { dryRun: url.searchParams.get('dry') === '1' }));
     } catch (e) {
       return json({ error: e.message }, 500);
