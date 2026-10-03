@@ -32,3 +32,8 @@ crons = ["0 11,23 * * *"]
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
 id = "23e104faac8545dcb39b9283bf368a9b"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "card-tracker-staging"
+database_id = "0d2cff81-a05d-4728-a04a-9cb9ec12ec61"

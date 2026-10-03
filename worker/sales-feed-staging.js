@@ -247,9 +247,16 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname !== '/sales-feed-run' && url.pathname !== '/purchases-test') return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
+      if (url.pathname === '/db-status') {
+        const counts = {};
+        for (const t of ['cards', 'ebay_orders', 'pending_metadata']) {
+          counts[t] = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${t}`).first()).n;
+        }
+        return json({ db: 'card-tracker-staging', rows: counts });
+      }
       if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env, Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS))));
       return json(await runSalesFeed(env, { dryRun: url.searchParams.get('dry') === '1' }));
     } catch (e) {
