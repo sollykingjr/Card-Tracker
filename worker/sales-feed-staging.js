@@ -236,6 +236,82 @@ async function runPurchasesTest(env, days) {
   };
 }
 
+// ── BASELINE IMPORT (Card Cost Tracker Final → D1 cards) ──────────────────────
+const TRACKER_SID = '12sNofzPwhb8uR68hT_bJNiLD2MrM0rdoQMPXGTlx2_s';
+const TRACKER_TAB = 'Card Cost Tracker Final';
+// Sheet header → cards column. Money columns are stored as cents.
+const BASELINE_MAP = {
+  'ItemID': 'item_id', 'Sport': 'sport', 'Year': 'year', 'Set': 'set_name', 'Variation': 'variation',
+  'Version': 'version', 'Card No': 'card_no', 'Player Name': 'player_name', 'Serial No': 'serial_no',
+  'Qty Manufactured': 'qty_manufactured', 'Grade': 'grade',
+  'Purchase Price': 'purchase_price_cents', 'Sale Price': 'sale_price_cents', 'Sale Fees': 'sale_fees_cents',
+  'Date Purchased': 'date_purchased', 'Purchased From': 'purchased_from',
+  'Purchased By': 'purchased_by', 'Date Sold': 'date_sold'
+};
+const BASELINE_DERIVED = ['Net Profit', 'Profit %', 'Days Owned', 'Full Card', 'Transaction Date'];
+
+async function readTrackerFinal(env) {
+  const range = encodeURIComponent(`'${TRACKER_TAB}'!A1:Z100000`);
+  const qs = 'valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING';
+  const gToken = await getGoogleAccessTokenForSheets(env);
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${TRACKER_SID}/values/${range}?${qs}`,
+    { headers: { Authorization: `Bearer ${gToken}` } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Reading ${TRACKER_TAB} failed (${res.status}): ${data.error?.message || 'unknown'} — share the Card_Cost_Tracker sheet with the service account if this says permission denied`);
+  return data.values || [];
+}
+
+const cents = v => {
+  if (v === '' || v == null) return null;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[$,\s]/g, '').replace(/^\((.*)\)$/, '-$1'));
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+};
+const text = v => (v === '' || v == null ? null : String(v).trim() || null);
+
+function mapBaselineRows(values) {
+  const header = (values[0] || []).map(h => String(h).trim());
+  const idx = {};
+  header.forEach((h, i) => { if (BASELINE_MAP[h]) idx[BASELINE_MAP[h]] = i; });
+  const unmapped = header.filter(h => h && !BASELINE_MAP[h] && !BASELINE_DERIVED.includes(h));
+  const missingCols = Object.keys(BASELINE_MAP).filter(h => !header.includes(h));
+  const rows = [];
+  for (const r of values.slice(1)) {
+    if (!r || r.every(c => c === '' || c == null)) continue;
+    const get = col => (idx[col] == null ? null : r[idx[col]]);
+    const card = {};
+    for (const col of Object.values(BASELINE_MAP)) {
+      card[col] = col.endsWith('_cents') ? cents(get(col)) : text(get(col));
+    }
+    card.source = 'baseline';
+    card.status = (card.sale_price_cents != null || card.date_sold) ? 'sold' : 'owned';
+    rows.push(card);
+  }
+  return { header, unmapped, missingCols, rows };
+}
+
+async function runBaselineImport(env, { dryRun = true } = {}) {
+  const values = await readTrackerFinal(env);
+  const { header, unmapped, missingCols, rows } = mapBaselineRows(values);
+  const seen = new Map();
+  const dupes = [];
+  let noId = 0;
+  for (const c of rows) {
+    if (!c.item_id) { noId++; continue; }
+    if (seen.has(c.item_id)) dupes.push(c.item_id); else seen.set(c.item_id, c);
+  }
+  const sum = k => rows.reduce((s, c) => s + (c[k] || 0), 0) / 100;
+  const report = {
+    dryRun, tab: TRACKER_TAB, header, unmappedColumns: unmapped, missingColumns: missingCols,
+    rowsRead: rows.length, rowsMissingItemId: noId,
+    duplicateItemIds: { count: dupes.length, sample: [...new Set(dupes)].slice(0, 20) },
+    statusCounts: { owned: rows.filter(c => c.status === 'owned').length, sold: rows.filter(c => c.status === 'sold').length },
+    totals: { purchasePrice: sum('purchase_price_cents').toFixed(2), salePrice: sum('sale_price_cents').toFixed(2), saleFees: sum('sale_fees_cents').toFixed(2) },
+    sample: rows.slice(0, 3)
+  };
+  if (dryRun) return report;
+  throw new Error('Real import not enabled yet — run with dry=1');
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -247,7 +323,7 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -257,6 +333,7 @@ export default {
         }
         return json({ db: 'card-tracker-staging', rows: counts });
       }
+      if (url.pathname === '/baseline-import') return json(await runBaselineImport(env, { dryRun: true }));
       if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env, Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS))));
       return json(await runSalesFeed(env, { dryRun: url.searchParams.get('dry') === '1' }));
     } catch (e) {
