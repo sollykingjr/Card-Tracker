@@ -2,7 +2,7 @@
 import { notifyCronFailure } from './misc.js';
 
 export const RUNAME = 'Max_Solomon-MaxSolom-MCSTra-anhpmrm';
-export const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.marketing https://api.ebay.com/oauth/api_scope/commerce.identity.readonly';
+export const SCOPES = 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.marketing https://api.ebay.com/oauth/api_scope/commerce.identity.readonly https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly';
 
 export function handleAuth(env) {
   const authUrl = `https://auth.ebay.com/oauth2/authorize?client_id=${env.EBAY_CLIENT_ID}&response_type=code&redirect_uri=${RUNAME}&scope=${encodeURIComponent(SCOPES)}`;
