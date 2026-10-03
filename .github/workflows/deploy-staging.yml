@@ -9,6 +9,14 @@ on:
       - 'worker/**'
       - 'wrangler.toml'
       - '.github/workflows/deploy-staging.yml'
+      - 'index.html'
+      - 'js/**'
+      - 'css/**'
+      - 'icons/**'
+      - 'icon/**'
+      - 'assets/**'
+      - 'manifest.json'
+      - '.assetsignore'
 
 jobs:
   deploy:
@@ -21,3 +29,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           environment: staging
+          wranglerVersion: "3.114.0"
