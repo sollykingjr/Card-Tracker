@@ -362,6 +362,76 @@ async function commitBaseline(env, rows) {
   };
 }
 
+// ── PURCHASE IMPORTER (eBay purchases → pending_metadata queue) ───────────────
+// Skips comc_consignment, cancelled orders, orders already processed, and cards whose
+// eBay Item ID is already in the baseline. New cards get a 12-digit ID starting with 9.
+const toEastern = iso => {
+  if (!iso) return null;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso)).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+};
+
+async function idTaken(env, id) {
+  const r = await env.DB.prepare(`SELECT 1 FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1
+    UNION SELECT 1 FROM pending_metadata WHERE item_id = ?1 LIMIT 1`).bind(id).first();
+  return !!r;
+}
+
+async function newItemId(env) {
+  for (let i = 0; i < 20; i++) {
+    const n = crypto.getRandomValues(new Uint32Array(2));
+    const id = '9' + String((n[0] * 4294967296 + n[1]) % 100000000000).padStart(11, '0');
+    if (!(await idTaken(env, id))) return id;
+  }
+  throw new Error('could not generate a unique Item ID');
+}
+
+async function inBaseline(env, ebayItemId) {
+  if (!ebayItemId) return false;
+  const r = await env.DB.prepare(`SELECT 1 FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`)
+    .bind(ebayItemId).first();
+  return !!r;
+}
+
+async function runPurchaseImport(env, days = LOOKBACK_DAYS) {
+  const raw = await fetchPurchaseOrders(env, days);
+  const summary = { ordersFound: raw.length, alreadyProcessed: 0, skippedOrders: [], cardsQueued: [], cardsSkippedInBaseline: [] };
+  for (const xml of raw) {
+    const totalReportedC = toCents(tag(xml, 'Total'));
+    const o = purchaseOrderToCards(xml);
+    const done = await env.DB.prepare(`SELECT 1 FROM ebay_orders WHERE order_id = ? AND role = 'purchase'`).bind(o.orderId).first();
+    if (done) { summary.alreadyProcessed++; continue; }
+    const reason = o.seller === 'comc_consignment' ? 'comc_consignment' : o.status === 'Cancelled' ? 'cancelled' : null;
+    const stmts = [];
+    if (!reason) {
+      const refunded = totalReportedC === 0;
+      for (const c of o.cards) {
+        if (await inBaseline(env, c.itemId)) { summary.cardsSkippedInBaseline.push({ orderId: o.orderId, ebayItemId: c.itemId, title: c.title }); continue; }
+        const itemId = await newItemId(env);
+        stmts.push(env.DB.prepare(`INSERT INTO pending_metadata (item_id, order_id, ebay_item_id, ebay_title, seller, date_purchased,
+          item_cents, shipping_cents, tax_cents, purchase_price_cents, flag) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
+          itemId, o.orderId, c.itemId, c.title, o.seller, toEastern(o.created),
+          toCents(c.itemPrice), toCents(c.shippingShare), toCents(c.tax), toCents(c.purchasePrice), refunded ? 'refunded' : null));
+        summary.cardsQueued.push({ itemId, orderId: o.orderId, title: c.title, purchasePrice: c.purchasePrice, refunded });
+      }
+    } else {
+      summary.skippedOrders.push({ orderId: o.orderId, seller: o.seller, reason });
+    }
+    stmts.push(env.DB.prepare(`INSERT INTO ebay_orders (order_id, role, status, total_cents) VALUES (?, 'purchase', ?, ?)`)
+      .bind(o.orderId, reason || o.status, totalReportedC));
+    await env.DB.batch(stmts);
+  }
+  return summary;
+}
+
+async function listPending(env) {
+  const { results } = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE status = 'pending' ORDER BY date_purchased`).all();
+  return { pending: results.length, rows: results.map(r => ({ ...r,
+    item: (r.item_cents / 100).toFixed(2), shipping: (r.shipping_cents / 100).toFixed(2), tax: (r.tax_cents / 100).toFixed(2),
+    purchasePrice: (r.purchase_price_cents / 100).toFixed(2) })) };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -369,11 +439,16 @@ export default {
     } catch (e) {
       console.error('sales-feed-staging cron failed:', e.message);
     }
+    try {
+      await runPurchaseImport(env);
+    } catch (e) {
+      console.error('purchase-import cron failed:', e.message);
+    }
   },
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
     try {
       if (url.pathname === '/db-status') {
@@ -383,6 +458,11 @@ export default {
         }
         return json({ db: 'card-tracker-staging', rows: counts });
       }
+      if (url.pathname === '/purchase-import') {
+        const days = Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
+        return json(await runPurchaseImport(env, days));
+      }
+      if (url.pathname === '/pending') return json(await listPending(env));
       if (url.pathname === '/baseline-import') return json(await runBaselineImport(env, { dryRun: url.searchParams.get('commit') !== '1' }));
       if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env, Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS))));
       return json(await runSalesFeed(env, { dryRun: url.searchParams.get('dry') === '1' }));

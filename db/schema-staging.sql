@@ -31,6 +31,7 @@ CREATE TABLE pending_metadata (
   date_purchased TEXT,
   item_cents INTEGER, shipping_cents INTEGER, tax_cents INTEGER, purchase_price_cents INTEGER,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','skipped')),
+  flag TEXT, -- 'refunded' when eBay reports a $0 order total (added via ALTER)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_cards_status ON cards(status);
