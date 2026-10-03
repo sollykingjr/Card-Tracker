@@ -316,7 +316,50 @@ async function runBaselineImport(env, { dryRun = true } = {}) {
       .map(c => ({ item_id: c.item_id, fullCard: c._fullCard, purchase: c.purchase_price_cents, sale: c.sale_price_cents, purchasedFrom: c.purchased_from, datePurchased: c.date_purchased, transactionDate: c.transaction_date })))
   };
   if (dryRun) return report;
-  throw new Error('Real import not enabled yet — run with dry=1');
+  return { ...(await commitBaseline(env, rows)), dryRunTotals: report.totals, dryRunRows: report.rowsRead };
+}
+
+// "10/3/26 11:35" or "9/29/2026" → "2026-10-03 11:35" / "2026-09-29"; anything else kept as-is
+function normDate(v) {
+  if (!v) return null;
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!m) return String(v).trim();
+  const yyyy = m[3].length === 2 ? `20${m[3]}` : m[3];
+  const d = `${yyyy}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  return m[4] ? `${d} ${m[4].padStart(2, '0')}:${m[5]}` : d;
+}
+
+const CARD_COLS = ['item_id', 'legacy_item_id', 'source', 'status', 'sport', 'year', 'set_name', 'variation', 'version',
+  'card_no', 'player_name', 'serial_no', 'qty_manufactured', 'grade', 'purchase_price_cents', 'date_purchased',
+  'purchased_from', 'sale_price_cents', 'sale_fees_cents', 'date_sold', 'purchased_by'];
+
+async function commitBaseline(env, rows) {
+  const existing = (await env.DB.prepare('SELECT COUNT(*) AS n FROM cards').first()).n;
+  if (existing > 0) throw new Error(`cards already has ${existing} rows — baseline import refused (it only runs on an empty table)`);
+  const seenCount = new Map();
+  const prepared = rows.map(c => {
+    const n = (seenCount.get(c.item_id) || 0) + 1;
+    seenCount.set(c.item_id, n);
+    return {
+      ...c,
+      item_id: n === 1 ? c.item_id : `${c.item_id}-${n}`,
+      legacy_item_id: n === 1 ? null : c.item_id,
+      date_purchased: normDate(c.date_purchased),
+      date_sold: c.status === 'sold' ? normDate(c.date_sold || c.transaction_date) : null
+    };
+  });
+  const sql = `INSERT INTO cards (${CARD_COLS.join(', ')}) VALUES (${CARD_COLS.map(() => '?').join(', ')})`;
+  const stmt = env.DB.prepare(sql);
+  for (let i = 0; i < prepared.length; i += 100) {
+    await env.DB.batch(prepared.slice(i, i + 100).map(c => stmt.bind(...CARD_COLS.map(k => c[k] ?? null))));
+  }
+  const t = await env.DB.prepare(`SELECT COUNT(*) AS n, SUM(purchase_price_cents) AS p, SUM(sale_price_cents) AS s, SUM(sale_fees_cents) AS f,
+    SUM(status = 'sold') AS sold, SUM(status = 'owned') AS owned, SUM(legacy_item_id IS NOT NULL) AS suffixed FROM cards`).first();
+  return {
+    committed: true, rowsInDb: t.n, suffixedRows: t.suffixed,
+    statusCounts: { owned: t.owned, sold: t.sold },
+    dbTotals: { purchasePrice: ((t.p || 0) / 100).toFixed(2), salePrice: ((t.s || 0) / 100).toFixed(2), saleFees: ((t.f || 0) / 100).toFixed(2) }
+  };
 }
 
 export default {
@@ -340,7 +383,7 @@ export default {
         }
         return json({ db: 'card-tracker-staging', rows: counts });
       }
-      if (url.pathname === '/baseline-import') return json(await runBaselineImport(env, { dryRun: true }));
+      if (url.pathname === '/baseline-import') return json(await runBaselineImport(env, { dryRun: url.searchParams.get('commit') !== '1' }));
       if (url.pathname === '/purchases-test') return json(await runPurchasesTest(env, Math.min(89, Math.max(1, parseInt(url.searchParams.get('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS))));
       return json(await runSalesFeed(env, { dryRun: url.searchParams.get('dry') === '1' }));
     } catch (e) {

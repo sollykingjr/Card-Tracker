@@ -10,6 +10,7 @@ CREATE TABLE cards (
   date_purchased TEXT, purchased_from TEXT, purchase_order_id TEXT, purchase_ebay_item_id TEXT,
   sale_price_cents INTEGER, sale_tax_cents INTEGER, sale_fees_cents INTEGER, sale_shipping_cents INTEGER,
   date_sold TEXT, purchased_by TEXT, sale_order_id TEXT,
+  legacy_item_id TEXT, -- original shared eBay listing ID for suffixed baseline rows (added via ALTER)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
