@@ -653,16 +653,21 @@ async function geminiSuggest(env, title, model = GEMINI_MODEL) {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
   const examples = await similarCardExamples(env, title);
   const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\nTITLE: ${title}`;
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: GEMINI_INSTRUCTIONS }] },
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0 }
-    })
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: GEMINI_INSTRUCTIONS }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0 }
   });
-  const d = await res.json().catch(() => ({}));
+  // Free tier returns 503 (overloaded) / 429 (rate limit) at times — retry with backoff.
+  let res, d;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt) await new Promise(r => setTimeout(r, 2000 * 2 ** (attempt - 1)));
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY }, body
+    });
+    d = await res.json().catch(() => ({}));
+    if (res.status !== 503 && res.status !== 429) break;
+  }
   if (!res.ok) return { examples: examples.length, error: `Gemini ${res.status}: ${d.error?.message || 'error'}` };
   const text = d.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
   let parsed = {};
