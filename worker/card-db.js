@@ -600,12 +600,74 @@ async function readCardMeta(env) {
 }
 
 
+// ── CARDSIGHT SUGGESTIONS (read-only test for now) ────────────────────────────
+// Turns an eBay listing title into a suggested COMC-style file name using CardSight's
+// catalog search. Nothing from CardSight is stored (their terms only allow short-term caching).
+const CS_BASE = 'https://api.cardsight.ai';
+const TITLE_NOISE = /\b(RC|Rookie Card|Rookie|SP|SSP|HOF|Hall of Fame|Color Match|Case Hit|PSA|BGS|SGC|CGC|GEM|MINT|MT|NM-MT|NM|Card|Cards|Lot|Invest|Hot|Rare|Refractor\s*Rookie|1st|First|Bowman\s*1st)\b/gi;
+
+function titleToQuery(title) {
+  const grade = (title.match(/\b(PSA|BGS|SGC|CGC)\s*(\d{1,2}(?:\.5)?)\b/i) || []);
+  const year = (title.match(/\b(19[5-9]\d|20[0-3]\d)(?:-\d{2})?\b/) || [])[1] || null;
+  const serial = (title.match(/(?:#\s*)?\/\s*(\d{1,4})\b/) || [])[1] || null;
+  let q = title.replace(/\b(PSA|BGS|SGC|CGC)\s*\d{1,2}(?:\.5)?\b/gi, ' ').replace(/#\s*\/\s*\d+|\/\s*\d+/g, ' ').replace(/#/g, ' ').replace(TITLE_NOISE, ' ').replace(/[^\w#.'\-\s&]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (serial) q += ` /${serial}`;
+  return { q, year, serial, grade: grade[1] ? `${grade[1].toUpperCase()} ${grade[2]}` : null };
+}
+
+function suggestionToFileName(r, grade) {
+  if (!r) return null;
+  const setPart = !r.setName || /^base( set)?$/i.test(r.setName) ? '[Base]' : r.setName;
+  let name = `${r.year || ''} ${r.releaseName || ''} - ${setPart}`;
+  if (r.parallelName) name += ` - ${r.parallelName}`;
+  if (r.cardNumber) name += ` #${r.cardNumber}`;
+  name += ` - ${r.name}`;
+  if (r.numberedTo) name += ` /${r.numberedTo}`;
+  if (grade) name += ` [${grade}]`;
+  return name.replace(/\s+/g, ' ').trim();
+}
+
+async function cardsightSearch(env, title) {
+  if (!env.CARDSIGHT_API_KEY) throw new Error('CARDSIGHT_API_KEY is not set');
+  const { q, year, grade } = titleToQuery(title || '');
+  const params = new URLSearchParams({ q, type: 'card', take: '3' });
+  if (year) params.set('year', year);
+  const res = await fetch(`${CS_BASE}/v1/catalog/search?${params}`, { headers: { 'X-API-Key': env.CARDSIGHT_API_KEY } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { query: q, year, error: `CardSight ${res.status}: ${data.error || data.message || 'error'}` };
+  const results = data.results || [];
+  return {
+    query: q, year,
+    top: results.slice(0, 3).map(r => ({ name: r.name, year: r.year, release: r.releaseName, set: r.setName, parallel: r.parallelName,
+      number: r.cardNumber, numberedTo: r.numberedTo, match: r.matchKind })),
+    suggestedFileName: suggestionToFileName(results[0], grade)
+  };
+}
+
+// Read-only: last N days of eBay purchases → CardSight suggestion vs the card already in your data
+async function runCardsightTest(env, days) {
+  const raw = await fetchPurchaseOrders(env, days);
+  const out = [];
+  let calls = 0;
+  for (const xml of raw) {
+    const o = purchaseOrderToCards(xml);
+    if (o.seller === 'comc_consignment') continue;
+    for (const c of o.cards) {
+      const mine = await env.DB.prepare(`SELECT item_id, year, set_name, variation, version, card_no, player_name, qty_manufactured, grade
+        FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
+      const s = await cardsightSearch(env, c.title); calls++;
+      out.push({ ebayTitle: c.title, yourCard: mine ? fullCard(mine) : '(not in your data)', ...s });
+    }
+  }
+  return { readOnly: true, cardsightCallsUsed: calls, cards: out };
+}
+
 // ── Routes (called from worker.js) ────────────────────────────────────────────
 const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
   'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
-  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run'
+  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/cardsight-test'
 ]);
 
 export async function handleCardDb(request, env, cors) {
@@ -613,7 +675,9 @@ export async function handleCardDb(request, env, cors) {
   const key = `${request.method}:${url.pathname}`;
   if (!CARD_DB_ROUTES.has(key)) return null;
   const out = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-  if (request.headers.get('X-App-Key') !== env.APP_KEY) return out({ error: 'unauthorized' }, 401);
+  const keyOk = request.headers.get('X-App-Key') === env.APP_KEY
+    || (key === 'GET:/cardsight-test' && url.searchParams.get('key') === env.APP_KEY); // test link opened in a browser
+  if (!keyOk) return out({ error: 'unauthorized' }, 401);
   try {
     const p = url.pathname, q = n => url.searchParams.get(n);
     const days = () => Math.min(89, Math.max(1, parseInt(q('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
@@ -664,6 +728,7 @@ export async function handleCardDb(request, env, cors) {
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
       case '/backup-run': return out(await writeBackup(env));
+      case '/cardsight-test': return out(await runCardsightTest(env, days()));
     }
     return null;
   } catch (e) {
