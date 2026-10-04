@@ -213,6 +213,8 @@ async function runPurchaseImport(env, days = LOOKBACK_DAYS) {
       .bind(o.orderId, reason || o.status, totalReportedC));
     await env.DB.batch(stmts);
   }
+  // Suggested file names (never blocks the import if OpenAI is down)
+  summary.suggestions = await fillSuggestions(env).catch(e => ({ error: e.message }));
   return summary;
 }
 
@@ -220,7 +222,8 @@ async function listPending(env) {
   const { results } = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE status = 'pending' ORDER BY date_purchased`).all();
   return { pending: results.length, rows: results.map(r => ({ ...r,
     item: (r.item_cents / 100).toFixed(2), shipping: (r.shipping_cents / 100).toFixed(2), tax: (r.tax_cents / 100).toFixed(2),
-    purchasePrice: (r.purchase_price_cents / 100).toFixed(2) })) };
+    purchasePrice: (r.purchase_price_cents / 100).toFixed(2),
+    suggested_missing: (() => { try { return JSON.parse(r.suggested_missing || '[]'); } catch (e) { return []; } })() })) };
 }
 
 // ── REVIEW QUEUE ACTIONS ──────────────────────────────────────────────────────
@@ -600,9 +603,9 @@ async function readCardMeta(env) {
 }
 
 
-// ── GEMINI FILE-NAME SUGGESTIONS (read-only test) ─────────────────────────────
-// eBay title + similar cards from your own data → suggested file name in your format.
-const GEMINI_MODEL = 'gemini-3.8-flash'; // override per run with ?model=
+// ── FILE-NAME SUGGESTIONS (OpenAI, from the eBay title + the collector's own naming) ─
+// Filled in for each pending purchase after the import; shown pre-filled in Intake for editing.
+const OPENAI_MODEL = 'gpt-5.6-luna';
 const NAME_STOP = new Set(('topps panini bowman upper deck donruss optic prizm select chrome refractor finest mosaic phoenix stadium club heritage ' +
   'update series sapphire cosmic national treasures immaculate contenders score fleer leaf gold silver black blue red green orange purple ' +
   'pink yellow white aqua bronze lava wave ice scope parallel insert base auto autograph autographs signature signatures patch rookie rookies ' +
@@ -639,38 +642,6 @@ async function similarCardExamples(env, title, excludeEbayId = null) {
   return rows.slice(0, 6).map(fileNameFromCard);
 }
 
-const GEMINI_INSTRUCTIONS = `You convert an eBay trading card listing title into the collector's file-name format.
-Format: "{Year} {Set} - {Insert or subset (optional)} - {Parallel (optional)} #{Card No} - {Version (optional)} - {Player} /{Print run (optional)} [{Grade (optional)}]"
-- Year is the season as printed on the product (e.g. 2025, 2025-26). Set is the product line (e.g. Topps Chrome, Panini Prizm).
-- Insert/subset and parallel come after the set, separated by " - ". Omit "[Base]".
-- Version is for things like "Rookie Signature Materials" or a Pokémon rarity; usually omitted.
-- Print run is the serial denominator only (219/250 -> /250). Grade only if graded, as "PSA 10" or "BGS 9.5".
-- Copy the collector's naming from the EXAMPLES whenever the same set, parallel or player appears (exact spelling and wording).
-- LISTING DETAILS are the seller's eBay item specifics (Card Number, Parallel/Variety, Set, Season...). Use them to fill fields the title lacks.
-- KNOWN SETS lists the collector's exact set names for this year. If the card's set is there, copy that year + set text exactly (brand, season format like 2025-26, hyphens).
-- Season: if title and listing details differ only in format (2007 vs 2007-08), use the full season, matching KNOWN SETS when listed.
-- Version: some sets use a version tier (e.g. Topps Finest: Common, Uncommon, Rare). Include it only if the title or listing details state it. If KNOWN SETS shows that set uses versions but the tier isn't stated, leave it out and add "version" to "missing".
-- If the title and listing details otherwise disagree on a field, leave that field out and list it in "missing".
-- Use ONLY information in the title, listing details or examples. Do NOT guess card numbers, parallels or sets that aren't there; leave them out instead.
-- Drop marketing words (RC, Rookie, SSP, Hot, Invest, team names, positions).
-Return JSON: {"file_name": string, "missing": [list of fields you could not determine]}.`;
-
-// eBay item specifics for a purchased listing (seller-entered Card Number, Parallel, Set...)
-const SPECIFIC_SKIP = /country|manufacture|language|material|vintage|original|reprint|autograph (authentication|format)|signed by|card size|thickness|custom bundle|type$|^league$|^team$|^sport$|^genre$|^character$|^manufacturer$/i;
-async function itemSpecifics(env, itemId) {
-  if (!itemId) return [];
-  const token = await getEbayToken(env);
-  const res = await fetch('https://api.ebay.com/ws/api.dll', {
-    method: 'POST',
-    headers: { 'X-EBAY-API-SITEID': '0', 'X-EBAY-API-COMPATIBILITY-LEVEL': '967', 'X-EBAY-API-CALL-NAME': 'GetItem',
-      'X-EBAY-API-IAF-TOKEN': token, 'Content-Type': 'text/xml' },
-    body: `<?xml version="1.0" encoding="utf-8"?><GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><ItemID>${String(itemId).replace(/\D/g, '')}</ItemID><IncludeItemSpecifics>true</IncludeItemSpecifics></GetItemRequest>`
-  });
-  const xml = await res.text();
-  return tags(tag(xml, 'ItemSpecifics') || '', 'NameValueList')
-    .map(nv => ({ name: tag(nv, 'Name'), value: tags(nv, 'Value').join(', ') }))
-    .filter(x => x.name && x.value && !SPECIFIC_SKIP.test(x.name));
-}
 // The collector's own set names for the title's year (excluding the card itself), so the model reuses exact wording
 async function knownSets(env, title, excludeEbayId = null) {
   const year = (title.match(/\b(19[5-9]\d|20[0-3]\d)\b/) || [])[1];
@@ -700,84 +671,51 @@ async function knownSets(env, title, excludeEbayId = null) {
   });
 }
 
-async function namePrompt(env, title, ctx = {}) {
-  const examples = await similarCardExamples(env, title, ctx.excludeEbayId);
-  const specs = ctx.specifics || [];
-  const sets = await knownSets(env, title, ctx.excludeEbayId);
-  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\n`
-    + `KNOWN SETS:\n${sets.map(x => '- ' + x).join('\n') || '(none)'}\n\n`
-    + `LISTING DETAILS:\n${specs.map(x => `- ${x.name}: ${x.value}`).join('\n') || '(none)'}\n\nTITLE: ${title}`;
-  return { examples, sets, prompt };
-}
+const NAME_INSTRUCTIONS = `You convert an eBay trading card listing title into the collector's file-name format.
+Format: "{Year} {Set} - {Insert or subset (optional)} - {Parallel (optional)} #{Card No} - {Version (optional)} - {Player} /{Print run (optional)} [{Grade (optional)}]"
+- Year is the season as printed on the product (e.g. 2025, 2025-26). Set is the product line (e.g. Topps Chrome, Panini Prizm).
+- Insert/subset and parallel come after the set, separated by " - ". Omit "[Base]".
+- Print run is the serial denominator only (219/250 -> /250).
+- Grade: include only if the TITLE names the grading company and grade, written as "[PSA 10]" or "[BGS 9.5]". Otherwise no grade.
+- KNOWN SETS are set names the collector has used before. Use one only if it is clearly the same product as the title; then copy its year + set text exactly (brand, season format like 2025-26). If none clearly matches (new or different product), build the set from the title.
+- Prefer the collector's existing wording for inserts and parallels when the title clearly names the same one (from KNOWN SETS or EXAMPLES).
+- Version: some sets use a version tier (e.g. Topps Finest: Common, Uncommon, Rare). Include it only if the title states it. If the matching known set uses versions but the title doesn't say which, leave it out and add "version" to "missing".
+- Use ONLY information in the title, known sets or examples. Do NOT guess card numbers, parallels or sets that aren't there; leave them out and list them in "missing".
+- Drop marketing words (RC, Rookie, SSP, Hot, Invest, team names, positions).
+Return JSON: {"file_name": string, "missing": [list of fields you could not determine]}.`;
 
-async function geminiSuggest(env, title, model, ctx) { model = model || GEMINI_MODEL;
-  if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
-  const { examples, sets, prompt } = await namePrompt(env, title, ctx);
-  const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: GEMINI_INSTRUCTIONS }] },
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0 }
-  });
-  // Free tier returns 503 (overloaded) / 429 (rate limit) at times — retry with backoff.
-  let res, d;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (attempt) await new Promise(r => setTimeout(r, 2000 * 2 ** (attempt - 1)));
-    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY }, body
-    });
-    d = await res.json().catch(() => ({}));
-    if (res.status !== 503 && res.status !== 429) break;
-  }
-  if (!res.ok) return { examples: examples.length, error: `Gemini ${res.status}: ${d.error?.message || 'error'}` };
-  const text = d.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-  let parsed = {};
-  try { parsed = JSON.parse(text); } catch (e) { return { examples: examples.length, error: 'unreadable response', raw: text.slice(0, 200) }; }
-  return { examples: examples.length, knownSets: sets, suggestion: parsed.file_name || null, missing: parsed.missing || [] };
-}
-
-const OPENAI_MODEL = 'gpt-5.6-luna'; // override per run with ?model=
-async function openaiSuggest(env, title, model, ctx) { model = model || OPENAI_MODEL;
+async function suggestFileName(env, title, excludeEbayId = null) {
   if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
-  const { examples, sets, prompt } = await namePrompt(env, title, ctx);
+  const examples = await similarCardExamples(env, title, excludeEbayId);
+  const sets = await knownSets(env, title, excludeEbayId);
+  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\n`
+    + `KNOWN SETS:\n${sets.map(x => '- ' + x).join('\n') || '(none)'}\n\nTITLE: ${title}`;
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_API_KEY}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'system', content: GEMINI_INSTRUCTIONS }, { role: 'user', content: prompt }],
-      response_format: { type: 'json_object' }
-    })
+    body: JSON.stringify({ model: OPENAI_MODEL, response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: NAME_INSTRUCTIONS }, { role: 'user', content: prompt }] })
   });
   const d = await res.json().catch(() => ({}));
-  if (!res.ok) return { examples: examples.length, error: `OpenAI ${res.status}: ${d.error?.message || 'error'}` };
-  const text = d.choices?.[0]?.message?.content || '';
-  let parsed = {};
-  try { parsed = JSON.parse(text); } catch (e) { return { examples: examples.length, error: 'unreadable response', raw: text.slice(0, 200) }; }
-  return { examples: examples.length, knownSets: sets, suggestion: parsed.file_name || null, missing: parsed.missing || [],
-    tokens: d.usage ? { in: d.usage.prompt_tokens, out: d.usage.completion_tokens } : undefined };
+  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${d.error?.message || 'error'}`);
+  const parsed = JSON.parse(d.choices?.[0]?.message?.content || '{}');
+  return { name: (parsed.file_name || '').trim() || null, missing: Array.isArray(parsed.missing) ? parsed.missing : [] };
 }
 
-async function runGeminiTest(env, days, model = GEMINI_MODEL, provider = 'gemini') {
-  const suggest = provider === 'openai' ? openaiSuggest : geminiSuggest;
-  const raw = await fetchPurchaseOrders(env, days);
-  const items = [];
-  for (const xml of raw) {
-    const o = purchaseOrderToCards(xml);
-    if (o.seller === 'comc_consignment') continue;
-    items.push(...o.cards);
-  }
-  // Run all cards in parallel — a sequential loop made the test link take minutes.
-  const t0 = Date.now();
-  const out = await Promise.all(items.map(async c => {
-    const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
-    const s0 = Date.now();
-    const specifics = await itemSpecifics(env, c.itemId).catch(() => []);
-    const g = await suggest(env, c.title, model, { specifics, excludeEbayId: c.itemId }).catch(e => ({ error: e.message }));
-    return { ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', suggestion: g.suggestion || null,
-      missing: g.missing, listingDetails: specifics.map(x => `${x.name}: ${x.value}`), examplesUsed: g.examples, knownSets: g.knownSets, tokens: g.tokens,
-      seconds: (Date.now() - s0) / 1000, error: g.error };
+// Suggest names for pending purchases that don't have one yet. Failures are left blank and retried next run.
+async function fillSuggestions(env, limit = 25) {
+  const { results } = await env.DB.prepare(`SELECT item_id, ebay_item_id, ebay_title FROM pending_metadata
+    WHERE status = 'pending' AND suggested_name IS NULL AND ebay_title IS NOT NULL LIMIT ?`).bind(limit).all();
+  const out = await Promise.all(results.map(async r => {
+    try {
+      const s = await suggestFileName(env, r.ebay_title, r.ebay_item_id);
+      if (!s.name) return { itemId: r.item_id, error: 'empty' };
+      await env.DB.prepare(`UPDATE pending_metadata SET suggested_name = ?, suggested_missing = ? WHERE item_id = ?`)
+        .bind(s.name, JSON.stringify(s.missing), r.item_id).run();
+      return { itemId: r.item_id, name: s.name };
+    } catch (e) { return { itemId: r.item_id, error: e.message }; }
   }));
-  return { readOnly: true, provider, model, totalSeconds: (Date.now() - t0) / 1000, cards: out };
+  return { suggested: out.filter(x => x.name).length, failed: out.filter(x => x.error) };
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
@@ -785,7 +723,7 @@ const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
   'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
-  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/gemini-test', 'GET:/name-test'
+  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run'
 ]);
 
 export async function handleCardDb(request, env, cors) {
@@ -793,9 +731,7 @@ export async function handleCardDb(request, env, cors) {
   const key = `${request.method}:${url.pathname}`;
   if (!CARD_DB_ROUTES.has(key)) return null;
   const out = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-  const keyOk = request.headers.get('X-App-Key') === env.APP_KEY
-    || ((key === 'GET:/gemini-test' || key === 'GET:/name-test') && url.searchParams.get('key') === env.APP_KEY); // test link opened in a browser
-  if (!keyOk) return out({ error: 'unauthorized' }, 401);
+  if (request.headers.get('X-App-Key') !== env.APP_KEY) return out({ error: 'unauthorized' }, 401);
   try {
     const p = url.pathname, q = n => url.searchParams.get(n);
     const days = () => Math.min(89, Math.max(1, parseInt(q('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
@@ -846,12 +782,6 @@ export async function handleCardDb(request, env, cors) {
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
       case '/backup-run': return out(await writeBackup(env));
-      case '/gemini-test': return out(await runGeminiTest(env, days(), (url.searchParams.get('model') || GEMINI_MODEL).replace(/[^a-z0-9.\-]/gi, '')));
-      case '/name-test': {
-        const provider = q('provider') === 'gemini' ? 'gemini' : 'openai';
-        const model = (q('model') || (provider === 'openai' ? OPENAI_MODEL : GEMINI_MODEL)).replace(/[^a-z0-9.\-]/gi, '');
-        return out(await runGeminiTest(env, days(), model, provider));
-      }
     }
     return null;
   } catch (e) {

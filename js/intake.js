@@ -81,7 +81,8 @@ async function intakeRender() {
         <div class="intake-name">${inEsc(r.ebay_title)}${r.flag === 'refunded' ? '<span class="intake-flag">Refunded</span>' : ''}</div>
         <div class="intake-meta">${inEsc(r.seller)} · ${inEsc(r.date_purchased)} · ID ${r.item_id}</div>
         <div class="intake-cost"><span>Item <b>$${r.item}</b></span><span>Ship <b>$${r.shipping}</b></span><span>Tax <b>$${r.tax}</b></span><span>Total <b>$${r.purchasePrice}</b></span></div>
-        <textarea class="intake-in" placeholder="Paste file name" oninput="intakePreview('${r.item_id}', this.value)"></textarea>
+        ${r.suggested_name ? `<div class="intake-sugg">Suggested name — check before confirming${(r.suggested_missing || []).length ? ` · <b>missing: ${inEsc(r.suggested_missing.join(', '))}</b>` : ''}</div>` : ''}
+        <textarea class="intake-in" placeholder="Paste file name" oninput="intakePreview('${r.item_id}', this.value)">${r.suggested_name ? inEsc(r.suggested_name) : ''}</textarea>
         <table class="intake-prev" id="in-p-${r.item_id}"></table>
         <select class="intake-in" id="in-s-${r.item_id}" onchange="intakeGate('${r.item_id}')"><option value="">Sport…</option>${sportOpts}</select>
         <div class="intake-err" id="in-e-${r.item_id}"></div>
@@ -125,7 +126,8 @@ async function intakeRender() {
       <div class="intake-err" id="in-c-err"></div>
       <div id="in-c-out"></div>
     </details>
-  `;
+  `;  // show the parsed preview + sport for pre-filled suggestions
+  (pending.rows || []).forEach(r => { if (r.suggested_name) intakePreview(r.item_id, r.suggested_name); });
 }
 
 // ── Needs file name ───────────────────────────────────────────────────────────

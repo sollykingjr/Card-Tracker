@@ -1602,6 +1602,8 @@ body {
 .intake-card { background: var(--surf); border: 1px solid var(--bdr2); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
 .intake-name { font-size: 13px; font-weight: 600; line-height: 1.35; }
 .intake-meta { font-size: 11px; color: var(--tx2); margin-top: 4px; }
+.intake-sugg { margin-top: 8px; font-size: 11px; color: var(--tx2); }
+.intake-sugg b { color: var(--b3-tx); font-weight: 700; }
 .intake-flag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px; background: var(--b3-bg); color: var(--b3-tx); font-size: 10px; font-weight: 700; }
 .intake-cost { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--tx2); margin: 8px 0; }
 .intake-cost b { color: var(--tx); font-family: 'DM Mono', monospace; font-weight: 500; }

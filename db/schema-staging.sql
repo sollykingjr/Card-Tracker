@@ -22,7 +22,7 @@ CREATE TABLE ebay_orders (
   processed_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (order_id, role)
 );
-CREATE TABLE pending_metadata (
+CREATE TABLE pending_metadata ( -- + suggested_name TEXT, suggested_missing TEXT (JSON array) added via ALTER
   item_id TEXT PRIMARY KEY,
   order_id TEXT NOT NULL,
   ebay_item_id TEXT,
