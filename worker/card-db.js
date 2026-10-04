@@ -600,12 +600,98 @@ async function readCardMeta(env) {
 }
 
 
+// ── GEMINI FILE-NAME SUGGESTIONS (read-only test) ─────────────────────────────
+// eBay title + similar cards from your own data → suggested file name in your format.
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const NAME_STOP = new Set(('topps panini bowman upper deck donruss optic prizm select chrome refractor finest mosaic phoenix stadium club heritage ' +
+  'update series sapphire cosmic national treasures immaculate contenders score fleer leaf gold silver black blue red green orange purple ' +
+  'pink yellow white aqua bronze lava wave ice scope parallel insert base auto autograph autographs signature signatures patch rookie rookies ' +
+  'rc sp ssp card cards first 1st rare hof qb rb wr nfl nba mlb nhl psa bgs sgc cgc gem mint mt').split(/\s+/));
+
+const fileNameFromCard = c => {
+  let n = `${c.year || ''} ${c.set_name || ''}`;
+  if (c.variation) n += ` - ${c.variation}`;
+  if (c.card_no) n += ` #${c.card_no}`;
+  n += ` - ${c.version ? c.version + ' - ' : ''}${c.player_name || ''}`;
+  if (c.qty_manufactured) n += ` /${c.qty_manufactured}`;
+  if (c.grade) n += ` [${c.grade}]`;
+  return n.replace(/\s+/g, ' ').trim();
+};
+
+async function similarCardExamples(env, title) {
+  const year = (title.match(/\b(19[5-9]\d|20[0-3]\d)\b/) || [])[1] || null;
+  const words = title.replace(/[^A-Za-z'.\-\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !NAME_STOP.has(w.toLowerCase()));
+  const pairs = [];
+  for (let i = 0; i < Math.min(words.length - 1, 4); i++) pairs.push(`${words[i]} ${words[i + 1]}`);
+  const brand = (title.match(/\b(Topps|Panini|Bowman|Upper Deck|Donruss|Leaf|Fleer|Pok[eé]mon)\b/i) || [])[1] || null;
+  const rows = [];
+  const add = list => { for (const r of list) if (!rows.some(x => x.item_id === r.item_id)) rows.push(r); };
+  for (const p of pairs) {
+    const { results } = await env.DB.prepare(`SELECT * FROM cards WHERE player_name LIKE ? ORDER BY COALESCE(date_purchased,'') DESC LIMIT 4`).bind(`%${p}%`).all();
+    add(results);
+  }
+  if (year && brand) {
+    const { results } = await env.DB.prepare(`SELECT * FROM cards WHERE year LIKE ? AND set_name LIKE ? ORDER BY COALESCE(date_purchased,'') DESC LIMIT 6`)
+      .bind(`${year}%`, `%${brand}%`).all();
+    add(results);
+  }
+  return rows.slice(0, 12).map(fileNameFromCard);
+}
+
+const GEMINI_INSTRUCTIONS = `You convert an eBay trading card listing title into the collector's file-name format.
+Format: "{Year} {Set} - {Insert or subset (optional)} - {Parallel (optional)} #{Card No} - {Version (optional)} - {Player} /{Print run (optional)} [{Grade (optional)}]"
+- Year is the season as printed on the product (e.g. 2025, 2025-26). Set is the product line (e.g. Topps Chrome, Panini Prizm).
+- Insert/subset and parallel come after the set, separated by " - ". Omit "[Base]".
+- Version is for things like "Rookie Signature Materials" or a Pokémon rarity; usually omitted.
+- Print run is the serial denominator only (219/250 -> /250). Grade only if graded, as "PSA 10" or "BGS 9.5".
+- Copy the collector's naming from the EXAMPLES whenever the same set, parallel or player appears (exact spelling and wording).
+- Use ONLY information in the title or the examples. Do NOT guess card numbers, parallels or sets that aren't there; leave them out instead.
+- Drop marketing words (RC, Rookie, SSP, Hot, Invest, team names, positions).
+Return JSON: {"file_name": string, "missing": [list of fields you could not determine]}.`;
+
+async function geminiSuggest(env, title) {
+  if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
+  const examples = await similarCardExamples(env, title);
+  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\nTITLE: ${title}`;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: GEMINI_INSTRUCTIONS }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0 }
+    })
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { examples: examples.length, error: `Gemini ${res.status}: ${d.error?.message || 'error'}` };
+  const text = d.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+  let parsed = {};
+  try { parsed = JSON.parse(text); } catch (e) { return { examples: examples.length, error: 'unreadable response', raw: text.slice(0, 200) }; }
+  return { examples: examples.length, suggestion: parsed.file_name || null, missing: parsed.missing || [] };
+}
+
+async function runGeminiTest(env, days) {
+  const raw = await fetchPurchaseOrders(env, days);
+  const out = [];
+  for (const xml of raw) {
+    const o = purchaseOrderToCards(xml);
+    if (o.seller === 'comc_consignment') continue;
+    for (const c of o.cards) {
+      const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
+      const g = await geminiSuggest(env, c.title).catch(e => ({ error: e.message }));
+      out.push({ ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', gemini: g.suggestion || null,
+        missing: g.missing, examplesUsed: g.examples, error: g.error });
+    }
+  }
+  return { readOnly: true, model: GEMINI_MODEL, cards: out };
+}
+
 // ── Routes (called from worker.js) ────────────────────────────────────────────
 const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
   'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
-  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run'
+  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/gemini-test'
 ]);
 
 export async function handleCardDb(request, env, cors) {
@@ -613,7 +699,9 @@ export async function handleCardDb(request, env, cors) {
   const key = `${request.method}:${url.pathname}`;
   if (!CARD_DB_ROUTES.has(key)) return null;
   const out = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-  if (request.headers.get('X-App-Key') !== env.APP_KEY) return out({ error: 'unauthorized' }, 401);
+  const keyOk = request.headers.get('X-App-Key') === env.APP_KEY
+    || (key === 'GET:/gemini-test' && url.searchParams.get('key') === env.APP_KEY); // test link opened in a browser
+  if (!keyOk) return out({ error: 'unauthorized' }, 401);
   try {
     const p = url.pathname, q = n => url.searchParams.get(n);
     const days = () => Math.min(89, Math.max(1, parseInt(q('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
@@ -664,6 +752,7 @@ export async function handleCardDb(request, env, cors) {
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
       case '/backup-run': return out(await writeBackup(env));
+      case '/gemini-test': return out(await runGeminiTest(env, days()));
     }
     return null;
   } catch (e) {
