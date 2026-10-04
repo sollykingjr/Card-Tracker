@@ -151,6 +151,7 @@ async function ctLoadInHand() {
 }
 
 async function ctLoadPendingOverrides() {
+  if (CARD_DB_URL) return; // card database: edits apply immediately, no pending overrides
   if (ctPendingLoaded) return;
   ctPendingLoaded = true;
   try {
@@ -973,6 +974,7 @@ function ctOpenCard(idx) {
     <div class="ct-menu" id="ct-menu">
       <div class="ct-menu-item" onclick="ctRefreshScans()">Refresh Scans</div>
       <div class="ct-menu-item" onclick="ctShowEditMetadata(${idx})">Edit Metadata</div>
+      ${CARD_DB_URL && safeNum(c.salePrice) > 0 ? `<div class="ct-menu-item" onclick="ctShowRefund(${idx})">Refund / cancel sale</div>` : ''}
       <div class="ct-menu-item" onclick="ebayOpenListingForm('${(c.itemId||'').replace(/'/g,"\\'")}')">List on eBay</div>
       ${ctGetTags(c).includes('Listed') ? `<div class="ct-menu-item" onclick="emlOpenForCard('${(c.itemId||'').replace(/'/g,"\\'")}')">Edit eBay listing</div>` : ''}
     </div>
@@ -1072,6 +1074,53 @@ function ctShowEditMetadata(idx) {
   `;
 }
 
+async function ctReloadAndReopen(itemId) {
+  await loadCardData();
+  const i = cards.findIndex(x => x.itemId === itemId);
+  if (i >= 0) ctOpenCard(i);
+}
+
+function ctShowRefund(idx) {
+  const menu = document.getElementById('ct-menu');
+  if (menu) menu.classList.remove('on');
+  const c = cards[idx];
+  if (!c) return;
+  const btn = 'width:100%;height:44px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:10px';
+  document.getElementById('mcontent').innerHTML = `
+    <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
+      <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+        style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0">← Back</button>
+    </div>
+    <div class="section-hdr">Refund / cancel sale</div>
+    <div style="font-size:12px;color:var(--tx2);margin:10px 0 4px">Sold ${fmtShortDate(c.transactionDate)} for $${safeNum(c.salePrice).toFixed(2)}</div>
+    <button style="${btn}" onclick="ctDoRefund(${idx},'cancelled')">Cancelled — I still have the card</button>
+    <div style="font-size:11px;color:var(--tx3);margin-top:4px">Clears the sale and puts the card back to owned. It isn't relisted.</div>
+    <button style="${btn}" onclick="ctDoRefund(${idx},'gone')">Refunded — the card is gone</button>
+    <div style="font-size:11px;color:var(--tx3);margin-top:4px">No sale money; the purchase cost counts as a loss.</div>
+    <div id="ct-refund-status" style="font-size:12px;color:#f87171;margin-top:10px"></div>
+  `;
+}
+
+async function ctDoRefund(idx, type) {
+  const c = cards[idx];
+  if (!c) return;
+  const msg = type === 'cancelled' ? 'Clear this sale and put the card back to owned?' : 'Mark this sale refunded and the card gone?';
+  if (!confirm(msg)) return;
+  const status = document.getElementById('ct-refund-status');
+  try {
+    const res = await fetch(`${CARD_DB_URL}/card-refund`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+      body: JSON.stringify({ item_id: c.itemId, type })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    await ctReloadAndReopen(c.itemId);
+  } catch (e) {
+    if (status) status.textContent = e.message || "Couldn't update. Try again.";
+  }
+}
+
 function ctRefreshScans() {
   const menu = document.getElementById('ct-menu');
   if (menu) menu.classList.remove('on');
@@ -1104,6 +1153,24 @@ async function ctSaveMetadata(idx) {
 
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
   if (status) status.textContent = '';
+
+  // Card database (staging app): save directly, then reload and reopen the card with the new values
+  if (CARD_DB_URL) {
+    try {
+      const res = await fetch(`${CARD_DB_URL}/card-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+        body: JSON.stringify({ itemId: c.itemId, fields })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'save failed');
+      await ctReloadAndReopen(c.itemId);
+    } catch (e) {
+      if (status) status.textContent = "Couldn't save changes. Try again.";
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
+    }
+    return;
+  }
 
   try {
     const res = await fetch(`${WORKER_URL}/card-override`, {

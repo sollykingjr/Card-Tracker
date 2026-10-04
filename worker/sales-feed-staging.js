@@ -756,6 +756,30 @@ async function appCards(env) {
   return { source: 'card-tracker-db', count: values.length, values };
 }
 
+// ── EDIT METADATA (card modal) ────────────────────────────────────────────────
+const EDIT_FIELD_COLS = {
+  'Sport': 'sport', 'Year': 'year', 'Set': 'set_name', 'Variation': 'variation', 'Version': 'version', 'Card No': 'card_no',
+  'Player Name': 'player_name', 'Serial No': 'serial_no', 'Qty Manufactured': 'qty_manufactured', 'Purchased From': 'purchased_from', 'Grade': 'grade'
+};
+async function updateCard(env, itemId, fields) {
+  const card = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?`).bind(itemId).first();
+  if (!card) throw new Error('card not found');
+  const sets = [], vals = [], before = {}, after = {};
+  for (const [label, raw] of Object.entries(fields || {})) {
+    const col = EDIT_FIELD_COLS[label];
+    if (!col) continue;
+    const v = String(raw ?? '').trim();
+    sets.push(`${col} = ?`); vals.push(v === '' ? null : v);
+    before[col] = card[col]; after[col] = v === '' ? null : v;
+  }
+  if (!sets.length) throw new Error('no changes');
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE cards SET ${sets.join(', ')}, updated_at = datetime('now') WHERE item_id = ?`).bind(...vals, itemId),
+    env.DB.prepare(`INSERT INTO card_events (item_id, event, details) VALUES (?, 'edit', ?)`).bind(itemId, JSON.stringify({ before, after }))
+  ]);
+  return { ok: true, itemId, changed: after };
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -783,7 +807,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }));
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards', '/intake-counts', '/sale-review/dismiss'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards', '/intake-counts', '/sale-review/dismiss', '/card-update'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (url.pathname === '/cards') {
       try {
         const res = json(await appCards(env));
@@ -840,6 +864,10 @@ export default {
         const b = await request.json();
         await env.DB.prepare(`UPDATE sale_review SET status = 'dismissed' WHERE order_id = ? AND sku = ?`).bind(b.order_id, b.sku || '').run();
         return cors(json({ dismissed: true }));
+      }
+      if (url.pathname === '/card-update' && request.method === 'POST') {
+        const b = await request.json();
+        return cors(json(await updateCard(env, b.itemId || b.item_id, b.fields)));
       }
       if (url.pathname === '/backup-run') return json(await writeBackup(env));
       if (url.pathname === '/card-search') return json(await cardSearch(env, url.searchParams.get('q')));
