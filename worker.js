@@ -10,7 +10,6 @@ import {
 import {
   handleScan, handleScanBatch, handleCardMetaAll, handleCardMetaPost, handleCardMetaInHandAll,
   handleComcPulledAll, handleComcPulledPost, handleComcPulledInvalidateScans,
-  handleCardOverride, handleCardOverridePendingAll, handleCardOverridePendingClear,
   handleCardImage
 } from './worker/cardmeta.js';
 import { handleDebugRawWatchlist } from './worker/debug.js';
@@ -35,8 +34,6 @@ const PROTECTED_ROUTES = new Set([
   'POST:/scan-batch',
   'POST:/card-meta',
   'POST:/comc-pulled',
-  'POST:/card-override',
-  'POST:/card-override-pending-clear',
   'POST:/ebay-publish',
   'POST:/scan-index-rebuild',
   'POST:/scan-index-update',
@@ -134,9 +131,6 @@ export default {
     if (path === '/comc-pulled-all' && request.method === 'GET') return handleComcPulledAll(env, cors);
     if (path === '/comc-pulled' && request.method === 'POST') return handleComcPulledPost(request, env, cors);
     if (path === '/comc-pulled-invalidate-scans' && request.method === 'GET') return handleComcPulledInvalidateScans(env, cors);
-    if (path === '/card-override' && request.method === 'POST') return handleCardOverride(request, env, cors);
-    if (path === '/card-override-pending-all' && request.method === 'GET') return handleCardOverridePendingAll(env, cors);
-    if (path === '/card-override-pending-clear' && request.method === 'POST') return handleCardOverridePendingClear(request, env, cors);
     if (path === '/ebay-publish' && request.method === 'POST') return handleEbayPublish(request, env, cors);
     if (path === '/scan-index-version' && request.method === 'GET') return handleScanIndexVersion(env, cors);
     if (path === '/scan-index' && request.method === 'GET') return handleScanIndexGet(env, cors);
