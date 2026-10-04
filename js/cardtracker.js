@@ -1228,7 +1228,7 @@ function ctRenderBody() {
           </div>
         </div>
         <div class="ct-main-col">
-          <div style="display:flex;align-items:center;gap:8px;margin:16px 16px 0">
+          <div style="display:flex;align-items:center;gap:8px;margin:16px 16px 0;flex-shrink:0">
             <div class="sort-chips" style="flex:1;min-width:0">
               ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
             </div>
