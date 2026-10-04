@@ -118,7 +118,7 @@ async function intakeRender() {
     <details class="intake-section">
       <summary class="srow-t">Upload COMC file</summary>
       <select class="intake-in" id="in-c-type"><option value="purchases">Purchase history</option><option value="sales">Sales history</option></select>
-      <input class="intake-in" id="in-c-file" type="file" accept=".csv,text/csv">
+      <input class="intake-in" id="in-c-file" type="file">
       <div class="intake-row">
         <button class="intake-btn" onclick="intakeComc(false)">Check file</button>
         <button class="intake-btn primary" id="in-c-go" disabled onclick="intakeComc(true)">Import</button>
