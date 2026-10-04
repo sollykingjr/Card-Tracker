@@ -618,14 +618,15 @@ const fileNameFromCard = c => {
   return n.replace(/\s+/g, ' ').trim();
 };
 
-async function similarCardExamples(env, title) {
+async function similarCardExamples(env, title, excludeEbayId = null) {
   const year = (title.match(/\b(19[5-9]\d|20[0-3]\d)\b/) || [])[1] || null;
   const words = title.replace(/[^A-Za-z'.\-\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !NAME_STOP.has(w.toLowerCase()));
   const pairs = [];
   for (let i = 0; i < Math.min(words.length - 1, 4); i++) pairs.push(`${words[i]} ${words[i + 1]}`);
   const brand = (title.match(/\b(Topps|Panini|Bowman|Upper Deck|Donruss|Leaf|Fleer|Pok[eé]mon)\b/i) || [])[1] || null;
   const rows = [];
-  const add = list => { for (const r of list) if (!rows.some(x => x.item_id === r.item_id)) rows.push(r); };
+  const self = r => excludeEbayId && [r.item_id, r.legacy_item_id, r.purchase_ebay_item_id].includes(excludeEbayId);
+  const add = list => { for (const r of list) if (!self(r) && !rows.some(x => x.item_id === r.item_id)) rows.push(r); };
   for (const p of pairs) {
     const { results } = await env.DB.prepare(`SELECT * FROM cards WHERE player_name LIKE ? ORDER BY COALESCE(date_purchased,'') DESC LIMIT 4`).bind(`%${p}%`).all();
     add(results);
@@ -645,14 +646,39 @@ Format: "{Year} {Set} - {Insert or subset (optional)} - {Parallel (optional)} #{
 - Version is for things like "Rookie Signature Materials" or a Pokémon rarity; usually omitted.
 - Print run is the serial denominator only (219/250 -> /250). Grade only if graded, as "PSA 10" or "BGS 9.5".
 - Copy the collector's naming from the EXAMPLES whenever the same set, parallel or player appears (exact spelling and wording).
-- Use ONLY information in the title or the examples. Do NOT guess card numbers, parallels or sets that aren't there; leave them out instead.
+- LISTING DETAILS are the seller's eBay item specifics (Card Number, Parallel/Variety, Set, Season...). Use them to fill fields the title lacks.
+- If the title and listing details disagree on a field, leave that field out and list it in "missing".
+- Use ONLY information in the title, listing details or examples. Do NOT guess card numbers, parallels or sets that aren't there; leave them out instead.
 - Drop marketing words (RC, Rookie, SSP, Hot, Invest, team names, positions).
 Return JSON: {"file_name": string, "missing": [list of fields you could not determine]}.`;
 
-async function geminiSuggest(env, title, model = GEMINI_MODEL) {
+// eBay item specifics for a purchased listing (seller-entered Card Number, Parallel, Set...)
+const SPECIFIC_SKIP = /country|manufacture|language|material|vintage|original|reprint|autograph (authentication|format)|signed by|card size|thickness|custom bundle|type$|^league$|^team$|^sport$|^genre$|^character$|^manufacturer$/i;
+async function itemSpecifics(env, itemId) {
+  if (!itemId) return [];
+  const token = await getEbayToken(env);
+  const res = await fetch('https://api.ebay.com/ws/api.dll', {
+    method: 'POST',
+    headers: { 'X-EBAY-API-SITEID': '0', 'X-EBAY-API-COMPATIBILITY-LEVEL': '967', 'X-EBAY-API-CALL-NAME': 'GetItem',
+      'X-EBAY-API-IAF-TOKEN': token, 'Content-Type': 'text/xml' },
+    body: `<?xml version="1.0" encoding="utf-8"?><GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><ItemID>${String(itemId).replace(/\D/g, '')}</ItemID><IncludeItemSpecifics>true</IncludeItemSpecifics></GetItemRequest>`
+  });
+  const xml = await res.text();
+  return tags(tag(xml, 'ItemSpecifics') || '', 'NameValueList')
+    .map(nv => ({ name: tag(nv, 'Name'), value: tags(nv, 'Value').join(', ') }))
+    .filter(x => x.name && x.value && !SPECIFIC_SKIP.test(x.name));
+}
+async function namePrompt(env, title, ctx = {}) {
+  const examples = await similarCardExamples(env, title, ctx.excludeEbayId);
+  const specs = ctx.specifics || [];
+  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\n`
+    + `LISTING DETAILS:\n${specs.map(x => `- ${x.name}: ${x.value}`).join('\n') || '(none)'}\n\nTITLE: ${title}`;
+  return { examples, prompt };
+}
+
+async function geminiSuggest(env, title, model, ctx) { model = model || GEMINI_MODEL;
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
-  const examples = await similarCardExamples(env, title);
-  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\nTITLE: ${title}`;
+  const { examples, prompt } = await namePrompt(env, title, ctx);
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: GEMINI_INSTRUCTIONS }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -676,10 +702,9 @@ async function geminiSuggest(env, title, model = GEMINI_MODEL) {
 }
 
 const OPENAI_MODEL = 'gpt-5.6-luna'; // override per run with ?model=
-async function openaiSuggest(env, title, model = OPENAI_MODEL) {
+async function openaiSuggest(env, title, model, ctx) { model = model || OPENAI_MODEL;
   if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
-  const examples = await similarCardExamples(env, title);
-  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\nTITLE: ${title}`;
+  const { examples, prompt } = await namePrompt(env, title, ctx);
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_API_KEY}` },
@@ -712,9 +737,11 @@ async function runGeminiTest(env, days, model = GEMINI_MODEL, provider = 'gemini
   const out = await Promise.all(items.map(async c => {
     const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
     const s0 = Date.now();
-    const g = await suggest(env, c.title, model).catch(e => ({ error: e.message }));
-    return { ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', gemini: g.suggestion || null,
-      missing: g.missing, examplesUsed: g.examples, tokens: g.tokens, seconds: (Date.now() - s0) / 1000, error: g.error };
+    const specifics = await itemSpecifics(env, c.itemId).catch(() => []);
+    const g = await suggest(env, c.title, model, { specifics, excludeEbayId: c.itemId }).catch(e => ({ error: e.message }));
+    return { ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', suggestion: g.suggestion || null,
+      missing: g.missing, listingDetails: specifics.map(x => `${x.name}: ${x.value}`), examplesUsed: g.examples, tokens: g.tokens,
+      seconds: (Date.now() - s0) / 1000, error: g.error };
   }));
   return { readOnly: true, provider, model, totalSeconds: (Date.now() - t0) / 1000, cards: out };
 }
