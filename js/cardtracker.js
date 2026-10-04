@@ -252,11 +252,17 @@ function ctGetTags(c) {
   return c.salePrice ? [...new Set([...stored, 'Sold'])] : stored;
 }
 
+let ctSoldTagsOpen = {};
 function ctRenderTags(idx) {
   const box = document.getElementById('ct-tags');
   const c = cards[idx];
   if (!box || !c) return;
   const tags = ctGetTags(c);
+  if (c.salePrice && !ctSoldTagsOpen[c.itemId]) {
+    const n = tags.filter(t => t !== 'Sold').length;
+    box.innerHTML = `<button onclick="ctSoldTagsOpen['${(c.itemId||'').replace(/'/g,"\\'")}']=true;ctRenderTags(${idx})" style="background:none;border:none;padding:0;color:var(--acc);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Show tags${n ? ` (${n})` : ''}</button>`;
+    return;
+  }
   box.innerHTML = `
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Tags</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${c.itemId ? '8px' : '0'}">
@@ -751,7 +757,8 @@ function ctListRowHTML(c) {
   const dateLine = ctDateLine(c);
   const inHand = ctIsInHand(c);
   const listed = ctGetTags(c).includes('Listed');
-  const tags = ctGetTags(c).filter(t => t !== 'Sold' && t !== 'Listed');
+  // Sold cards: custom tags hidden (still saved, visible in the card modal via Show tags)
+  const tags = c.salePrice ? [] : ctGetTags(c).filter(t => t !== 'Sold' && t !== 'Listed');
   return `
     <div class="cs-row" onclick="ctOpenCard(${cards.indexOf(c)})">
       <div class="cs-row-top">
@@ -1021,6 +1028,7 @@ function ctOpenCard(idx) {
     <div id="ct-inhand" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
+    <div id="ct-sale" style="margin-top:14px"></div>
   `;
   _modalMainHtml = ctModalHtml;
   document.getElementById('mcontent').innerHTML = ctModalHtml;
@@ -1029,6 +1037,29 @@ function ctOpenCard(idx) {
   ctRenderPendingBadge(idx);
   ctRenderInHand(idx);
   if (c.itemId) ctLoadScans(c.itemId);
+  if (CARD_DB_URL && c.itemId && c.salePrice) ctLoadSaleBreakdown(c.itemId);
+}
+
+// Sale breakdown (card database only) — bottom of the card modal for sold cards
+async function ctLoadSaleBreakdown(itemId) {
+  try {
+    const r = await fetch(`${CARD_DB_URL}/card-detail?item_id=${encodeURIComponent(itemId)}`, { headers: { 'X-App-Key': APP_KEY } });
+    const d = await r.json();
+    const box = document.getElementById('ct-sale');
+    if (!box || d.error || ctOpenCardIdx == null || cards[ctOpenCardIdx]?.itemId !== itemId) return;
+    const m = v => v == null ? '—' : (v < 0 ? '−$' : '$') + (Math.abs(v) / 100).toFixed(2);
+    const row = (label, val, strong, neg) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:13px${strong ? ';font-weight:700' : ''}">
+      <span style="color:${strong ? 'var(--tx)' : 'var(--tx2)'}">${label}</span><span style="font-family:'DM Mono',monospace;color:${neg ? 'var(--tx2)' : 'var(--tx)'}">${val}</span></div>`;
+    const lines = d.status === 'refunded'
+      ? row('Refunded', d.refundDate || '—') + row('Cost', m(d.cost)) + row('Profit', m(d.profit), true)
+      : row('Sale price', m(d.salePrice)) +
+        (d.hasBreakdown ? row('Tax', '−' + m(d.tax), false, true) + row('Fees', '−' + m(d.fees), false, true) + row('Shipping', '−' + m(d.shipping), false, true)
+          : row('Fees', '−' + m(d.fees), false, true)) +
+        row('Net proceeds', m(d.netProceeds), true) + row('Cost', '−' + m(d.cost), false, true) + row('Profit', m(d.profit), true);
+    box.innerHTML = `<div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Sale breakdown</div>${lines}
+      ${d.hasBreakdown || d.status === 'refunded' ? '' : '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Older sale — tax and shipping detail not available.</div>'}`;
+    _modalMainHtml = _modalMainHtml.replace('<div id="ct-sale" style="margin-top:14px"></div>', `<div id="ct-sale" style="margin-top:14px">${box.innerHTML}</div>`);
+  } catch (e) { /* breakdown is optional */ }
 }
 function ctShowEditMetadata(idx) {
   const menu = document.getElementById('ct-menu');

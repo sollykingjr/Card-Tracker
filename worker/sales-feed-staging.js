@@ -721,7 +721,11 @@ async function writeBackup(env) {
   const { results } = await env.DB.prepare(`SELECT * FROM cards ORDER BY COALESCE(date_sold, refund_date, date_purchased) DESC, item_id`).all();
   await ensureBackupTabs(env);
   const finalValues = [FINAL_HEADERS, ...results.map(finalRow)];
-  const allValues = [[...ALL_COLS, 'backed_up_at'], ...results.map((c, i) => [...ALL_COLS.map(k => c[k] ?? ''), i === 0 ? new Date().toISOString() : ''])];
+  const meta = await readCardMeta(env);
+  const allValues = [[...ALL_COLS, 'tags', 'in_hand', 'backed_up_at'], ...results.map((c, i) => {
+    const m = meta[c.item_id] || { tags: [], inHand: false };
+    return [...ALL_COLS.map(k => c[k] ?? ''), m.tags.join(', '), m.inHand ? 'TRUE' : '', i === 0 ? new Date().toISOString() : ''];
+  })];
   await sheetsFetch(env, '/values:batchClear', { method: 'POST',
     body: JSON.stringify({ ranges: ["'Card Cost Tracker Final'!A:Z", "'All Data'!A:AZ"] }) }, BACKUP_SID);
   await sheetsFetch(env, '/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: [
@@ -780,6 +784,39 @@ async function updateCard(env, itemId, fields) {
   return { ok: true, itemId, changed: after };
 }
 
+// ── CARD DETAIL (sale breakdown for the card modal) ───────────────────────────
+async function cardDetail(env, itemId) {
+  const c = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?`).bind(itemId).first();
+  if (!c) throw new Error('card not found');
+  const hasBreakdown = c.sale_tax_cents != null;
+  const deductions = saleDeductions(c);
+  return {
+    itemId: c.item_id, status: c.status, source: c.source, hasBreakdown,
+    salePrice: c.sale_price_cents, tax: hasBreakdown ? c.sale_tax_cents : null,
+    fees: hasBreakdown ? c.sale_fees_cents : Math.abs(c.sale_fees_cents || 0),
+    shipping: hasBreakdown ? c.sale_shipping_cents : null,
+    netProceeds: c.sale_price_cents == null ? null : c.sale_price_cents - deductions,
+    cost: c.purchase_price_cents, profit: netProfitCents(c),
+    purchase: { item: c.purchase_item_cents, shipping: c.purchase_shipping_cents, tax: c.purchase_tax_cents },
+    soldTo: c.purchased_by, orderId: c.sale_order_id, refundDate: c.refund_date
+  };
+}
+
+// Tags + In Hand from the Worker's card-meta KV (read-only), for the backup sheet
+async function readCardMeta(env) {
+  const out = {};
+  let cursor;
+  do {
+    const page = await env.CACHE.list({ prefix: 'card-meta:', cursor });
+    for (const k of page.keys) {
+      const id = k.name.slice('card-meta:'.length);
+      out[id] = { tags: (k.metadata && Array.isArray(k.metadata.tags)) ? k.metadata.tags : [], inHand: !!(k.metadata && k.metadata.inHand) };
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return out;
+}
+
 export default {
   async scheduled(event, env, ctx) {
     try {
@@ -807,7 +844,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }));
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards', '/intake-counts', '/sale-review/dismiss', '/card-update'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards', '/intake-counts', '/sale-review/dismiss', '/card-update', '/card-detail'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (url.pathname === '/cards') {
       try {
         const res = json(await appCards(env));
@@ -865,6 +902,7 @@ export default {
         await env.DB.prepare(`UPDATE sale_review SET status = 'dismissed' WHERE order_id = ? AND sku = ?`).bind(b.order_id, b.sku || '').run();
         return cors(json({ dismissed: true }));
       }
+      if (url.pathname === '/card-detail') return cors(json(await cardDetail(env, url.searchParams.get('item_id') || '')));
       if (url.pathname === '/card-update' && request.method === 'POST') {
         const b = await request.json();
         return cors(json(await updateCard(env, b.itemId || b.item_id, b.fields)));
