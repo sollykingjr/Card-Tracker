@@ -600,175 +600,12 @@ async function readCardMeta(env) {
 }
 
 
-// ── CARDSIGHT SUGGESTIONS (read-only test for now) ────────────────────────────
-// Turns an eBay listing title into a suggested COMC-style file name using CardSight's
-// catalog search. Nothing from CardSight is stored (their terms only allow short-term caching).
-const CS_BASE = 'https://api.cardsight.ai';
-const TITLE_NOISE = /\b(RC|Rookie Card|Rookie|SP|SSP|HOF|Hall of Fame|Color Match|Case Hit|PSA|BGS|SGC|CGC|GEM|MINT|MT|NM-MT|NM|Card|Cards|Lot|Invest|Hot|Rare|Refractor\s*Rookie|1st|First|Bowman\s*1st)\b/gi;
-
-function titleToQuery(title) {
-  const grade = (title.match(/\b(PSA|BGS|SGC|CGC)\s*(\d{1,2}(?:\.5)?)\b/i) || []);
-  const year = (title.match(/\b(19[5-9]\d|20[0-3]\d)(?:-\d{2})?\b/) || [])[1] || null;
-  const serial = (title.match(/(?:#\s*)?\/\s*(\d{1,4})\b/) || [])[1] || null;
-  let q = title.replace(/\b(PSA|BGS|SGC|CGC)\s*\d{1,2}(?:\.5)?\b/gi, ' ').replace(/#\s*\/\s*\d+|\/\s*\d+/g, ' ').replace(/#/g, ' ').replace(TITLE_NOISE, ' ').replace(/[^\w#.'\-\s&]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (serial) q += ` /${serial}`;
-  return { q, year, serial, grade: grade[1] ? `${grade[1].toUpperCase()} ${grade[2]}` : null };
-}
-
-function suggestionToFileName(r, grade) {
-  if (!r) return null;
-  const setPart = !r.setName || /^base( set)?$/i.test(r.setName) ? '[Base]' : r.setName;
-  let name = `${r.year || ''} ${r.releaseName || ''} - ${setPart}`;
-  if (r.parallelName) name += ` - ${r.parallelName}`;
-  if (r.cardNumber) name += ` #${r.cardNumber}`;
-  name += ` - ${r.name}`;
-  if (r.numberedTo) name += ` /${r.numberedTo}`;
-  if (grade) name += ` [${grade}]`;
-  return name.replace(/\s+/g, ' ').trim();
-}
-
-async function cardsightSearch(env, title) {
-  if (!env.CARDSIGHT_API_KEY) throw new Error('CARDSIGHT_API_KEY is not set');
-  const { q, year, grade } = titleToQuery(title || '');
-  const params = new URLSearchParams({ q, type: 'card', take: '3' });
-  if (year) params.set('year', year);
-  const res = await fetch(`${CS_BASE}/v1/catalog/search?${params}`, { headers: { 'X-API-Key': env.CARDSIGHT_API_KEY } });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { query: q, year, error: `CardSight ${res.status}: ${data.error || data.message || 'error'}` };
-  const results = data.results || [];
-  return {
-    query: q, year,
-    top: results.slice(0, 3).map(r => ({ name: r.name, year: r.year, release: r.releaseName, set: r.setName, parallel: r.parallelName,
-      number: r.cardNumber, numberedTo: r.numberedTo, match: r.matchKind })),
-    suggestedFileName: suggestionToFileName(results[0], grade)
-  };
-}
-
-// Read-only: last N days of eBay purchases → CardSight suggestion vs the card already in your data
-async function runCardsightTest(env, days) {
-  const raw = await fetchPurchaseOrders(env, days);
-  const out = [];
-  let calls = 0;
-  for (const xml of raw) {
-    const o = purchaseOrderToCards(xml);
-    if (o.seller === 'comc_consignment') continue;
-    for (const c of o.cards) {
-      const mine = await env.DB.prepare(`SELECT item_id, year, set_name, variation, version, card_no, player_name, qty_manufactured, grade
-        FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
-      const s = await cardsightSearch(env, c.title); calls++;
-      out.push({ ebayTitle: c.title, yourCard: mine ? fullCard(mine) : '(not in your data)', ...s });
-    }
-  }
-  return { readOnly: true, cardsightCallsUsed: calls, cards: out };
-}
-
-// ── CARDSIGHT TEST v2: smarter text search vs photo identification ────────────
-const CS_STOP = new Set(('topps panini bowman upper deck donruss optic prizm select chrome refractor xfractor x-fractor finest mosaic phoenix ' +
-  'select stadium club heritage update series sapphire cosmic national treasures immaculate contenders score fleer leaf ' +
-  'gold silver black blue red green orange purple pink yellow white aqua bronze teal lava wave ice scope shimmer mojo pulsar ' +
-  'parallel insert base auto autograph autographs signature signatures patch rpa rookie rookies rc sp ssp numbered serial ' +
-  'card cards first 1st year rare hof qb rb wr te nfl nba mlb nhl giants jets yankees mets panini-select en fuego').split(/\s+/));
-
-function smartQueries(title) {
-  const t = title.replace(/\b(PSA|BGS|SGC|CGC)\s*\d{1,2}(?:\.5)?\b/gi, ' ');
-  const number = (t.match(/#\s*([A-Z0-9]+(?:-[A-Z0-9]+)*)/i) || [])[1] || null;
-  const yearM = t.match(/\b(19[5-9]\d|20[0-3]\d)(?:-(\d{2}))?\b/);
-  const serial = (t.match(/\/\s*(\d{1,4})\b/) || [])[1] || null;
-  const words = t.replace(/#\s*[A-Z0-9-]+/gi, ' ').replace(/\d+\s*\/\s*\d+|\/\s*\d+/g, ' ').replace(/[^A-Za-z'.\-\s]/g, ' ')
-    .split(/\s+/).filter(w => w.length > 1 && !CS_STOP.has(w.toLowerCase()));
-  // Player guess: first two leftover words; fallback: the next pair (handles a leading insert/set word)
-  const player = words.slice(0, 2).join(' '), alt = words.slice(1, 3).join(' ');
-  const qs = [];
-  if (player && number) qs.push(`${player} ${number}`);
-  if (player) qs.push(player);
-  if (alt && alt !== player) qs.push(alt);
-  return { qs, number, year: yearM ? yearM[1] : null, serial };
-}
-
-async function csGet(env, path) {
-  const r = await fetch(`${CS_BASE}${path}`, { headers: { 'X-API-Key': env.CARDSIGHT_API_KEY } });
-  const d = await r.json().catch(() => ({}));
-  return r.ok ? d : { error: `CardSight ${r.status}: ${d.error || d.message || 'error'}` };
-}
-
-// Text: card results for player (+number), within ±1 year, prefer matching number and print run
-async function smartTextSuggest(env, title) {
-  const { qs, number, year, serial } = smartQueries(title);
-  let calls = 0, best = null, used = null;
-  for (const q of qs) {
-    const p = new URLSearchParams({ q: serial ? `${q} /${serial}` : q, type: 'card', take: '25' });
-    if (year) { p.set('min_year', String(+year - 1)); p.set('max_year', String(+year + 1)); }
-    const d = await csGet(env, `/v1/catalog/search?${p}`); calls++;
-    const rs = (d.results || []);
-    const scored = rs.map(r => ({ r, score: (number && String(r.cardNumber || '').toLowerCase() === number.toLowerCase() ? 4 : 0)
-      + (serial && +r.numberedTo === +serial ? 3 : 0) + (r.matchKind === 'exact' ? 1 : 0) })).sort((a, b) => b.score - a.score);
-    if (scored.length && scored[0].score >= 4) { best = scored[0].r; used = p.get('q'); break; }
-    if (!best && scored.length) { best = scored[0].r; used = p.get('q'); }
-  }
-  return { calls, query: used, match: best ? { name: best.name, year: best.year, release: best.releaseName, set: best.setName,
-    parallel: best.parallelName, number: best.cardNumber, numberedTo: best.numberedTo } : null,
-    suggestedFileName: suggestionToFileName(best, null) };
-}
-
-// Photo: eBay listing's main picture → CardSight identify
-async function ebayPictureUrl(env, itemId) {
-  const token = await getEbayToken(env);
-  const body = `<?xml version="1.0" encoding="utf-8"?><GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><ItemID>${itemId}</ItemID><DetailLevel>ReturnAll</DetailLevel></GetItemRequest>`;
-  const res = await fetch('https://api.ebay.com/ws/api.dll', { method: 'POST', headers: { 'X-EBAY-API-SITEID': '0', 'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
-    'X-EBAY-API-CALL-NAME': 'GetItem', 'X-EBAY-API-IAF-TOKEN': token, 'Content-Type': 'text/xml' }, body });
-  const xml = await res.text();
-  return tag(xml, 'PictureURL') || tag(xml, 'GalleryURL');
-}
-
-async function photoSuggest(env, itemId, title) {
-  const pic = await ebayPictureUrl(env, itemId).catch(() => null);
-  if (!pic) return { calls: 0, error: 'no eBay photo found' };
-  const img = await fetch(pic.replace(/s-l\d+\./, 's-l1600.'));
-  if (!img.ok) return { calls: 0, picture: pic, error: `photo download ${img.status}` };
-  const form = new FormData();
-  form.append('image', new Blob([await img.arrayBuffer()], { type: img.headers.get('content-type') || 'image/jpeg' }), 'card.jpg');
-  const r = await fetch(`${CS_BASE}/v1/identify/card`, { method: 'POST', headers: { 'X-API-Key': env.CARDSIGHT_API_KEY }, body: form });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) return { calls: 1, picture: pic, error: `CardSight ${r.status}: ${d.error || d.message || 'error'}` };
-  const det = (d.detections || [])[0];
-  if (!det) return { calls: 1, picture: pic, match: null, suggestedFileName: null };
-  const c = det.card || {}, ps = (c.parallelSuggestions || [])[0];
-  const serial = (title.match(/\/\s*(\d{1,4})\b/) || [])[1];
-  const m = { name: c.name, year: c.year, release: c.releaseName, set: c.setName, number: c.number,
-    parallel: ps ? ps.name : null, numberedTo: (ps && ps.numberedTo) || (serial ? +serial : null), confidence: det.confidence,
-    otherParallels: (c.parallelSuggestions || []).slice(1, 3).map(x => x.name) };
-  const grade = det.grading && det.grading.company ? `${det.grading.company} ${det.grading.grade}` : null;
-  return { calls: 1, picture: pic, match: m, suggestedFileName: suggestionToFileName({ year: m.year, releaseName: m.release, setName: m.set,
-    parallelName: m.parallel, cardNumber: m.number, name: m.name, numberedTo: m.numberedTo }, grade) };
-}
-
-async function runCardsightTest2(env, days) {
-  const raw = await fetchPurchaseOrders(env, days);
-  const out = []; let calls = 0;
-  for (const xml of raw) {
-    const o = purchaseOrderToCards(xml);
-    if (o.seller === 'comc_consignment') continue;
-    for (const c of o.cards) {
-      const mine = await env.DB.prepare(`SELECT year, set_name, variation, version, card_no, player_name, qty_manufactured, grade
-        FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
-      const text = await smartTextSuggest(env, c.title).catch(e => ({ calls: 0, error: e.message }));
-      const photo = await photoSuggest(env, c.itemId, c.title).catch(e => ({ calls: 0, error: e.message }));
-      calls += (text.calls || 0) + (photo.calls || 0);
-      out.push({ ebayTitle: c.title, yourCard: mine ? fullCard(mine) : '(not in your data)',
-        text: { suggestion: text.suggestedFileName, query: text.query, error: text.error },
-        photo: { suggestion: photo.suggestedFileName, confidence: photo.match && photo.match.confidence,
-          otherParallels: photo.match && photo.match.otherParallels, error: photo.error } });
-    }
-  }
-  return { readOnly: true, cardsightCallsUsed: calls, cards: out };
-}
-
 // ── Routes (called from worker.js) ────────────────────────────────────────────
 const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
   'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
-  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/cardsight-test', 'GET:/cardsight-test2'
+  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run'
 ]);
 
 export async function handleCardDb(request, env, cors) {
@@ -776,9 +613,7 @@ export async function handleCardDb(request, env, cors) {
   const key = `${request.method}:${url.pathname}`;
   if (!CARD_DB_ROUTES.has(key)) return null;
   const out = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-  const keyOk = request.headers.get('X-App-Key') === env.APP_KEY
-    || ((key === 'GET:/cardsight-test' || key === 'GET:/cardsight-test2') && url.searchParams.get('key') === env.APP_KEY); // test link opened in a browser
-  if (!keyOk) return out({ error: 'unauthorized' }, 401);
+  if (request.headers.get('X-App-Key') !== env.APP_KEY) return out({ error: 'unauthorized' }, 401);
   try {
     const p = url.pathname, q = n => url.searchParams.get(n);
     const days = () => Math.min(89, Math.max(1, parseInt(q('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
@@ -829,8 +664,6 @@ export async function handleCardDb(request, env, cors) {
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
       case '/backup-run': return out(await writeBackup(env));
-      case '/cardsight-test': return out(await runCardsightTest(env, days()));
-      case '/cardsight-test2': return out(await runCardsightTest2(env, days()));
     }
     return null;
   } catch (e) {
