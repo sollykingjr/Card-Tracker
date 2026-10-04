@@ -1239,6 +1239,7 @@ function ctRenderBody() {
                   ${ctShortcutsButtonHTML()}
                   ${ctFilterButtonHTML()}
                   ${ctViewToggleHTML()}
+                  ${typeof intakeButtonHTML === 'function' ? intakeButtonHTML() : ''}
                 </div>
               </div>
               ${ctShortcutsDropdownHTML()}

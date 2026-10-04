@@ -16,8 +16,14 @@ const HEADERS = ['Order ID', 'Title', 'Order Cost', 'Taxes', 'Fees', 'Shipping',
 const LOOKBACK_DAYS = 30;
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj, null, 2), {
-  status, headers: { 'Content-Type': 'application/json' }
+  status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
 });
+const cors = res => {
+  res.headers.set('Access-Control-Allow-Origin', '*');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-App-Key');
+  return res;
+};
 
 async function getEbayToken(env) {
   const cached = await env.CACHE.get('ebay_access_token');
@@ -776,7 +782,8 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards'].includes(url.pathname)) return json({ error: 'not found' }, 404);
+    if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }));
+    if (!['/sales-feed-run', '/purchases-test', '/db-status', '/baseline-import', '/purchase-import', '/pending', '/parse', '/pending/confirm', '/pending/skip', '/review', '/sale-import', '/sale-review', '/sports', '/manual-add', '/card-search', '/card-refund', '/comc-import', '/backup-run', '/cards', '/intake-counts', '/sale-review/dismiss'].includes(url.pathname)) return json({ error: 'not found' }, 404);
     if (url.pathname === '/cards') {
       try {
         const res = json(await appCards(env));
@@ -784,7 +791,10 @@ export default {
         return res;
       } catch (e) { return json({ error: e.message }, 500); }
     }
-    if (!env.APP_KEY || url.searchParams.get('key') !== env.APP_KEY) return json({ error: 'unauthorized' }, 401);
+    // Staging auth: ?key= (test links) or the app's own X-App-Key header (same public key the app sends to the live Worker)
+    const APP_HEADER_KEY = 'c18429c7ca75017087511834d1a3d5664bc017a3afb8e5853052251ddd58ae93';
+    const okKey = (env.APP_KEY && url.searchParams.get('key') === env.APP_KEY) || request.headers.get('X-App-Key') === APP_HEADER_KEY;
+    if (!okKey) return cors(json({ error: 'unauthorized' }, 401));
     try {
       if (url.pathname === '/db-status') {
         const counts = {};
@@ -820,6 +830,16 @@ export default {
         const type = url.searchParams.get('type');
         if (!['purchases', 'sales'].includes(type)) return json({ error: 'type must be purchases or sales' }, 400);
         return json(await runComcImport(env, type, await request.text(), url.searchParams.get('commit') === '1'));
+      }
+      if (url.pathname === '/intake-counts') {
+        const p = await env.DB.prepare(`SELECT COUNT(*) n FROM pending_metadata WHERE status = 'pending'`).first();
+        const r = await env.DB.prepare(`SELECT COUNT(*) n FROM sale_review WHERE status = 'open'`).first();
+        return cors(json({ pending: p.n, review: r.n }));
+      }
+      if (url.pathname === '/sale-review/dismiss' && request.method === 'POST') {
+        const b = await request.json();
+        await env.DB.prepare(`UPDATE sale_review SET status = 'dismissed' WHERE order_id = ? AND sku = ?`).bind(b.order_id, b.sku || '').run();
+        return cors(json({ dismissed: true }));
       }
       if (url.pathname === '/backup-run') return json(await writeBackup(env));
       if (url.pathname === '/card-search') return json(await cardSearch(env, url.searchParams.get('q')));

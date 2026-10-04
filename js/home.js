@@ -19,6 +19,7 @@ function renderHome() {
     <div class="sr-wrap">
       <div style="padding:16px 16px 0">
         ${searchBarHTML('home', 'Search your collection...')}
+        <div id="intake-banner"></div>
       </div>
       <div id="home-body"></div>
     </div>
@@ -33,6 +34,7 @@ function renderHome() {
   });
 
   homeRenderBody();
+  if (typeof intakeRenderBanner === 'function') { intakeRenderBanner(); intakeRefreshCounts(); }
 }
 
 function homeRenderBody() {
