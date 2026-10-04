@@ -121,7 +121,9 @@ function purchaseOrderToCards(orderXml) {
     for (let i = 0; i < qty; i++) {
       // a multi-quantity line's tax is spread across its units
       const unitTaxC = lineTaxC == null ? null : Math.floor(lineTaxC / qty) + (i === qty - 1 ? lineTaxC - Math.floor(lineTaxC / qty) * qty : 0);
-      cards.push({ itemId: tag(item, 'ItemID'), title: tag(item, 'Title'), priceC: toCents(tag(t, 'TransactionPrice')), taxC: unitTaxC });
+      const txn = tag(t, 'TransactionID');
+      cards.push({ itemId: tag(item, 'ItemID'), title: tag(item, 'Title'), priceC: toCents(tag(t, 'TransactionPrice')), taxC: unitTaxC,
+        txnId: txn ? (qty > 1 ? `${txn}#${i + 1}` : txn) : null });
     }
   }
   const n = cards.length || 1;
@@ -140,7 +142,7 @@ function purchaseOrderToCards(orderXml) {
     orderTotalComputed: f(itemsC + shippingC + taxC), taxSource: taxFromEbay ? 'ebay-per-card' : 'derived-even-split',
     cardCount: cards.length,
     cards: cards.map((c, i) => ({
-      itemId: c.itemId, title: c.title, itemPrice: f(c.priceC), shippingShare: f(shipShare(i)),
+      itemId: c.itemId, txnId: c.txnId, title: c.title, itemPrice: f(c.priceC), shippingShare: f(shipShare(i)),
       tax: f(c.taxC), purchasePrice: f(c.priceC + shipShare(i) + c.taxC)
     }))
   };
@@ -185,39 +187,80 @@ async function inBaseline(env, ebayItemId) {
   return !!r;
 }
 
+// A card already queued from an earlier order (same eBay transaction — e.g. auctions later combined into one invoice)
+async function findQueued(env, c, seller) {
+  if (c.txnId) {
+    const r = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE ebay_txn_id = ?`).bind(c.txnId).first();
+    if (r) return r;
+  }
+  // rows queued before transaction IDs were stored
+  return env.DB.prepare(`SELECT * FROM pending_metadata WHERE ebay_txn_id IS NULL AND ebay_item_id = ? AND seller = ? LIMIT 1`)
+    .bind(c.itemId, seller).first();
+}
+const RECHECK_DAYS = 10; // combined-shipping orders (e.g. DC Sports 7-day carts) can change after they first come in
+const isPaid = xml => !!tag(xml, 'PaidTime') || tag(tag(xml, 'CheckoutStatus') || '', 'Status') === 'Complete' || tag(xml, 'OrderStatus') === 'Completed';
+
 async function runPurchaseImport(env, days = LOOKBACK_DAYS) {
   const raw = await fetchPurchaseOrders(env, days);
-  const summary = { ordersFound: raw.length, alreadyProcessed: 0, skippedOrders: [], cardsQueued: [], cardsSkippedInBaseline: [] };
+  const summary = { ordersFound: raw.length, alreadyProcessed: 0, awaitingPayment: [], skippedOrders: [], cardsQueued: [], costUpdates: [], cardsSkippedInBaseline: [] };
+  const recentCutoff = Date.now() - RECHECK_DAYS * 86400000;
   for (const xml of raw) {
     const totalReportedC = toCents(tag(xml, 'Total'));
     const o = purchaseOrderToCards(xml);
     const done = await env.DB.prepare(`SELECT 1 FROM ebay_orders WHERE order_id = ? AND role = 'purchase'`).bind(o.orderId).first();
-    if (done) { summary.alreadyProcessed++; continue; }
+    const recent = Date.parse(o.created) >= recentCutoff;
+    if (done && !recent) { summary.alreadyProcessed++; continue; }
     const reason = o.seller === 'comc_consignment' ? 'comc_consignment' : o.status === 'Cancelled' ? 'cancelled' : null;
-    const stmts = [];
-    if (!reason) {
-      const refunded = totalReportedC === 0;
-      for (const c of o.cards) {
-        if (await inBaseline(env, c.itemId)) { summary.cardsSkippedInBaseline.push({ orderId: o.orderId, ebayItemId: c.itemId, title: c.title }); continue; }
-        const itemId = await newItemId(env);
-        stmts.push(env.DB.prepare(`INSERT INTO pending_metadata (item_id, order_id, ebay_item_id, ebay_title, seller, date_purchased,
-          item_cents, shipping_cents, tax_cents, purchase_price_cents, flag) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
-          itemId, o.orderId, c.itemId, c.title, o.seller, toEastern(o.created),
-          toCents(c.itemPrice), toCents(c.shippingShare), toCents(c.tax), toCents(c.purchasePrice), refunded ? 'refunded' : null));
-        summary.cardsQueued.push({ itemId, orderId: o.orderId, title: c.title, purchasePrice: c.purchasePrice, refunded });
+    if (reason) {
+      if (!done) {
+        await env.DB.prepare(`INSERT INTO ebay_orders (order_id, role, status, total_cents) VALUES (?, 'purchase', ?, ?)`).bind(o.orderId, reason, totalReportedC).run();
+        summary.skippedOrders.push({ orderId: o.orderId, seller: o.seller, reason });
       }
-    } else {
-      summary.skippedOrders.push({ orderId: o.orderId, seller: o.seller, reason });
+      continue;
     }
-    stmts.push(env.DB.prepare(`INSERT INTO ebay_orders (order_id, role, status, total_cents) VALUES (?, 'purchase', ?, ?)`)
-      .bind(o.orderId, reason || o.status, totalReportedC));
-    await env.DB.batch(stmts);
+    // Wait until paid: shipping and tax aren't final before checkout (combined invoices). Not recorded, so it's retried next run.
+    if (!done && !isPaid(xml)) { summary.awaitingPayment.push({ orderId: o.orderId, seller: o.seller, cards: o.cardCount }); continue; }
+
+    const refunded = totalReportedC === 0;
+    const stmts = [];
+    for (const c of o.cards) {
+      const cost = { item: toCents(c.itemPrice), ship: toCents(c.shippingShare), tax: toCents(c.tax), total: toCents(c.purchasePrice) };
+      const q = await findQueued(env, c, o.seller);
+      if (q) {
+        // An already-processed order only updates its own cards; a card moves to a different order only when that order is new
+        // (e.g. separate auction orders later combined), so older superseded orders can't flip it back.
+        if (done && q.order_id !== o.orderId) continue;
+        const changed = q.item_cents !== cost.item || q.shipping_cents !== cost.ship || q.tax_cents !== cost.tax || q.purchase_price_cents !== cost.total;
+        if (changed || q.order_id !== o.orderId || (!q.ebay_txn_id && c.txnId)) {
+          stmts.push(env.DB.prepare(`UPDATE pending_metadata SET order_id = ?, ebay_txn_id = COALESCE(ebay_txn_id, ?), item_cents = ?, shipping_cents = ?, tax_cents = ?,
+            purchase_price_cents = ?, flag = CASE WHEN ? THEN 'refunded' ELSE flag END WHERE item_id = ?`)
+            .bind(o.orderId, c.txnId, cost.item, cost.ship, cost.tax, cost.total, refunded ? 1 : 0, q.item_id));
+          if (q.status === 'done') {
+            stmts.push(env.DB.prepare(`UPDATE cards SET purchase_order_id = ?, purchase_item_cents = ?, purchase_shipping_cents = ?, purchase_tax_cents = ?,
+              purchase_price_cents = ?, updated_at = datetime('now') WHERE item_id = ?`).bind(o.orderId, cost.item, cost.ship, cost.tax, cost.total, q.item_id));
+          }
+          if (changed) summary.costUpdates.push({ itemId: q.item_id, title: c.title, status: q.status,
+            from: (q.purchase_price_cents / 100).toFixed(2), to: c.purchasePrice, shipping: c.shippingShare, tax: c.tax });
+        }
+        continue;
+      }
+      if (done) continue; // already handled when the order first came in (e.g. in the baseline)
+      if (await inBaseline(env, c.itemId)) { summary.cardsSkippedInBaseline.push({ orderId: o.orderId, ebayItemId: c.itemId, title: c.title }); continue; }
+      const itemId = await newItemId(env);
+      stmts.push(env.DB.prepare(`INSERT INTO pending_metadata (item_id, order_id, ebay_item_id, ebay_txn_id, ebay_title, seller, date_purchased,
+        item_cents, shipping_cents, tax_cents, purchase_price_cents, flag) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        itemId, o.orderId, c.itemId, c.txnId, c.title, o.seller, toEastern(o.created),
+        cost.item, cost.ship, cost.tax, cost.total, refunded ? 'refunded' : null));
+      summary.cardsQueued.push({ itemId, orderId: o.orderId, title: c.title, purchasePrice: c.purchasePrice, refunded });
+    }
+    if (!done) stmts.push(env.DB.prepare(`INSERT INTO ebay_orders (order_id, role, status, total_cents) VALUES (?, 'purchase', ?, ?)`)
+      .bind(o.orderId, o.status, totalReportedC));
+    if (stmts.length) await env.DB.batch(stmts);
   }
   // Suggested file names (never blocks the import if OpenAI is down)
   summary.suggestions = await fillSuggestions(env).catch(e => ({ error: e.message }));
   return summary;
 }
-
 async function listPending(env) {
   const { results } = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE status = 'pending' ORDER BY date_purchased`).all();
   return { pending: results.length, rows: results.map(r => ({ ...r,
