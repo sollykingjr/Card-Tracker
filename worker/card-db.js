@@ -718,12 +718,23 @@ async function fillSuggestions(env, limit = 25) {
   return { suggested: out.filter(x => x.name).length, failed: out.filter(x => x.error) };
 }
 
+// TEMP test: name given titles (id~title pairs) and compare with the saved card, excluding it from examples
+async function nameTry(env, itemsParam) {
+  const items = (itemsParam || '').split('||').map(x => x.split('~')).filter(x => x[1]).slice(0, 15);
+  const cards = await Promise.all(items.map(async ([id, title]) => {
+    const mine = id ? await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(id).first() : null;
+    const r = await suggestFileName(env, title, id || null).catch(e => ({ error: e.message }));
+    return { ebayTitle: title, yourCard: mine ? fileNameFromCard(mine) : '(not found)', suggestion: r.name || null, missing: r.missing, error: r.error };
+  }));
+  return { readOnly: true, model: OPENAI_MODEL, cards };
+}
+
 // ── Routes (called from worker.js) ────────────────────────────────────────────
 const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
   'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
-  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run'
+  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/name-try'
 ]);
 
 export async function handleCardDb(request, env, cors) {
@@ -731,7 +742,8 @@ export async function handleCardDb(request, env, cors) {
   const key = `${request.method}:${url.pathname}`;
   if (!CARD_DB_ROUTES.has(key)) return null;
   const out = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
-  if (request.headers.get('X-App-Key') !== env.APP_KEY) return out({ error: 'unauthorized' }, 401);
+  if (request.headers.get('X-App-Key') !== env.APP_KEY
+    && !(key === 'GET:/name-try' && url.searchParams.get('key') === env.APP_KEY)) return out({ error: 'unauthorized' }, 401); // TEMP browser test link
   try {
     const p = url.pathname, q = n => url.searchParams.get(n);
     const days = () => Math.min(89, Math.max(1, parseInt(q('days') || String(LOOKBACK_DAYS), 10) || LOOKBACK_DAYS));
@@ -781,6 +793,7 @@ export async function handleCardDb(request, env, cors) {
       }
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
+      case '/name-try': return out(await nameTry(env, q('items')));
       case '/backup-run': return out(await writeBackup(env));
     }
     return null;
