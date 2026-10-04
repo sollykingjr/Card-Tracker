@@ -14,7 +14,7 @@ export function normalizeGrade(raw) {
 
 export function parseFileName(input) {
   const out = { year: null, set_name: null, variation: null, card_no: null, version: null, player_name: null, qty_manufactured: null, grade: null };
-  let s = String(input || '').trim().replace(/\s+/g, ' ');
+  let s = String(input || '').trim().replace(/\s+/g, ' ').replace(/ [\u2012-\u2015\u2212] /g, ' - '); // em/en dashes as separators
   if (!s) return out;
   const sp = s.indexOf(' ');
   if (sp < 0) { out.year = s; return out; }
