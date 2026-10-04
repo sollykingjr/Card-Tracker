@@ -635,7 +635,7 @@ async function similarCardExamples(env, title) {
       .bind(`${year}%`, `%${brand}%`).all();
     add(results);
   }
-  return rows.slice(0, 12).map(fileNameFromCard);
+  return rows.slice(0, 6).map(fileNameFromCard);
 }
 
 const GEMINI_INSTRUCTIONS = `You convert an eBay trading card listing title into the collector's file-name format.
@@ -675,7 +675,31 @@ async function geminiSuggest(env, title, model = GEMINI_MODEL) {
   return { examples: examples.length, suggestion: parsed.file_name || null, missing: parsed.missing || [] };
 }
 
-async function runGeminiTest(env, days, model = GEMINI_MODEL) {
+const OPENAI_MODEL = 'gpt-5.6-luna'; // override per run with ?model=
+async function openaiSuggest(env, title, model = OPENAI_MODEL) {
+  if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
+  const examples = await similarCardExamples(env, title);
+  const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\nTITLE: ${title}`;
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'system', content: GEMINI_INSTRUCTIONS }, { role: 'user', content: prompt }],
+      response_format: { type: 'json_object' }
+    })
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { examples: examples.length, error: `OpenAI ${res.status}: ${d.error?.message || 'error'}` };
+  const text = d.choices?.[0]?.message?.content || '';
+  let parsed = {};
+  try { parsed = JSON.parse(text); } catch (e) { return { examples: examples.length, error: 'unreadable response', raw: text.slice(0, 200) }; }
+  return { examples: examples.length, suggestion: parsed.file_name || null, missing: parsed.missing || [],
+    tokens: d.usage ? { in: d.usage.prompt_tokens, out: d.usage.completion_tokens } : undefined };
+}
+
+async function runGeminiTest(env, days, model = GEMINI_MODEL, provider = 'gemini') {
+  const suggest = provider === 'openai' ? openaiSuggest : geminiSuggest;
   const raw = await fetchPurchaseOrders(env, days);
   const out = [];
   for (const xml of raw) {
@@ -683,12 +707,12 @@ async function runGeminiTest(env, days, model = GEMINI_MODEL) {
     if (o.seller === 'comc_consignment') continue;
     for (const c of o.cards) {
       const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
-      const g = await geminiSuggest(env, c.title, model).catch(e => ({ error: e.message }));
+      const g = await suggest(env, c.title, model).catch(e => ({ error: e.message }));
       out.push({ ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', gemini: g.suggestion || null,
-        missing: g.missing, examplesUsed: g.examples, error: g.error });
+        missing: g.missing, examplesUsed: g.examples, tokens: g.tokens, error: g.error });
     }
   }
-  return { readOnly: true, model, cards: out };
+  return { readOnly: true, provider, model, cards: out };
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
@@ -696,7 +720,7 @@ const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
   'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
-  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/gemini-test'
+  'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run', 'GET:/gemini-test', 'GET:/name-test'
 ]);
 
 export async function handleCardDb(request, env, cors) {
@@ -705,7 +729,7 @@ export async function handleCardDb(request, env, cors) {
   if (!CARD_DB_ROUTES.has(key)) return null;
   const out = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
   const keyOk = request.headers.get('X-App-Key') === env.APP_KEY
-    || (key === 'GET:/gemini-test' && url.searchParams.get('key') === env.APP_KEY); // test link opened in a browser
+    || ((key === 'GET:/gemini-test' || key === 'GET:/name-test') && url.searchParams.get('key') === env.APP_KEY); // test link opened in a browser
   if (!keyOk) return out({ error: 'unauthorized' }, 401);
   try {
     const p = url.pathname, q = n => url.searchParams.get(n);
@@ -758,6 +782,11 @@ export async function handleCardDb(request, env, cors) {
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
       case '/backup-run': return out(await writeBackup(env));
       case '/gemini-test': return out(await runGeminiTest(env, days(), (url.searchParams.get('model') || GEMINI_MODEL).replace(/[^a-z0-9.\-]/gi, '')));
+      case '/name-test': {
+        const provider = q('provider') === 'gemini' ? 'gemini' : 'openai';
+        const model = (q('model') || (provider === 'openai' ? OPENAI_MODEL : GEMINI_MODEL)).replace(/[^a-z0-9.\-]/gi, '');
+        return out(await runGeminiTest(env, days(), model, provider));
+      }
     }
     return null;
   } catch (e) {
