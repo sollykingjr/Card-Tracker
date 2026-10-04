@@ -1,0 +1,11 @@
+# Files the staging Worker must NOT serve as public assets
+.git
+.github
+.wrangler
+node_modules
+worker.js
+worker
+db
+wrangler.toml
+.assetsignore
+*.md

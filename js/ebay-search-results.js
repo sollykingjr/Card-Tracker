@@ -1,5 +1,5 @@
 // ── Search Results ────────────────────────────────────────────────────────────
-const WORKER = 'https://card-app.maxcsolomon.workers.dev';
+const WORKER = API_BASE;
 
 async function addToWatch(itemId, btn) {
   btn.disabled = true;

@@ -151,6 +151,7 @@ async function ctLoadInHand() {
 }
 
 async function ctLoadPendingOverrides() {
+  if (CARD_DB_URL) return; // card database: edits apply immediately, no pending overrides
   if (ctPendingLoaded) return;
   ctPendingLoaded = true;
   try {
@@ -251,11 +252,17 @@ function ctGetTags(c) {
   return c.salePrice ? [...new Set([...stored, 'Sold'])] : stored;
 }
 
+let ctSoldTagsOpen = {};
 function ctRenderTags(idx) {
   const box = document.getElementById('ct-tags');
   const c = cards[idx];
   if (!box || !c) return;
   const tags = ctGetTags(c);
+  if (c.salePrice && !ctSoldTagsOpen[c.itemId]) {
+    const n = tags.filter(t => t !== 'Sold').length;
+    box.innerHTML = `<button onclick="ctSoldTagsOpen['${(c.itemId||'').replace(/'/g,"\\'")}']=true;ctRenderTags(${idx})" style="background:none;border:none;padding:0;color:var(--acc);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Show tags${n ? ` (${n})` : ''}</button>`;
+    return;
+  }
   box.innerHTML = `
     <div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Tags</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${c.itemId ? '8px' : '0'}">
@@ -750,7 +757,8 @@ function ctListRowHTML(c) {
   const dateLine = ctDateLine(c);
   const inHand = ctIsInHand(c);
   const listed = ctGetTags(c).includes('Listed');
-  const tags = ctGetTags(c).filter(t => t !== 'Sold' && t !== 'Listed');
+  // Sold cards: custom tags hidden (still saved, visible in the card modal via Show tags)
+  const tags = c.salePrice ? [] : ctGetTags(c).filter(t => t !== 'Sold' && t !== 'Listed');
   return `
     <div class="cs-row" onclick="ctOpenCard(${cards.indexOf(c)})">
       <div class="cs-row-top">
@@ -973,6 +981,7 @@ function ctOpenCard(idx) {
     <div class="ct-menu" id="ct-menu">
       <div class="ct-menu-item" onclick="ctRefreshScans()">Refresh Scans</div>
       <div class="ct-menu-item" onclick="ctShowEditMetadata(${idx})">Edit Metadata</div>
+      ${CARD_DB_URL && safeNum(c.salePrice) > 0 ? `<div class="ct-menu-item" onclick="ctShowRefund(${idx})">Refund / cancel sale</div>` : ''}
       <div class="ct-menu-item" onclick="ebayOpenListingForm('${(c.itemId||'').replace(/'/g,"\\'")}')">List on eBay</div>
       ${ctGetTags(c).includes('Listed') ? `<div class="ct-menu-item" onclick="emlOpenForCard('${(c.itemId||'').replace(/'/g,"\\'")}')">Edit eBay listing</div>` : ''}
     </div>
@@ -1019,6 +1028,7 @@ function ctOpenCard(idx) {
     <div id="ct-inhand" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
+    <div id="ct-sale" style="margin-top:14px"></div>
   `;
   _modalMainHtml = ctModalHtml;
   document.getElementById('mcontent').innerHTML = ctModalHtml;
@@ -1027,6 +1037,29 @@ function ctOpenCard(idx) {
   ctRenderPendingBadge(idx);
   ctRenderInHand(idx);
   if (c.itemId) ctLoadScans(c.itemId);
+  if (CARD_DB_URL && c.itemId && c.salePrice) ctLoadSaleBreakdown(c.itemId);
+}
+
+// Sale breakdown (card database only) — bottom of the card modal for sold cards
+async function ctLoadSaleBreakdown(itemId) {
+  try {
+    const r = await fetch(`${CARD_DB_URL}/card-detail?item_id=${encodeURIComponent(itemId)}`, { headers: { 'X-App-Key': APP_KEY } });
+    const d = await r.json();
+    const box = document.getElementById('ct-sale');
+    if (!box || d.error || ctOpenCardIdx == null || cards[ctOpenCardIdx]?.itemId !== itemId) return;
+    const m = v => v == null ? '—' : (v < 0 ? '−$' : '$') + (Math.abs(v) / 100).toFixed(2);
+    const row = (label, val, strong, neg) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:13px${strong ? ';font-weight:700' : ''}">
+      <span style="color:${strong ? 'var(--tx)' : 'var(--tx2)'}">${label}</span><span style="font-family:'DM Mono',monospace;color:${neg ? 'var(--tx2)' : 'var(--tx)'}">${val}</span></div>`;
+    const lines = d.status === 'refunded'
+      ? row('Refunded', d.refundDate || '—') + row('Cost', m(d.cost)) + row('Profit', m(d.profit), true)
+      : row('Sale price', m(d.salePrice)) +
+        (d.hasBreakdown ? row('Tax', '−' + m(d.tax), false, true) + row('Fees', '−' + m(d.fees), false, true) + row('Shipping', '−' + m(d.shipping), false, true)
+          : row('Fees', '−' + m(d.fees), false, true)) +
+        row('Net proceeds', m(d.netProceeds), true) + row('Cost', '−' + m(d.cost), false, true) + row('Profit', m(d.profit), true);
+    box.innerHTML = `<div style="font-size:11px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Sale breakdown</div>${lines}
+      ${d.hasBreakdown || d.status === 'refunded' ? '' : '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Older sale — tax and shipping detail not available.</div>'}`;
+    _modalMainHtml = _modalMainHtml.replace('<div id="ct-sale" style="margin-top:14px"></div>', `<div id="ct-sale" style="margin-top:14px">${box.innerHTML}</div>`);
+  } catch (e) { /* breakdown is optional */ }
 }
 function ctShowEditMetadata(idx) {
   const menu = document.getElementById('ct-menu');
@@ -1072,6 +1105,53 @@ function ctShowEditMetadata(idx) {
   `;
 }
 
+async function ctReloadAndReopen(itemId) {
+  await loadCardData();
+  const i = cards.findIndex(x => x.itemId === itemId);
+  if (i >= 0) ctOpenCard(i);
+}
+
+function ctShowRefund(idx) {
+  const menu = document.getElementById('ct-menu');
+  if (menu) menu.classList.remove('on');
+  const c = cards[idx];
+  if (!c) return;
+  const btn = 'width:100%;height:44px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:10px';
+  document.getElementById('mcontent').innerHTML = `
+    <div style="position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:10;margin-bottom:6px">
+      <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
+        style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0">← Back</button>
+    </div>
+    <div class="section-hdr">Refund / cancel sale</div>
+    <div style="font-size:12px;color:var(--tx2);margin:10px 0 4px">Sold ${fmtShortDate(c.transactionDate)} for $${safeNum(c.salePrice).toFixed(2)}</div>
+    <button style="${btn}" onclick="ctDoRefund(${idx},'cancelled')">Cancelled — I still have the card</button>
+    <div style="font-size:11px;color:var(--tx3);margin-top:4px">Clears the sale and puts the card back to owned. It isn't relisted.</div>
+    <button style="${btn}" onclick="ctDoRefund(${idx},'gone')">Refunded — the card is gone</button>
+    <div style="font-size:11px;color:var(--tx3);margin-top:4px">No sale money; the purchase cost counts as a loss.</div>
+    <div id="ct-refund-status" style="font-size:12px;color:#f87171;margin-top:10px"></div>
+  `;
+}
+
+async function ctDoRefund(idx, type) {
+  const c = cards[idx];
+  if (!c) return;
+  const msg = type === 'cancelled' ? 'Clear this sale and put the card back to owned?' : 'Mark this sale refunded and the card gone?';
+  if (!confirm(msg)) return;
+  const status = document.getElementById('ct-refund-status');
+  try {
+    const res = await fetch(`${CARD_DB_URL}/card-refund`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+      body: JSON.stringify({ item_id: c.itemId, type })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    await ctReloadAndReopen(c.itemId);
+  } catch (e) {
+    if (status) status.textContent = e.message || "Couldn't update. Try again.";
+  }
+}
+
 function ctRefreshScans() {
   const menu = document.getElementById('ct-menu');
   if (menu) menu.classList.remove('on');
@@ -1104,6 +1184,24 @@ async function ctSaveMetadata(idx) {
 
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
   if (status) status.textContent = '';
+
+  // Card database (staging app): save directly, then reload and reopen the card with the new values
+  if (CARD_DB_URL) {
+    try {
+      const res = await fetch(`${CARD_DB_URL}/card-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+        body: JSON.stringify({ itemId: c.itemId, fields })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'save failed');
+      await ctReloadAndReopen(c.itemId);
+    } catch (e) {
+      if (status) status.textContent = "Couldn't save changes. Try again.";
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
+    }
+    return;
+  }
 
   try {
     const res = await fetch(`${WORKER_URL}/card-override`, {
@@ -1228,8 +1326,11 @@ function ctRenderBody() {
           </div>
         </div>
         <div class="ct-main-col">
-          <div class="sort-chips" style="margin:16px 16px 0">
-            ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
+          <div style="display:flex;align-items:center;gap:8px;margin:16px 16px 0;flex-shrink:0">
+            <div class="sort-chips" style="flex:1;min-width:0">
+              ${CT_SORT_OPTS.map(o => `<button class="schip${ctSort===o.k?' on':''}" onclick="ctSetSort('${o.k}')">${o.l}${ctSort===o.k ? (ctSortDir==='asc' ? ' ↑' : ' ↓') : ''}</button>`).join('')}
+            </div>
+            ${typeof intakeButtonHTML === 'function' ? intakeButtonHTML() : ''}
           </div>
           <div class="ct-panel">
             <div class="ct-toolbar-row">

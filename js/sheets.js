@@ -231,12 +231,16 @@ function saveCardsToCache() {
 
 async function loadCardData() {
   document.getElementById('cntlbl').textContent='Loading...';
-  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>'+(CARD_DB_URL?'Loading cards...':'Fetching from Google Sheets...')+'</div>';
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
-    const cR = await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
-      .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
+    // Card data source: the card database (Worker /cards). The sheet path is the rollback fallback
+    // if CARD_DB_URL is ever set to null.
+    const cR = CARD_DB_URL
+      ? await fetch(`${CARD_DB_URL}/cards`, { headers: { 'X-App-Key': APP_KEY } }).then(r=>r.ok?r.json().then(d=>d.values||[]):[])
+      : await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
+          .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
 
     cards = cR.filter(r=>r[7]).map(r=>({
       itemId:cl(r[0]),

@@ -17,6 +17,7 @@ import { handleDebugRawWatchlist } from './worker/debug.js';
 import { handleScanIndexVersion, handleScanIndexGet, handleScanIndexRebuild, handleScanIndexUpdate } from './worker/scan-index.js';
 import { handleEbayPublish, handleEbayListingStatus, handleEbayFeePreview, handleEbayDiscard } from './worker/ebay-publish.js';
 import { handleEbayMyListings, handleEbayListingDetail, handleEbayListingUpdate, handleEbayListingEnd } from './worker/ebay-listings.js';
+import { handleCardDb, runCardDbJobs } from './worker/card-db.js';
 
 
 
@@ -58,6 +59,11 @@ export default {
       await refreshWatchlistCache(env);
       await reconcileListingTags(env);
       return;
+    }
+    // Card database jobs (eBay sales + purchases, backup sheet): 7am / 7pm Eastern = 11:00 / 23:00 UTC hourly runs
+    if (event.cron === '0 * * * *') {
+      const h = new Date(event.scheduledTime).getUTCHours();
+      if (h === 11 || h === 23) ctx.waitUntil(runCardDbJobs(env));
     }
     if (event.cron === '0 10 * * *') {
       await checkNightlySearches(env);
@@ -145,6 +151,8 @@ export default {
     if (path === '/ebay-listing-end' && request.method === 'POST') return handleEbayListingEnd(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);
+    const cardDbRes = await handleCardDb(request, env, cors);
+    if (cardDbRes) return cardDbRes;
     return new Response('card-app worker running', { headers: cors });
   }
 };

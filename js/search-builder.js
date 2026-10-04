@@ -118,7 +118,7 @@ const SB_DECADES = [
   { label: '2020s', val: '202' },
 ];
 
-const SB_WORKER = 'https://card-app.maxcsolomon.workers.dev';
+const SB_WORKER = API_BASE;
 
 // =============================================================================
 // SECTION 3: PLAYER DATA HELPERS (~133-185)
