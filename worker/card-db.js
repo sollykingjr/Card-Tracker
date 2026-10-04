@@ -602,7 +602,7 @@ async function readCardMeta(env) {
 
 // ── GEMINI FILE-NAME SUGGESTIONS (read-only test) ─────────────────────────────
 // eBay title + similar cards from your own data → suggested file name in your format.
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.8-flash'; // override per run with ?model=
 const NAME_STOP = new Set(('topps panini bowman upper deck donruss optic prizm select chrome refractor finest mosaic phoenix stadium club heritage ' +
   'update series sapphire cosmic national treasures immaculate contenders score fleer leaf gold silver black blue red green orange purple ' +
   'pink yellow white aqua bronze lava wave ice scope parallel insert base auto autograph autographs signature signatures patch rookie rookies ' +
@@ -649,11 +649,11 @@ Format: "{Year} {Set} - {Insert or subset (optional)} - {Parallel (optional)} #{
 - Drop marketing words (RC, Rookie, SSP, Hot, Invest, team names, positions).
 Return JSON: {"file_name": string, "missing": [list of fields you could not determine]}.`;
 
-async function geminiSuggest(env, title) {
+async function geminiSuggest(env, title, model = GEMINI_MODEL) {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
   const examples = await similarCardExamples(env, title);
   const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\nTITLE: ${title}`;
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
     body: JSON.stringify({
@@ -670,7 +670,7 @@ async function geminiSuggest(env, title) {
   return { examples: examples.length, suggestion: parsed.file_name || null, missing: parsed.missing || [] };
 }
 
-async function runGeminiTest(env, days) {
+async function runGeminiTest(env, days, model = GEMINI_MODEL) {
   const raw = await fetchPurchaseOrders(env, days);
   const out = [];
   for (const xml of raw) {
@@ -678,12 +678,12 @@ async function runGeminiTest(env, days) {
     if (o.seller === 'comc_consignment') continue;
     for (const c of o.cards) {
       const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
-      const g = await geminiSuggest(env, c.title).catch(e => ({ error: e.message }));
+      const g = await geminiSuggest(env, c.title, model).catch(e => ({ error: e.message }));
       out.push({ ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', gemini: g.suggestion || null,
         missing: g.missing, examplesUsed: g.examples, error: g.error });
     }
   }
-  return { readOnly: true, model: GEMINI_MODEL, cards: out };
+  return { readOnly: true, model, cards: out };
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
@@ -752,7 +752,7 @@ export async function handleCardDb(request, env, cors) {
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
       case '/backup-run': return out(await writeBackup(env));
-      case '/gemini-test': return out(await runGeminiTest(env, days()));
+      case '/gemini-test': return out(await runGeminiTest(env, days(), (url.searchParams.get('model') || GEMINI_MODEL).replace(/[^a-z0-9.\-]/gi, '')));
     }
     return null;
   } catch (e) {
