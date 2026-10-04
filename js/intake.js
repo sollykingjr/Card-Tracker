@@ -128,6 +128,19 @@ async function intakeRender() {
     </details>
   `;  // show the parsed preview + sport for pre-filled suggestions
   (pending.rows || []).forEach(r => { if (r.suggested_name) intakePreview(r.item_id, r.suggested_name); });
+  // cards that came in without a suggestion (e.g. OpenAI was down at import): ask for one now and fill empty boxes
+  if ((pending.rows || []).some(r => !r.suggested_name)) intakeFillSuggestions();
+}
+async function intakeFillSuggestions() {
+  const d = await intakePost('/pending/suggest', {});
+  (d.rows || []).forEach(r => {
+    const card = document.getElementById('in-c-' + r.item_id);
+    const box = card && card.querySelector('textarea');
+    if (!r.suggested_name || !box || box.value.trim()) return;
+    box.value = r.suggested_name;
+    box.insertAdjacentHTML('beforebegin', `<div class="intake-sugg">Suggested name — check before confirming${(r.suggested_missing || []).length ? ` · <b>missing: ${inEsc(r.suggested_missing.join(', '))}</b>` : ''}</div>`);
+    intakePreview(r.item_id, r.suggested_name);
+  });
 }
 
 // ── Needs file name ───────────────────────────────────────────────────────────

@@ -764,7 +764,7 @@ async function fillSuggestions(env, limit = 25) {
 // ── Routes (called from worker.js) ────────────────────────────────────────────
 const CARD_DB_ROUTES = new Set([
   'GET:/cards', 'GET:/card-detail', 'POST:/card-update', 'POST:/card-refund', 'GET:/card-search',
-  'GET:/intake-counts', 'GET:/pending', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
+  'GET:/intake-counts', 'GET:/pending', 'POST:/pending/suggest', 'POST:/pending/confirm', 'POST:/pending/skip', 'GET:/parse', 'GET:/sports',
   'POST:/manual-add', 'POST:/comc-import', 'GET:/sale-review', 'POST:/sale-review/dismiss',
   'GET:/sale-import', 'GET:/purchase-import', 'GET:/backup-run'
 ]);
@@ -824,6 +824,7 @@ export async function handleCardDb(request, env, cors) {
       }
       case '/sale-import': return out(await runSaleImport(env, days()));
       case '/purchase-import': return out(await runPurchaseImport(env, days()));
+      case '/pending/suggest': return out({ ...(await fillSuggestions(env, 10)), ...(await listPending(env)) });
       case '/backup-run': return out(await writeBackup(env));
     }
     return null;
