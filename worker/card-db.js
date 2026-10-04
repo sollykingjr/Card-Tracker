@@ -647,7 +647,10 @@ Format: "{Year} {Set} - {Insert or subset (optional)} - {Parallel (optional)} #{
 - Print run is the serial denominator only (219/250 -> /250). Grade only if graded, as "PSA 10" or "BGS 9.5".
 - Copy the collector's naming from the EXAMPLES whenever the same set, parallel or player appears (exact spelling and wording).
 - LISTING DETAILS are the seller's eBay item specifics (Card Number, Parallel/Variety, Set, Season...). Use them to fill fields the title lacks.
-- If the title and listing details disagree on a field, leave that field out and list it in "missing".
+- KNOWN SETS lists the collector's exact set names for this year. If the card's set is there, copy that year + set text exactly (brand, season format like 2025-26, hyphens).
+- Season: if title and listing details differ only in format (2007 vs 2007-08), use the full season, matching KNOWN SETS when listed.
+- Version: some sets use a version tier (e.g. Topps Finest: Common, Uncommon, Rare). Include it only if the title or listing details state it. If KNOWN SETS shows that set uses versions but the tier isn't stated, leave it out and add "version" to "missing".
+- If the title and listing details otherwise disagree on a field, leave that field out and list it in "missing".
 - Use ONLY information in the title, listing details or examples. Do NOT guess card numbers, parallels or sets that aren't there; leave them out instead.
 - Drop marketing words (RC, Rookie, SSP, Hot, Invest, team names, positions).
 Return JSON: {"file_name": string, "missing": [list of fields you could not determine]}.`;
@@ -668,17 +671,48 @@ async function itemSpecifics(env, itemId) {
     .map(nv => ({ name: tag(nv, 'Name'), value: tags(nv, 'Value').join(', ') }))
     .filter(x => x.name && x.value && !SPECIFIC_SKIP.test(x.name));
 }
+// The collector's own set names for the title's year (excluding the card itself), so the model reuses exact wording
+async function knownSets(env, title, excludeEbayId = null) {
+  const year = (title.match(/\b(19[5-9]\d|20[0-3]\d)\b/) || [])[1];
+  if (!year) return [];
+  const ex = excludeEbayId || '';
+  const { results } = await env.DB.prepare(`SELECT year, set_name, variation, version, COUNT(*) n FROM cards
+    WHERE year LIKE ?1 AND item_id != ?2 AND COALESCE(legacy_item_id,'') != ?2 AND COALESCE(purchase_ebay_item_id,'') != ?2
+    GROUP BY year, set_name, variation, version`).bind(`${year}%`, ex).all();
+  const titleWords = new Set(title.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(w => w.length > 2));
+  const sets = new Map();
+  for (const r of results) {
+    if (!r.set_name) continue;
+    const k = `${r.year} ${r.set_name}`;
+    if (!sets.has(k)) sets.set(k, { name: k, hits: 0, n: 0, variations: new Map(), versions: new Set() });
+    const e = sets.get(k);
+    e.n += r.n;
+    if (r.variation) e.variations.set(r.variation, (e.variations.get(r.variation) || 0) + r.n);
+    if (r.version) e.versions.add(r.version);
+  }
+  for (const e of sets.values()) e.hits = e.name.toLowerCase().split(/[\s-]+/).filter(w => w.length > 2 && titleWords.has(w)).length;
+  return [...sets.values()].filter(e => e.hits > 0).sort((a, b) => b.hits - a.hits || b.n - a.n).slice(0, 12).map(e => {
+    let line = e.name;
+    const vars = [...e.variations.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(x => x[0]);
+    if (vars.length) line += ` | inserts/parallels used: ${vars.join('; ')}`;
+    if (e.versions.size) line += ` | versions used: ${[...e.versions].slice(0, 8).join(', ')}`;
+    return line;
+  });
+}
+
 async function namePrompt(env, title, ctx = {}) {
   const examples = await similarCardExamples(env, title, ctx.excludeEbayId);
   const specs = ctx.specifics || [];
+  const sets = await knownSets(env, title, ctx.excludeEbayId);
   const prompt = `EXAMPLES (collector's existing file names):\n${examples.map(e => '- ' + e).join('\n') || '(none)'}\n\n`
+    + `KNOWN SETS:\n${sets.map(x => '- ' + x).join('\n') || '(none)'}\n\n`
     + `LISTING DETAILS:\n${specs.map(x => `- ${x.name}: ${x.value}`).join('\n') || '(none)'}\n\nTITLE: ${title}`;
-  return { examples, prompt };
+  return { examples, sets, prompt };
 }
 
 async function geminiSuggest(env, title, model, ctx) { model = model || GEMINI_MODEL;
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
-  const { examples, prompt } = await namePrompt(env, title, ctx);
+  const { examples, sets, prompt } = await namePrompt(env, title, ctx);
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: GEMINI_INSTRUCTIONS }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -698,13 +732,13 @@ async function geminiSuggest(env, title, model, ctx) { model = model || GEMINI_M
   const text = d.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
   let parsed = {};
   try { parsed = JSON.parse(text); } catch (e) { return { examples: examples.length, error: 'unreadable response', raw: text.slice(0, 200) }; }
-  return { examples: examples.length, suggestion: parsed.file_name || null, missing: parsed.missing || [] };
+  return { examples: examples.length, knownSets: sets, suggestion: parsed.file_name || null, missing: parsed.missing || [] };
 }
 
 const OPENAI_MODEL = 'gpt-5.6-luna'; // override per run with ?model=
 async function openaiSuggest(env, title, model, ctx) { model = model || OPENAI_MODEL;
   if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
-  const { examples, prompt } = await namePrompt(env, title, ctx);
+  const { examples, sets, prompt } = await namePrompt(env, title, ctx);
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_API_KEY}` },
@@ -719,7 +753,7 @@ async function openaiSuggest(env, title, model, ctx) { model = model || OPENAI_M
   const text = d.choices?.[0]?.message?.content || '';
   let parsed = {};
   try { parsed = JSON.parse(text); } catch (e) { return { examples: examples.length, error: 'unreadable response', raw: text.slice(0, 200) }; }
-  return { examples: examples.length, suggestion: parsed.file_name || null, missing: parsed.missing || [],
+  return { examples: examples.length, knownSets: sets, suggestion: parsed.file_name || null, missing: parsed.missing || [],
     tokens: d.usage ? { in: d.usage.prompt_tokens, out: d.usage.completion_tokens } : undefined };
 }
 
@@ -740,7 +774,7 @@ async function runGeminiTest(env, days, model = GEMINI_MODEL, provider = 'gemini
     const specifics = await itemSpecifics(env, c.itemId).catch(() => []);
     const g = await suggest(env, c.title, model, { specifics, excludeEbayId: c.itemId }).catch(e => ({ error: e.message }));
     return { ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', suggestion: g.suggestion || null,
-      missing: g.missing, listingDetails: specifics.map(x => `${x.name}: ${x.value}`), examplesUsed: g.examples, tokens: g.tokens,
+      missing: g.missing, listingDetails: specifics.map(x => `${x.name}: ${x.value}`), examplesUsed: g.examples, knownSets: g.knownSets, tokens: g.tokens,
       seconds: (Date.now() - s0) / 1000, error: g.error };
   }));
   return { readOnly: true, provider, model, totalSeconds: (Date.now() - t0) / 1000, cards: out };
