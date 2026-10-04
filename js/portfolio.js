@@ -1,4 +1,9 @@
 // ── Portfolio ──────────────────────────────────────────────────────────────────
+// Dollar amount with thousands commas, 2 decimals (negatives keep the existing "$-1,234.56" shape)
+function pfMoney(n) {
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function renderPortfolio() {
   const root = document.getElementById('portfolio-root');
 
@@ -39,20 +44,20 @@ function renderPortfolio() {
   const heroHtml = `
     <div class="srow" style="margin:16px;text-align:center">
       <div class="sc-l">Realized P&amp;L</div>
-      <div style="font-size:32px;font-weight:700;margin-top:6px"><span class="${realizedPnL>=0?'up':'dn'}">${realizedPnL>=0?'+':''}$${realizedPnL.toFixed(2)}</span></div>
+      <div style="font-size:32px;font-weight:700;margin-top:6px"><span class="${realizedPnL>=0?'up':'dn'}">${realizedPnL>=0?'+':''}$${pfMoney(realizedPnL)}</span></div>
       <div style="display:flex;gap:16px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)">
         <div style="flex:1">
           <div class="sc-l">To sell, at cost</div>
-          <div class="sc-v">${tagsReady ? '$' + toSellCost.toFixed(2) : '…'}</div>
+          <div class="sc-v">${tagsReady ? '$' + pfMoney(toSellCost) : '…'}</div>
         </div>
         <div style="flex:1;border-left:1px solid var(--bdr);padding-left:16px">
           <div class="sc-l">PC, at cost</div>
-          <div class="sc-v">${tagsReady ? '$' + pcCost.toFixed(2) : '…'}</div>
+          <div class="sc-v">${tagsReady ? '$' + pfMoney(pcCost) : '…'}</div>
         </div>
       </div>
       <div style="margin-top:12px;font-size:12px;opacity:.7">
         <span class="sc-l">Net position</span>
-        <span class="${realizedNetProfit>=0?'up':'dn'}" style="margin-left:6px;font-weight:600">${realizedNetProfit>=0?'+':''}$${realizedNetProfit.toFixed(2)}</span>
+        <span class="${realizedNetProfit>=0?'up':'dn'}" style="margin-left:6px;font-weight:600">${realizedNetProfit>=0?'+':''}$${pfMoney(realizedNetProfit)}</span>
       </div>
     </div>
   `;
@@ -62,9 +67,9 @@ function renderPortfolio() {
       <div class="srow-t">Purchases</div>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;text-align:center;margin-top:8px">
         <div><div class="sc-l">Total purchases</div><div class="sc-v">${totalPurchasesCount}</div></div>
-        <div><div class="sc-l">Purchases</div><div class="sc-v">$${totalInvested.toFixed(2)}</div></div>
+        <div><div class="sc-l">Purchases</div><div class="sc-v">$${pfMoney(totalInvested)}</div></div>
         <div><div class="sc-l">Cards owned</div><div class="sc-v">${owned.length}</div></div>
-        <div><div class="sc-l">Owned cost basis</div><div class="sc-v">$${ownedCostBasis.toFixed(2)}</div></div>
+        <div><div class="sc-l">Owned cost basis</div><div class="sc-v">$${pfMoney(ownedCostBasis)}</div></div>
       </div>
     </div>
   `;
@@ -74,7 +79,7 @@ function renderPortfolio() {
       <div class="srow-t">Sales</div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;text-align:center;margin-top:8px">
         <div><div class="sc-l">Total sales</div><div class="sc-v">${sold.length}</div></div>
-        <div><div class="sc-l">Net sales</div><div class="sc-v">$${totalRecovered.toFixed(2)}</div></div>
+        <div><div class="sc-l">Net sales</div><div class="sc-v">$${pfMoney(totalRecovered)}</div></div>
         <div><div class="sc-l">Sell-through</div><div class="sc-v">${sellThroughRate.toFixed(1)}%</div></div>
         <div><div class="sc-l">Win rate</div><div class="sc-v">${winRate.toFixed(1)}%</div></div>
         <div><div class="sc-l">Avg ROI</div><div class="sc-v"><span class="${avgROI>=0?'up':'dn'}">${avgROI>=0?'+':''}${avgROI.toFixed(1)}%</span></div></div>
@@ -87,11 +92,11 @@ function renderPortfolio() {
       <div class="srow-t">Best &amp; worst flip (last 30 days)</div>
       <div class="recent-row">
         <div class="recent-info"><div class="rc-name">${bestFlip ? (bestFlip.fullCard || '—') : 'No sales in the last 30 days'}</div><div class="rc-date">Best flip</div></div>
-        ${bestFlip ? `<div class="recent-sale"><span class="up">+$${safeNum(bestFlip.netProfit, true).toFixed(2)}</span></div>` : ''}
+        ${bestFlip ? `<div class="recent-sale"><span class="up">+$${pfMoney(safeNum(bestFlip.netProfit, true))}</span></div>` : ''}
       </div>
       <div class="recent-row">
         <div class="recent-info"><div class="rc-name">${worstFlip ? (worstFlip.fullCard || '—') : 'No sales in the last 30 days'}</div><div class="rc-date">Worst flip</div></div>
-        ${worstFlip ? `<div class="recent-sale"><span class="${safeNum(worstFlip.netProfit,true)>=0?'up':'dn'}">${safeNum(worstFlip.netProfit,true)>=0?'+':''}$${safeNum(worstFlip.netProfit, true).toFixed(2)}</span></div>` : ''}
+        ${worstFlip ? `<div class="recent-sale"><span class="${safeNum(worstFlip.netProfit,true)>=0?'up':'dn'}">${safeNum(worstFlip.netProfit,true)>=0?'+':''}$${pfMoney(safeNum(worstFlip.netProfit, true))}</span></div>` : ''}
       </div>
     </div>
   `;
@@ -104,7 +109,7 @@ function renderPortfolio() {
         const date = fmtShortDate(c.transactionDate || c.datePurchased);
         return `<div class="recent-row">
           <div class="recent-info"><div class="rc-name">${c.fullCard || '—'}</div><div class="rc-date">${date}${isSold ? ' · Sold' : ' · Purchased'}</div></div>
-          <div class="${isSold ? 'recent-sale' : 'recent-price'}">${isSold ? `$${safeNum(c.salePrice).toFixed(2)}` : `$${safeNum(c.purchasePrice).toFixed(2)}`}</div>
+          <div class="${isSold ? 'recent-sale' : 'recent-price'}">${isSold ? `$${pfMoney(safeNum(c.salePrice))}` : `$${pfMoney(safeNum(c.purchasePrice))}`}</div>
         </div>`;
       }).join('') : '<div style="font-size:12px;color:var(--tx3);padding:4px 0">No activity yet</div>'}
     </div>
