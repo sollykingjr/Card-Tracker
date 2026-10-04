@@ -20,30 +20,8 @@ id = "23e104faac8545dcb39b9283bf368a9b"
 # Card database (replaces the Excel / Power Query pipeline)
 [[d1_databases]]
 binding = "DB"
-database_name = "card-tracker-staging"
+database_name = "card-tracker-staging"  # name kept from staging; this is the live card database
 database_id = "0d2cff81-a05d-4728-a04a-9cb9ec12ec61"
 
 [limits]
 cpu_ms = 30000
-
-# ── Staging Worker (sales-feed branch only) ───────────────────────────────────
-# Rehearsal: runs the full production Worker code, with all schedules turned off.
-[env.staging]
-name = "card-app-staging"
-main = "worker.js"
-
-[env.staging.triggers]
-crons = []
-
-[[env.staging.kv_namespaces]]
-binding = "CACHE"
-id = "23e104faac8545dcb39b9283bf368a9b"
-
-[[env.staging.d1_databases]]
-binding = "DB"
-database_name = "card-tracker-staging"
-database_id = "0d2cff81-a05d-4728-a04a-9cb9ec12ec61"
-
-# Staging also serves the app's frontend from this branch (test copy of the app)
-[env.staging.assets]
-directory = "."

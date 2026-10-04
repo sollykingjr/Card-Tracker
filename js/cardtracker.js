@@ -113,8 +113,6 @@ function ctSetPage(p) {
 let ctScanCache = {}; // itemId -> { front, back } built from the photo index (see ctLoadScanIndex)
 let ctTagCache = {};
 let ctTagsLoaded = false;
-let ctPendingCache = {};
-let ctPendingLoaded = false;
 let ctInHandCache = {};
 let ctInHandLoaded = false;
 
@@ -150,46 +148,6 @@ async function ctLoadInHand() {
   if (ctOpenCardIdx !== null) ctRenderTags(ctOpenCardIdx);
 }
 
-async function ctLoadPendingOverrides() {
-  if (CARD_DB_URL) return; // card database: edits apply immediately, no pending overrides
-  if (ctPendingLoaded) return;
-  ctPendingLoaded = true;
-  try {
-    const res = await fetch(`${WORKER_URL}/card-override-pending-all`);
-    ctPendingCache = await res.json() || {};
-  } catch (e) {
-    ctPendingCache = {};
-  }
-  if (ctOpenCardIdx !== null) ctRenderPendingBadge(ctOpenCardIdx);
-}
-
-function ctCheckPendingResolved(c) {
-  const pending = c.itemId ? ctPendingCache[c.itemId] : null;
-  if (!pending || !pending.fields) return null;
-  const stillPending = Object.keys(pending.fields).some(f => {
-    const prop = CT_OVERRIDE_FIELD_MAP[f];
-    if (!prop) return false;
-    return String(c[prop] ?? '').trim() !== String(pending.fields[f] ?? '').trim();
-  });
-  if (stillPending) return true;
-  delete ctPendingCache[c.itemId];
-  fetch(`${WORKER_URL}/card-override-pending-clear`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-    body: JSON.stringify({ itemId: c.itemId })
-  }).catch(() => {});
-  return false;
-}
-
-function ctRenderPendingBadge(idx) {
-  const box = document.getElementById('ct-pending-badge');
-  const c = cards[idx];
-  if (!box || !c) return;
-  const isPending = ctCheckPendingResolved(c);
-  box.innerHTML = isPending
-    ? `<div style="display:inline-block;padding:4px 10px;border-radius:20px;background:var(--acc-bg);color:var(--acc);font-size:11px;font-weight:700;margin-top:6px">Pending update</div>`
-    : '';
-}
 
 function ctIsInHand(c) {
   if (!c || !c.itemId) return false;
@@ -987,7 +945,6 @@ function ctOpenCard(idx) {
     </div>
     <div class="mname">${c.fullCard || c.playerDisplay || '—'}</div>
     <div class="mitemid">${c.itemId || '—'}</div>
-    <div id="ct-pending-badge"></div>
         <div class="sgrid">
       <div class="scard"><div class="slbl">Serial No</div><div class="sval">${c.serialNo || '—'}</div></div>
       <div class="scard"><div class="slbl">Purchase price</div><div class="sval">$${safeNum(c.purchasePrice).toFixed(2)}</div></div>
@@ -1034,7 +991,6 @@ function ctOpenCard(idx) {
   document.getElementById('mcontent').innerHTML = ctModalHtml;
   document.getElementById('mwrap').classList.add('on');
   ctRenderTags(idx);
-  ctRenderPendingBadge(idx);
   ctRenderInHand(idx);
   if (c.itemId) ctLoadScans(c.itemId);
   if (CARD_DB_URL && c.itemId && c.salePrice) ctLoadSaleBreakdown(c.itemId);
@@ -1185,36 +1141,16 @@ async function ctSaveMetadata(idx) {
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
   if (status) status.textContent = '';
 
-  // Card database (staging app): save directly, then reload and reopen the card with the new values
-  if (CARD_DB_URL) {
-    try {
-      const res = await fetch(`${CARD_DB_URL}/card-update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
-        body: JSON.stringify({ itemId: c.itemId, fields })
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'save failed');
-      await ctReloadAndReopen(c.itemId);
-    } catch (e) {
-      if (status) status.textContent = "Couldn't save changes. Try again.";
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
-    }
-    return;
-  }
-
+  // Save directly to the card database, then reload and reopen the card with the new values
   try {
-    const res = await fetch(`${WORKER_URL}/card-override`, {
+    const res = await fetch(`${CARD_DB_URL}/card-update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
       body: JSON.stringify({ itemId: c.itemId, fields })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'save failed');
-
-    ctPendingCache[c.itemId] = { fields };
-    document.getElementById('mcontent').innerHTML = _modalMainHtml;
-    ctRenderPendingBadge(idx);
+    await ctReloadAndReopen(c.itemId);
   } catch (e) {
     if (status) status.textContent = "Couldn't save changes. Try again.";
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
@@ -1269,7 +1205,6 @@ function renderCardTracker() {
   const root = document.getElementById('cardtracker-root');
   ctLoadTags();
   ctLoadInHand();
-  ctLoadPendingOverrides();
 
   root.innerHTML = `
     <div class="ct-wrap">

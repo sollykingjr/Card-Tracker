@@ -4,9 +4,8 @@ const TRACKER_SID = '12sNofzPwhb8uR68hT_bJNiLD2MrM0rdoQMPXGTlx2_s';
 const KEY         = 'AIzaSyCl43LqZrRJ-MlPkKiKjk51O2Aklv-T0RE';
 const BASE        = `https://sheets.googleapis.com/v4/spreadsheets/${SID}/values/`;
 const TRACKER_BASE= `https://sheets.googleapis.com/v4/spreadsheets/${TRACKER_SID}/values/`;
-// Worker base URL. The staging test copy of the app talks to the staging Worker (rehearsal);
-// everywhere else it's the live Worker.
-const API_BASE = location.hostname === 'card-app-staging.maxcsolomon.workers.dev' ? location.origin : 'https://card-app.maxcsolomon.workers.dev';
+// Worker base URL
+const API_BASE = 'https://card-app.maxcsolomon.workers.dev';
 // Card database (replaces the Card Cost Tracker Final sheet). Set to null to roll back to the sheet.
 const CARD_DB_URL = API_BASE;
 const APP_KEY      = 'c18429c7ca75017087511834d1a3d5664bc017a3afb8e5853052251ddd58ae93';
