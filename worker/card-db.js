@@ -701,18 +701,22 @@ async function openaiSuggest(env, title, model = OPENAI_MODEL) {
 async function runGeminiTest(env, days, model = GEMINI_MODEL, provider = 'gemini') {
   const suggest = provider === 'openai' ? openaiSuggest : geminiSuggest;
   const raw = await fetchPurchaseOrders(env, days);
-  const out = [];
+  const items = [];
   for (const xml of raw) {
     const o = purchaseOrderToCards(xml);
     if (o.seller === 'comc_consignment') continue;
-    for (const c of o.cards) {
-      const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
-      const g = await suggest(env, c.title, model).catch(e => ({ error: e.message }));
-      out.push({ ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', gemini: g.suggestion || null,
-        missing: g.missing, examplesUsed: g.examples, tokens: g.tokens, error: g.error });
-    }
+    items.push(...o.cards);
   }
-  return { readOnly: true, provider, model, cards: out };
+  // Run all cards in parallel — a sequential loop made the test link take minutes.
+  const t0 = Date.now();
+  const out = await Promise.all(items.map(async c => {
+    const mine = await env.DB.prepare(`SELECT * FROM cards WHERE item_id = ?1 OR legacy_item_id = ?1 OR purchase_ebay_item_id = ?1 LIMIT 1`).bind(c.itemId).first();
+    const s0 = Date.now();
+    const g = await suggest(env, c.title, model).catch(e => ({ error: e.message }));
+    return { ebayTitle: c.title, yourCard: mine ? fileNameFromCard(mine) : '(not in your data)', gemini: g.suggestion || null,
+      missing: g.missing, examplesUsed: g.examples, tokens: g.tokens, seconds: (Date.now() - s0) / 1000, error: g.error };
+  }));
+  return { readOnly: true, provider, model, totalSeconds: (Date.now() - t0) / 1000, cards: out };
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
