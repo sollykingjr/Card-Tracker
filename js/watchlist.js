@@ -1,5 +1,5 @@
 // ── Watchlist state ───────────────────────────────────────────────────────────
-const WORKER_URL = 'https://card-app.maxcsolomon.workers.dev';
+const WORKER_URL = API_BASE;
 let watchlistItems = [];
 let watchlistLoaded = false;
 let countdownInterval = null;

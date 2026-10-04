@@ -235,10 +235,10 @@ async function loadCardData() {
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
-    // Card data source: the new card database when running as the staging test app,
-    // otherwise the Card Cost Tracker Final sheet (live app, until cutover).
+    // Card data source: the card database (Worker /cards). The sheet path is the rollback fallback
+    // if CARD_DB_URL is ever set to null.
     const cR = CARD_DB_URL
-      ? await fetch(`${CARD_DB_URL}/cards`).then(r=>r.ok?r.json().then(d=>d.values||[]):[])
+      ? await fetch(`${CARD_DB_URL}/cards`, { headers: { 'X-App-Key': APP_KEY } }).then(r=>r.ok?r.json().then(d=>d.values||[]):[])
       : await fetch(`${TRACKER_BASE}${encodeURIComponent("'Card Cost Tracker Final'!A2:W100000")}?key=${KEY}`)
           .then(r=>r.ok?r.json().then(d=>d.values||[]):[]);
 
@@ -282,7 +282,7 @@ async function loadProspectData() {
   if (prospectDataLoaded) return;
   prospectDataLoaded = true;
   document.getElementById('cntlbl').textContent='Loading...';
-  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>'+(CARD_DB_URL?'Loading cards...':'Fetching from Google Sheets...')+'</div>';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
   document.getElementById('rfab').classList.add('spin');
   try {
     const [pR,h2,p1,oh2,op1,hsR,bsR,pmR] = await fetchBatch([
