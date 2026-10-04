@@ -28,15 +28,31 @@ function renderPortfolio() {
     .sort((a,b) => parseDate(b.transactionDate || b.datePurchased) - parseDate(a.transactionDate || a.datePurchased))
     .slice(0, 8);
 
+  // PC cards = unsold cards tagged exactly "PC" (tags load lazily from the worker)
+  const tagsReady = typeof ctTagsLoaded !== 'undefined' && ctTagsLoaded;
+  if (typeof ctLoadTags === 'function' && !tagsReady) ctLoadTags().then(() => renderPortfolio());
+  const pcCost = typeof ctGetTags === 'function'
+    ? owned.filter(c => ctGetTags(c).includes('PC')).reduce((s,c) => s + safeNum(c.purchasePrice), 0)
+    : 0;
+  const toSellCost = ownedCostBasis - pcCost;
+
   const heroHtml = `
-    <div class="srow" style="margin:16px;display:flex;gap:16px;text-align:center">
-      <div style="flex:1">
-        <div class="sc-l">Net position</div>
-        <div style="font-size:28px;font-weight:700;margin-top:6px"><span class="${realizedNetProfit>=0?'up':'dn'}">${realizedNetProfit>=0?'+':''}$${realizedNetProfit.toFixed(2)}</span></div>
+    <div class="srow" style="margin:16px;text-align:center">
+      <div class="sc-l">Realized P&amp;L</div>
+      <div style="font-size:32px;font-weight:700;margin-top:6px"><span class="${realizedPnL>=0?'up':'dn'}">${realizedPnL>=0?'+':''}$${realizedPnL.toFixed(2)}</span></div>
+      <div style="display:flex;gap:16px;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)">
+        <div style="flex:1">
+          <div class="sc-l">To sell, at cost</div>
+          <div class="sc-v">${tagsReady ? '$' + toSellCost.toFixed(2) : '…'}</div>
+        </div>
+        <div style="flex:1;border-left:1px solid var(--bdr);padding-left:16px">
+          <div class="sc-l">PC, at cost</div>
+          <div class="sc-v">${tagsReady ? '$' + pcCost.toFixed(2) : '…'}</div>
+        </div>
       </div>
-      <div style="flex:1;border-left:1px solid var(--bdr);padding-left:16px">
-        <div class="sc-l">Realized P&amp;L</div>
-        <div style="font-size:28px;font-weight:700;margin-top:6px"><span class="${realizedPnL>=0?'up':'dn'}">${realizedPnL>=0?'+':''}$${realizedPnL.toFixed(2)}</span></div>
+      <div style="margin-top:12px;font-size:12px;opacity:.7">
+        <span class="sc-l">Net position</span>
+        <span class="${realizedNetProfit>=0?'up':'dn'}" style="margin-left:6px;font-weight:600">${realizedNetProfit>=0?'+':''}$${realizedNetProfit.toFixed(2)}</span>
       </div>
     </div>
   `;
