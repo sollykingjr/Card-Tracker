@@ -20,13 +20,16 @@ async function getEbayToken(env) {
 }
 
 async function fetchOrders(env, days = LOOKBACK_DAYS) {
-  const token = await getEbayToken(env);
+  let token = await getEbayToken(env), retried = false;
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const orders = [];
   let url = `https://api.ebay.com/sell/fulfillment/v1/order?limit=200&filter=${encodeURIComponent(`creationdate:[${since}..]`)}`;
   for (let page = 0; url && page < 10; page++) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
+    if (res.status === 401 && !retried) {   // rejected token: drop the cached copy, refresh once, redo this page
+      retried = true; await env.CACHE.delete('ebay_access_token'); token = await getEbayToken(env); page--; continue;
+    }
     if (!res.ok) throw new Error(`eBay orders ${res.status}: ${JSON.stringify(data.errors || data)}`);
     orders.push(...(data.orders || []));
     url = data.next || null;
@@ -55,7 +58,7 @@ const num = v => (v == null || v === '' ? 0 : parseFloat(v));
 const toCents = v => Math.round(num(v) * 100);
 
 async function fetchPurchaseOrders(env, days = LOOKBACK_DAYS) {
-  const token = await getEbayToken(env);
+  let token = await getEbayToken(env), retried = false;
   const from = new Date(Date.now() - days * 86400000).toISOString();
   const to = new Date().toISOString();
   const orders = [];
@@ -82,6 +85,9 @@ async function fetchPurchaseOrders(env, days = LOOKBACK_DAYS) {
     const xml = await res.text();
     const ack = tag(xml, 'Ack');
     if (ack !== 'Success' && ack !== 'Warning') {
+      if (!retried && /auth|token/i.test(tag(xml, 'LongMessage') || '')) {   // rejected token: refresh once, redo this page
+        retried = true; await env.CACHE.delete('ebay_access_token'); token = await getEbayToken(env); page--; continue;
+      }
       throw new Error(`GetOrders ${res.status} ${ack}: ${tag(xml, 'LongMessage') || xml.slice(0, 300)}`);
     }
     orders.push(...tags(xml, 'Order'));

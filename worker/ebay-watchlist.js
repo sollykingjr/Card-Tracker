@@ -32,7 +32,7 @@ export async function handleCallback(request, env) {
     return new Response(`Token error: ${JSON.stringify(tokens)}`, { status: 500 });
   }
 
-  await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: 7200 });
+  await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: Math.max(60, (Number(tokens.expires_in) || 7200) - 900) }); // expire the cached copy 15 min before eBay does
   if (tokens.refresh_token) {
     await env.CACHE.put('ebay_refresh_token', tokens.refresh_token);
   }
@@ -197,7 +197,7 @@ export async function refreshAccessToken(refreshToken, env) {
   });
   const tokens = await res.json();
   if (!tokens.access_token) return null;
-  await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: 7200 });
+  await env.CACHE.put('ebay_access_token', tokens.access_token, { expirationTtl: Math.max(60, (Number(tokens.expires_in) || 7200) - 900) }); // expire the cached copy 15 min before eBay does
   return tokens.access_token;
 }
 

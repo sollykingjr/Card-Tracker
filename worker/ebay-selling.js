@@ -36,6 +36,13 @@ async function fetchSellingPage(accessToken, listTag, page) {
       </GetMyeBaySellingRequest>`
   });
   const xml = await res.text();
+  const ack = (xml.match(/<Ack>([^<]*)<\/Ack>/) || [])[1];
+  if (ack !== 'Success' && ack !== 'Warning') {
+    const msg = ((xml.match(/<LongMessage>([^<]*)<\/LongMessage>/) || [])[1] || xml.slice(0, 200)).trim();
+    const err = new Error(`GetMyeBaySelling ${listTag} ${ack || res.status}: ${msg}`);
+    err.authFailed = /auth|token/i.test(msg);
+    throw err;
+  }
   const section = xml.match(new RegExp(`<${listTag}[^>]*>([\\s\\S]*?)<\\/${listTag}>`));
   if (!section) return { items: [], pages: 0 };
   const items = [];
@@ -60,34 +67,55 @@ async function fetchSellingList(accessToken, listTag, allPages) {
   return items;
 }
 
+// Runs fn(accessToken). If eBay rejects the token, drop the cached copy, fetch a fresh one and retry once.
+// A missing/!refreshable connection comes back as { error } like before.
+async function withFreshToken(env, fn) {
+  for (let attempt = 0; ; attempt++) {
+    const tok = await getSellingToken(env);
+    if (tok.error) return { error: tok.error, authUrl: '/auth' };
+    try {
+      return await fn(tok.accessToken);
+    } catch (e) {
+      if (!e.authFailed || attempt >= 1) throw e;
+      await env.CACHE.delete('ebay_access_token');
+    }
+  }
+}
+
 // Live listings (active + scheduled) with details, keyed by SKU = card Item ID.
 export async function fetchLiveListings(env) {
-  const tok = await getSellingToken(env);
-  if (tok.error) return { error: tok.error };
-  const [active, scheduled] = await Promise.all([
-    fetchSellingList(tok.accessToken, 'ActiveList', true),
-    fetchSellingList(tok.accessToken, 'ScheduledList', true),
-  ]);
-  return { active, scheduled };
+  try {
+    return await withFreshToken(env, async (accessToken) => {
+      const [active, scheduled] = await Promise.all([
+        fetchSellingList(accessToken, 'ActiveList', true),
+        fetchSellingList(accessToken, 'ScheduledList', true),
+      ]);
+      return { active, scheduled };
+    });
+  } catch (e) {
+    return { error: e.message };
+  }
 }
 
 // Match listings to cards by Custom Label (SKU), which is set to the app's card Item ID.
 // Scheduled listings count as listed. Listings with no SKU are skipped.
 export async function fetchMyeBaySelling(env) {
-  const tok = await getSellingToken(env);
-  if (tok.error) return { error: tok.error, authUrl: '/auth' };
-  const [active, scheduled, sold, unsold] = await Promise.all([
-    fetchSellingList(tok.accessToken, 'ActiveList', true),
-    fetchSellingList(tok.accessToken, 'ScheduledList', true),
-    fetchSellingList(tok.accessToken, 'SoldList', false),
-    fetchSellingList(tok.accessToken, 'UnsoldList', false),
-  ]);
-  const skus = (arr) => [...new Set(arr.map(i => i.sku))];
-  return {
-    active: skus([...active, ...scheduled]),
-    sold: skus(sold),
-    unsold: skus(unsold),
-  };
+  // A failed call throws (the cron then alerts): an auth error must never look like "no listings",
+  // or every Listed tag would be stripped and sold cards would miss their Sold tag.
+  return withFreshToken(env, async (accessToken) => {
+    const [active, scheduled, sold, unsold] = await Promise.all([
+      fetchSellingList(accessToken, 'ActiveList', true),
+      fetchSellingList(accessToken, 'ScheduledList', true),
+      fetchSellingList(accessToken, 'SoldList', false),
+      fetchSellingList(accessToken, 'UnsoldList', false),
+    ]);
+    const skus = (arr) => [...new Set(arr.map(i => i.sku))];
+    return {
+      active: skus([...active, ...scheduled]),
+      sold: skus(sold),
+      unsold: skus(unsold),
+    };
+  });
 }
 
 export async function reconcileListingTags(env) {
