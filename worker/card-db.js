@@ -447,7 +447,9 @@ async function runComcImport(env, type, csvText, commit) {
 
   const { results } = await env.DB.prepare(`SELECT item_id, status, date_sold FROM cards`).all();
   const have = new Map(results.map(r => [r.item_id, r]));
-  const out = { type, rowsInFile: rows.length, alreadyInData: 0, toAdd: [], toMarkSold: [], toReview: [] };
+  // Review rows already on file (open, dismissed or resolved): a repeat conflict is not new, so it isn't counted or re-queued
+  const reviewed = new Set((await env.DB.prepare(`SELECT order_id, sku FROM sale_review`).all()).results.map(r => `${r.order_id}|${r.sku || ''}`));
+  const out = { type, rowsInFile: rows.length, alreadyInData: 0, toAdd: [], toMarkSold: [], toReview: [], skipped: [] };
   const stmts = [];
 
   for (const r of rows) {
@@ -470,14 +472,18 @@ async function runComcImport(env, type, csvText, commit) {
     const label = [c.year, c.set_name, c.variation, c.player_name].filter(Boolean).join(' ');
     if (existing && existing.status === 'sold') {
       if (sameDay(existing.date_sold, soldAt)) { out.alreadyInData++; continue; }
+      const orderId = `COMC:${r['Batch #'] || soldAt}`, rk = `${orderId}|${c.item_id}`;
+      if (reviewed.has(rk)) { out.alreadyInData++; continue; }
+      reviewed.add(rk);
       out.toReview.push({ itemId: c.item_id, card: label, reason: `already marked sold on ${existing.date_sold}` });
       stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO sale_review (order_id, sku, reason, title, sale_date, sale_price_cents, sale_tax_cents,
         sale_fees_cents, sale_shipping_cents, purchased_by) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?)`).bind(
-        `COMC:${r['Batch #'] || soldAt}`, c.item_id, `COMC sale, card already marked sold on ${existing.date_sold}`, label, soldAt, sale, fees, buyer));
+        orderId, c.item_id, `COMC sale, card already marked sold on ${existing.date_sold}`, label, soldAt, sale, fees, buyer));
       continue;
     }
     if (existing && existing.status !== 'owned') {
-      out.toReview.push({ itemId: c.item_id, card: label, reason: `card status is ${existing.status}` });
+      // Nothing is queued for these (no review row is written), so they are skipped, not "to review"
+      out.skipped.push({ itemId: c.item_id, card: label, reason: `card status is ${existing.status}` });
       continue;
     }
     if (existing) {
@@ -496,8 +502,8 @@ async function runComcImport(env, type, csvText, commit) {
   if (commit) for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
   return {
     committed: !!commit, type, rowsInFile: out.rowsInFile, alreadyInData: out.alreadyInData,
-    added: out.toAdd.length, markedSold: out.toMarkSold.length, sentToReview: out.toReview.length,
-    addedSample: out.toAdd.slice(0, 15), markedSoldSample: out.toMarkSold.slice(0, 15), review: out.toReview
+    added: out.toAdd.length, markedSold: out.toMarkSold.length, sentToReview: out.toReview.length, skipped: out.skipped.length,
+    addedSample: out.toAdd.slice(0, 15), markedSoldSample: out.toMarkSold.slice(0, 15), review: out.toReview, skippedSample: out.skipped.slice(0, 15)
   };
 }
 
