@@ -839,10 +839,17 @@ export async function handleCardDb(request, env, cors) {
   }
 }
 
-// ── Scheduled: 7am / 7pm Eastern (run from the hourly cron at 11:00 and 23:00 UTC) ─
-export async function runCardDbJobs(env) {
-  for (const [name, job] of [['sale-import', runSaleImport], ['purchase-import', runPurchaseImport], ['backup', writeBackup]]) {
+// ── Scheduled ─────────────────────────────────────────────────────────────────
+// eBay sales + purchases: every 30 minutes (run from the */15 cron at :00 and :30)
+export async function runCardSyncJobs(env) {
+  for (const [name, job] of [['sale-import', runSaleImport], ['purchase-import', runPurchaseImport]]) {
     try { await job(env); }
     catch (e) { await notifyCronFailure(env, `card-db-${name}`, e.message); }
   }
+}
+
+// Backup sheet: once a day at 7am Eastern (run from the hourly cron at 11:00 UTC)
+export async function runBackupJob(env) {
+  try { await writeBackup(env); }
+  catch (e) { await notifyCronFailure(env, 'card-db-backup', e.message); }
 }

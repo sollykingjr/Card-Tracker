@@ -16,7 +16,7 @@ import { handleDebugRawWatchlist } from './worker/debug.js';
 import { handleScanIndexVersion, handleScanIndexGet, handleScanIndexRebuild, handleScanIndexUpdate } from './worker/scan-index.js';
 import { handleEbayPublish, handleEbayListingStatus, handleEbayFeePreview, handleEbayDiscard } from './worker/ebay-publish.js';
 import { handleEbayMyListings, handleEbayListingDetail, handleEbayListingUpdate, handleEbayListingEnd } from './worker/ebay-listings.js';
-import { handleCardDb, runCardDbJobs } from './worker/card-db.js';
+import { handleCardDb, runCardSyncJobs, runBackupJob } from './worker/card-db.js';
 
 
 
@@ -53,14 +53,18 @@ export default {
   async scheduled(event, env, ctx) {
    try {
         if (event.cron === '*/15 * * * *') {
+      // Watchlist cache stays on the 15-min cycle (its cache lasts 20 min); the rest runs every 30 min (:00 and :30)
       await refreshWatchlistCache(env);
-      await reconcileListingTags(env);
+      if (new Date(event.scheduledTime).getUTCMinutes() % 30 === 0) {
+        ctx.waitUntil(runCardSyncJobs(env));   // eBay sales + purchases into the card database
+        await reconcileListingTags(env);
+      }
       return;
     }
-    // Card database jobs (eBay sales + purchases, backup sheet): 7am / 7pm Eastern = 11:00 / 23:00 UTC hourly runs
+    // Backup sheet: once a day at 7am Eastern (11:00 UTC; 6am during standard time)
     if (event.cron === '0 * * * *') {
       const h = new Date(event.scheduledTime).getUTCHours();
-      if (h === 11 || h === 23) ctx.waitUntil(runCardDbJobs(env));
+      if (h === 11) ctx.waitUntil(runBackupJob(env));
     }
     if (event.cron === '0 10 * * *') {
       await checkNightlySearches(env);
