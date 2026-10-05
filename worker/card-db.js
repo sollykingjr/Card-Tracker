@@ -210,10 +210,11 @@ async function runPurchaseImport(env, days = LOOKBACK_DAYS) {
   const raw = await fetchPurchaseOrders(env, days);
   const summary = { ordersFound: raw.length, alreadyProcessed: 0, awaitingPayment: [], skippedOrders: [], cardsQueued: [], costUpdates: [], cardsSkippedInBaseline: [] };
   const recentCutoff = Date.now() - RECHECK_DAYS * 86400000;
+  const doneIds = new Set((await env.DB.prepare(`SELECT order_id FROM ebay_orders WHERE role = 'purchase'`).all()).results.map(r => String(r.order_id)));
   for (const xml of raw) {
     const totalReportedC = toCents(tag(xml, 'Total'));
     const o = purchaseOrderToCards(xml);
-    const done = await env.DB.prepare(`SELECT 1 FROM ebay_orders WHERE order_id = ? AND role = 'purchase'`).bind(o.orderId).first();
+    const done = doneIds.has(String(o.orderId));
     const recent = Date.parse(o.created) >= recentCutoff;
     if (done && !recent) { summary.alreadyProcessed++; continue; }
     const reason = o.seller === 'comc_consignment' ? 'comc_consignment' : o.status === 'Cancelled' ? 'cancelled' : null;
@@ -332,8 +333,9 @@ function saleLines(o) {
 async function runSaleImport(env, days = LOOKBACK_DAYS) {
   const orders = await fetchOrders(env, days);
   const sum = { ordersFound: orders.length, alreadyProcessed: 0, waiting: [], cancelled: [], recorded: [], sameSaleAlreadyInData: [], sentToReview: [] };
+  const doneIds = new Set((await env.DB.prepare(`SELECT order_id FROM ebay_orders WHERE role = 'sale'`).all()).results.map(r => String(r.order_id)));
   for (const o of orders) {
-    const done = await env.DB.prepare(`SELECT 1 FROM ebay_orders WHERE order_id = ? AND role = 'sale'`).bind(o.orderId).first();
+    const done = doneIds.has(String(o.orderId));
     if (done) { sum.alreadyProcessed++; continue; }
     const cancelState = o.cancelStatus?.cancelState;
     const pay = o.orderPaymentStatus;
@@ -847,7 +849,35 @@ export async function handleCardDb(request, env, cors) {
 
 // ── Scheduled ─────────────────────────────────────────────────────────────────
 // eBay sales + purchases: every 30 minutes (run from the */15 cron at :00 and :30)
-export async function runCardSyncJobs(env) {
+// Cloudflare D1 occasionally throws a transient "internal error"; retry those a couple of times before giving up.
+const D1_TRANSIENT = /internal error|network connection|timed out|timeout|overloaded|reset/i;
+async function withD1Retry(fn, tries = 3) {
+  for (let i = 1; ; i++) {
+    try { return await fn(); }
+    catch (e) {
+      if (i >= tries || !D1_TRANSIENT.test(String(e && e.message))) throw e;
+      await new Promise(r => setTimeout(r, 300 * i));
+    }
+  }
+}
+function retryingDb(db) {
+  const wrapStmt = stmt => new Proxy(stmt, {
+    get(t, p) {
+      if (p === '__unwrap') return t;
+      if (p === 'bind') return (...a) => wrapStmt(t.bind(...a));
+      if (p === 'first' || p === 'all' || p === 'run' || p === 'raw') return (...a) => withD1Retry(() => t[p](...a));
+      const v = t[p];
+      return typeof v === 'function' ? v.bind(t) : v;
+    }
+  });
+  return {
+    prepare: sql => wrapStmt(db.prepare(sql)),
+    batch: stmts => withD1Retry(() => db.batch(stmts.map(s => (s && s.__unwrap) || s))),
+  };
+}
+
+export async function runCardSyncJobs(rawEnv) {
+  const env = { ...rawEnv, DB: retryingDb(rawEnv.DB) };
   for (const [name, job] of [['sale-import', runSaleImport], ['purchase-import', runPurchaseImport]]) {
     try { await job(env); }
     catch (e) { await notifyCronFailure(env, `card-db-${name}`, e.message); }
