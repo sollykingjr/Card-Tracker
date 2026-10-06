@@ -1147,7 +1147,10 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner, resume) {
       <div class="sr-digest-header">
         <button class="sr-back-btn" id="sr-back-btn">← Back</button>
         <div class="sr-digest-title">${label}</div>
-        <button class="sr-mark-seen-btn" id="sr-mark-seen-btn">Mark Seen</button>
+        <div class="sr-digest-actions">
+          <button class="sr-mark-past-btn" id="sr-mark-past-btn" title="Mark everything you've scrolled past as seen">Mark Seen</button>
+          <button class="sr-mark-seen-btn" id="sr-mark-seen-btn">Mark All Seen</button>
+        </div>
       </div>
       <div class="sr-digest-controls">
         <input class="sr-search-input" id="sr-digest-search" placeholder="Search titles...">
@@ -1211,6 +1214,55 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner, resume) {
     allItems = allItems.map(item => ({ ...item, seen: true }));
     updateDigestCount(allItems, showAll);
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
+  };
+
+  // Mark Seen: only the listings that have already scrolled past the top of the screen
+  document.getElementById('sr-mark-past-btn').onclick = async (e) => {
+    const btn = e.currentTarget;
+    const flash = (text) => { btn.textContent = text; setTimeout(() => { btn.textContent = 'Mark Seen'; }, 1400); };
+    const past = srGetScrolledPast();
+    if (past.length === 0) { flash('Nothing above yet'); return; }
+    const urls = past.map(i => i.url);
+
+    // Remember the first card still on screen so the list doesn't jump when the marked ones drop out
+    const line = srScrolledPastLine();
+    const anchorCard = [...document.querySelectorAll('#sr-digest-list .sr-listing-card')].find(c => c.getBoundingClientRect().bottom > line + 1);
+    const anchorUrl = anchorCard ? srRenderedItems[+anchorCard.dataset.i]?.url : null;
+    const anchorOffset = anchorCard ? anchorCard.getBoundingClientRect().top - line : 0;
+
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${WORKER}/mark-seen-urls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+        body: JSON.stringify({ key, urls })
+      });
+      if (!res.ok) throw new Error('mark-seen failed');
+    } catch (err) {
+      btn.disabled = false;
+      flash('Failed — try again');
+      return;
+    }
+    // Keep today's key in sync, same as Mark All Seen
+    try {
+      await fetch(`${WORKER}/mark-seen-urls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-App-Key': APP_KEY },
+        body: JSON.stringify({ key: key.replace('_archive', ''), urls })
+      });
+    } catch (err) {}
+    btn.disabled = false;
+
+    const done = new Set(urls);
+    allItems = allItems.map(item => done.has(item.url) ? { ...item, seen: true } : item);
+    updateDigestCount(allItems, showAll);
+    renderDigestItems(allItems, sortMode, filterText, key, showAll);
+    if (!showAll && anchorUrl) {
+      const idx = srRenderedItems.findIndex(i => i.url === anchorUrl);
+      const card = idx >= 0 ? document.querySelector(`#sr-digest-list .sr-listing-card[data-i="${idx}"]`) : null;
+      if (card) window.scrollBy(0, card.getBoundingClientRect().top - srScrolledPastLine() - anchorOffset);
+    }
+    flash(`✓ ${urls.length} marked seen`);
   };
 
   document.getElementById('sr-digest-search').oninput = (e) => {
@@ -1294,6 +1346,25 @@ function getListingExpectedValue(title) {
   if (base <= 0) return null;
   return base * mult;
 }
+// The listings currently on screen, in display order (card i on screen = srRenderedItems[i])
+let srRenderedItems = [];
+
+// Everything above this line has scrolled out of sight (under the sticky header + count bar)
+function srScrolledPastLine() {
+  const header = document.querySelector('.sr-digest-header');
+  const count = document.getElementById('sr-digest-count');
+  return Math.max(header ? header.getBoundingClientRect().bottom : 0, count ? count.getBoundingClientRect().bottom : 0);
+}
+
+// Unseen listings whose cards have fully scrolled past the top of the screen
+function srGetScrolledPast() {
+  const line = srScrolledPastLine();
+  return [...document.querySelectorAll('#sr-digest-list .sr-listing-card')]
+    .filter(card => card.getBoundingClientRect().bottom <= line + 1)
+    .map(card => srRenderedItems[+card.dataset.i])
+    .filter(item => item && !item.seen);
+}
+
 function renderDigestItems(allItems, sortMode, filterText, key, showAll = false) {
   const list = document.getElementById('sr-digest-list');
   if (!list) return;
@@ -1329,7 +1400,8 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
     return;
   }
 
-  list.innerHTML = items.map(item => {
+  srRenderedItems = items;
+  list.innerHTML = items.map((item, idx) => {
     const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const endDate = item.endDate ? new Date(item.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
     const ev = getListingExpectedValue(item.title);
@@ -1341,7 +1413,7 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
       evHtml = ` <span class="sr-listing-ev" style="color:#fff">Exp: ${fmtMoney(ev)}</span>`;
     }
     return `
-      <div class="sr-listing-card">
+      <div class="sr-listing-card" data-i="${idx}">
         ${item.image ? `<img class="sr-listing-img" src="${item.image}" alt="${item.title}" loading="lazy">` : ''}
         <div class="sr-listing-title">${item.title}</div>
         <div class="sr-listing-meta">${item.type} · Listed ${date}${endDate ? ` · Ends ${endDate}` : ''}</div>

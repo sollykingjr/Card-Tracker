@@ -1588,6 +1588,41 @@ body {
   flex-shrink: 0;
 }
 .sr-mark-seen-btn:hover { opacity: .85; }
+.sr-digest-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-digest-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Mark Seen (everything scrolled past): lives in the header on desktop, floats bottom-left on phones */
+.sr-mark-past-btn {
+  padding: 5px 12px;
+  background: var(--acc-bg);
+  color: var(--acc);
+  border: 1px solid var(--acc-bdr);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .2s;
+  flex-shrink: 0;
+}
+.sr-mark-past-btn:hover { opacity: .85; }
+.sr-mark-past-btn:disabled { opacity: .6; cursor: default; }
+@media (max-width: 767px) {
+  .sr-mark-past-btn {
+    position: fixed;
+    left: 16px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    z-index: 50;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    background: var(--acc);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  }
+}
 
 .sr-digest-count {
   position: sticky;
