@@ -950,10 +950,12 @@ function ctOpenCard(idx) {
       <div class="scard"><div class="slbl">Purchase price</div><div class="sval">$${safeNum(c.purchasePrice).toFixed(2)}</div></div>
       ${(() => {
         if (c.salePrice) {
-          return `<div class="scard"><div class="slbl">Sale price</div><div class="sval">$${safeNum(c.salePrice).toFixed(2)}</div></div>`;
+          // Shown as net proceeds (sale minus tax, fees and shipping), same as the breakdown's "Net proceeds" row
+          const netProceeds = safeNum(c.netProfit, true) + safeNum(c.purchasePrice);
+          return `<div class="scard"><div class="slbl">Sale price</div><div class="sval">$${netProceeds.toFixed(2)}</div></div>`;
         }
         if (ctIsInHand(c)) {
-          const ep = ctTargetPrice(c.purchasePrice, 'ebay');
+          const ep =ctTargetPrice(c.purchasePrice, 'ebay');
           return `<div class="scard sc-target"><div class="slbl">eBay Target Price</div><div class="sval">${ep ? '$'+ep.toFixed(2) : '—'}</div></div>`;
         }
         const cp = ctTargetPrice(c.purchasePrice, 'comc');
