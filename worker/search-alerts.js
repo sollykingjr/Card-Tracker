@@ -32,6 +32,22 @@ export function buildEbaySearchUrl(search, offset) {
   return `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&sort=newlyListed${categoryParam}${filterStr}${aspectFilter}&limit=200${offsetStr}`;
 }
 
+// Returns only the incoming items not already in `existing`, and not repeated within `incoming`.
+// Matches on eBay itemId, falling back to URL (older stored items have no itemId).
+export function dedupeNewItems(existing, incoming) {
+  const keysOf = i => [i.itemId, i.url].filter(Boolean);
+  const seen = new Set();
+  for (const i of existing) keysOf(i).forEach(k => seen.add(k));
+  const out = [];
+  for (const i of incoming) {
+    const keys = keysOf(i);
+    if (keys.some(k => seen.has(k))) continue;
+    keys.forEach(k => seen.add(k));
+    out.push(i);
+  }
+  return out;
+}
+
 // ── [14] checkPlayerSearches ──────────────────────────────────────────────────
 export async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
@@ -103,6 +119,7 @@ export async function checkPlayerSearches(env) {
       }
 
       groupMapped.push(...items.map(item => ({
+        itemId: item.itemId || null,
         title: item.title,
         price: item.currentBidPrice?.value || item.price?.value || '?',
         url: item.itemWebUrl,
@@ -118,10 +135,13 @@ export async function checkPlayerSearches(env) {
 
     if (groupMapped.length === 0) continue;
 
-    // Store in group digest
+    // Store in group digest (a listing matching 2+ searches in the group is stored once)
     const existing = await env.CACHE.get(group.digestKey);
     const digestItems = existing ? JSON.parse(existing) : [];
-    await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...groupMapped]));
+    const newGroupItems = dedupeNewItems(digestItems, groupMapped);
+    if (newGroupItems.length > 0) {
+      await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...newGroupItems]));
+    }
 
     // 7-day archive
     const archiveKey = group.digestKey + '_archive';
@@ -129,19 +149,19 @@ export async function checkPlayerSearches(env) {
     const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
-    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...groupMapped]));
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...dedupeNewItems(trimmed, groupMapped)]));
 
     // Pushover
     const etHour = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
     const hour = parseInt(etHour);
-    if (group.notify !== false && hour >= 7 && hour < 22) {
+    if (group.notify !== false && hour >= 7 && hour < 22 && newGroupItems.length > 0) {
       await fetch('https://api.pushover.net/1/messages.json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: env.PUSHOVER_TOKEN,
           user: env.PUSHOVER_USER,
-          title: `🔍 ${group.label}: ${groupMapped.length} new listing${groupMapped.length !== 1 ? 's' : ''}`,
+          title: `🔍 ${group.label}: ${newGroupItems.length} new listing${newGroupItems.length !== 1 ? 's' : ''}`,
           message: 'Tap to view new listings.',
           url: `https://sollykingjr.github.io/Card-Tracker?digest=${group.digestKey}`,
           url_title: 'View in App'
@@ -321,6 +341,7 @@ export async function checkNightlySearches(env) {
       }
 
       groupMapped.push(...newItems.map(item => ({
+        itemId: item.itemId || null,
         title: item.title,
         price: item.currentBidPrice?.value || item.price?.value || '?',
         url: item.itemWebUrl,
@@ -338,14 +359,14 @@ export async function checkNightlySearches(env) {
 
     const existing = await env.CACHE.get(group.digestKey);
     const digestItems = existing ? JSON.parse(existing) : [];
-    await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...groupMapped]));
+    await env.CACHE.put(group.digestKey, JSON.stringify([...digestItems, ...dedupeNewItems(digestItems, groupMapped)]));
 
     const archiveKey = group.digestKey + '_archive';
     const existingArchive = await env.CACHE.get(archiveKey);
     const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
-    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...groupMapped]));
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...dedupeNewItems(trimmed, groupMapped)]));
   }
 
   for (const search of searches) {
@@ -703,6 +724,7 @@ export async function handleRunSearch(request, env, cors) {
       }
 
       allItems.push(...filtered.map(item => ({
+        itemId: item.itemId || null,
         title: item.title,
         price: item.currentBidPrice?.value || item.price?.value || '?',
         url: item.itemWebUrl,
@@ -716,12 +738,11 @@ export async function handleRunSearch(request, env, cors) {
       })));
     }
 
-    const items = allItems;
+    const items = dedupeNewItems([], allItems);
     const targetKey = (group || search).digestKey;
     const existing = await env.CACHE.get(targetKey);
     const existingItems = existing ? JSON.parse(existing) : [];
-    const existingUrls = new Set(existingItems.map(i => i.url));
-    const deduped = items.filter(i => !existingUrls.has(i.url));
+    const deduped = dedupeNewItems(existingItems, items);
     const merged = [...existingItems, ...deduped];
     await env.CACHE.put(targetKey, JSON.stringify(merged));
 
@@ -729,8 +750,7 @@ export async function handleRunSearch(request, env, cors) {
     const archiveKey = targetKey + '_archive';
     const existingArchive = await env.CACHE.get(archiveKey);
     const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
-    const archiveUrls = new Set(archiveItems.map(i => i.url));
-    const archiveDeduped = items.filter(i => !archiveUrls.has(i.url));
+    const archiveDeduped = dedupeNewItems(archiveItems, items);
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const trimmedArchive = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
     await env.CACHE.put(archiveKey, JSON.stringify([...trimmedArchive, ...archiveDeduped]));
