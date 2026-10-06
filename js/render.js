@@ -760,10 +760,11 @@ async function submitSnipe(itemId, btn) {
   btn.textContent = '✓ Copied!';
   setTimeout(() => {
     document.getElementById('snipe-modal')?.remove();
-    // Phones open links in the in-app browser, where the deep link errors; use the Gixen home page there
-    const ua = navigator.userAgent || '';
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-    window.open(isMobile ? 'https://www.gixen.com' : 'https://www.gixen.com/main/home_2.php', '_blank');
+    // Home-screen web apps open links in the in-app browser (no saved logins), where the deep link errors;
+    // use the Gixen home page there. Normal browser tabs (desktop or mobile Safari) keep the direct link.
+    const isStandalone = navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    window.open(isStandalone ? 'https://www.gixen.com' : 'https://www.gixen.com/main/home_2.php', '_blank');
   }, 800);
 }
 
