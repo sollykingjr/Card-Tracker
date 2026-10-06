@@ -28,6 +28,63 @@ async function addToWatch(itemId, btn) {
 let srData = { groups: [], searches: [], sections: [] };
 let srUIState = { scrollY: 0, openGroups: new Set() };
 
+// ── Resume: reopen the listing view where you left it after the app reloads ───
+const SR_RESUME_KEY = 'srResume';
+const SR_RESUME_MAX_AGE = 6 * 60 * 60 * 1000;
+let srResumeCleanup = null;
+
+function srClearResume() {
+  try { localStorage.removeItem(SR_RESUME_KEY); } catch (e) {}
+}
+
+function srLoadResume() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SR_RESUME_KEY) || 'null');
+    if (s && s.digestKey && Date.now() - s.t < SR_RESUME_MAX_AGE) return s;
+  } catch (e) {}
+  return null;
+}
+
+// Saves the open listing view (and scroll position) while it's on screen; stops once it's gone.
+function srTrackResume(base, getState) {
+  if (srResumeCleanup) srResumeCleanup();
+  let timer = null;
+  const stop = () => {
+    clearTimeout(timer);
+    window.removeEventListener('scroll', onScroll);
+    document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('pagehide', save);
+    srResumeCleanup = null;
+  };
+  const save = () => {
+    if (!document.getElementById('sr-digest-list')) { stop(); srClearResume(); return; }
+    try {
+      localStorage.setItem(SR_RESUME_KEY, JSON.stringify({ ...base, ...getState(), scrollY: window.scrollY, t: Date.now() }));
+    } catch (e) {}
+  };
+  const onScroll = () => { clearTimeout(timer); timer = setTimeout(save, 150); };
+  const onHide = () => { if (document.visibilityState === 'hidden') save(); };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('pagehide', save);
+  srResumeCleanup = stop;
+}
+
+// Listing images load after render, so the page grows; keep nudging until we reach the spot (or the user scrolls).
+function srRestoreScroll(y) {
+  let tries = 0, cancelled = false;
+  const cancel = () => { cancelled = true; };
+  window.addEventListener('touchstart', cancel, { once: true, passive: true });
+  window.addEventListener('wheel', cancel, { once: true, passive: true });
+  const attempt = () => {
+    if (cancelled) return;
+    window.scrollTo(0, y);
+    tries++;
+    if (tries < 12 && Math.abs(window.scrollY - y) > 4) setTimeout(attempt, 150);
+  };
+  requestAnimationFrame(attempt);
+}
+
 // ── Buy Score auto-managed searches ────────────────────────────────────────────
 const BUY_SCORE_THRESHOLD = 5;
 const BUY_SCORE_SEARCH_LABELS = ['Prospects Buy Score 5 - Auction', 'Prospects Buy Score 5 - BIN'];
@@ -78,6 +135,9 @@ async function syncBuyScoreSearches() {
 }
 
 async function initSearchResults() {
+  // Back on the main list: stop tracking the listing view
+  if (srResumeCleanup) srResumeCleanup();
+  srClearResume();
   const root = document.getElementById('sr-root');
   root.innerHTML = `
     <div class="sr-wrap">
@@ -289,8 +349,14 @@ async function initSearchResults() {
     const label = window._pendingDigestLabel || key.replace('_digest', '').replace(/_/g, ' ').trim();
     window._pendingDigest = null;
     window._pendingDigestLabel = null;
-    const owner = srData.searches.find(s => s.digestKey === key) || srData.groups.find(g => g.digestKey === key);
-    showDigest(key, label, undefined, owner);
+    const resume = window._pendingResume || null;
+    window._pendingResume = null;
+    const searchId = resume && resume.searchId ? resume.searchId : undefined;
+    const owner = searchId
+      ? srData.searches.find(s => s.id === searchId)
+      : (srData.searches.find(s => s.digestKey === key) || srData.groups.find(g => g.digestKey === key));
+    // A restored view whose search/group was deleted meanwhile just falls back to the list
+    if (!(resume && !owner)) showDigest(key, label, searchId, owner, resume);
   }
 }
 
@@ -1061,7 +1127,7 @@ function wireForm() {
 }
 
 // ── Digest View ───────────────────────────────────────────────────────────────
-async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
+async function showDigest(digestKey, label, searchIdFilter, sortOwner, resume) {
   const root = document.getElementById('sr-root');
   const key = digestKey + '_archive';
 
@@ -1069,8 +1135,8 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
   // auctions default to ending-soonest and everything else to newest-listed.
   let sortMode = (sortOwner && sortOwner.lastSortMode)
     || (sortOwner && sortOwner.listingType === 'AUCTION' ? 'ending' : 'newest');
-  let filterText = '';
-  let showAll = false;
+  let filterText = (resume && resume.filterText) || '';
+  let showAll = !!(resume && resume.showAll);
 
   const initialListedLabel = sortMode === 'oldest' ? 'Listed ↑' : 'Listed ↓';
   const initialListedVal = sortMode === 'oldest' ? 'oldest' : 'newest';
@@ -1095,6 +1161,14 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
       <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
     </div>
   `;
+
+  if (showAll) {
+    const showAllBtn = document.getElementById('sr-show-all-btn');
+    showAllBtn.classList.add('on');
+    showAllBtn.textContent = 'Unseen Only';
+  }
+  if (filterText) document.getElementById('sr-digest-search').value = filterText;
+  srTrackResume({ digestKey, label, searchId: searchIdFilter || null }, () => ({ showAll, filterText }));
 
   document.getElementById('sr-back-btn').onclick = async () => {
     await initSearchResults();
@@ -1178,6 +1252,7 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner) {
     if (searchIdFilter) allItems = allItems.filter(i => i.searchId === searchIdFilter);
     updateDigestCount(allItems, showAll);
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
+    if (resume && resume.scrollY) srRestoreScroll(resume.scrollY);
   } catch(e) {
     document.getElementById('sr-digest-list').innerHTML = '<div class="sr-empty">Failed to load listings.</div>';
   }

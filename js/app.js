@@ -162,7 +162,16 @@ if (digestParam) {
   window._pendingDigest = digestParam;
   setSection('searchresults');
 } else {
-  setSection('home');
+  // If the app was reloaded while a listing view was open, reopen it where it was left
+  const resume = typeof srLoadResume === 'function' ? srLoadResume() : null;
+  if (resume) {
+    window._pendingDigest = resume.digestKey;
+    window._pendingDigestLabel = resume.label;
+    window._pendingResume = resume;
+    setSection('searchresults');
+  } else {
+    setSection('home');
+  }
 }
 loadCardData();
 // Check the photo index version once at startup, so a refresh from another device shows up.
