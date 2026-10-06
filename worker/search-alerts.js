@@ -18,7 +18,9 @@ export function buildEbaySearchUrl(search, offset) {
   const filterStr = filters.length ? `&filter=${encodeURIComponent(filters.join(','))}` : '';
 
   const categoryMap = { sports: '212', gaming: '183454', nonsport: '183050' };
-  const categoryId = categoryMap[search.categoryType] || null;
+  // Older searches have no categoryType saved (the editor shows them as "sports"). eBay ignores
+  // item-specific filters (Serial Numbered, Sport) without a category, so default to sports when either is on.
+  const categoryId = categoryMap[search.categoryType] || ((search.serial || search.sport) ? categoryMap.sports : null);
 
   const aspects = [];
   if (search.serial && categoryId !== '183454') aspects.push('Features:{Serial Numbered}');
