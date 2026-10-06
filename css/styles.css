@@ -1292,6 +1292,22 @@ body {
 .sr-listing-watch:hover { opacity: .8; }
 .sr-listing-watch:disabled { opacity: .5; cursor: default; }
 
+/* Phones: price + eBay / Snipe / Watch on a single row ("View on" dropped, Exp value tucked under the price) */
+@media (max-width: 767px) {
+  .sr-listing-bottom { gap: 6px; }  /* still wraps on very narrow phones rather than overlapping */
+  .sr-listing-price { flex: 1 1 auto; white-space: nowrap; }
+  .sr-listing-ev { display: block; font-size: 9px; font-weight: 600; opacity: .75; letter-spacing: -.02em; }
+  .sr-lnk-full { display: none; }
+  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 9px; white-space: nowrap; flex-shrink: 0; }
+}
+@media (max-width: 420px) {
+  .sr-listing-price { font-size: 14px; }
+  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 8px; }
+}
+@media (max-width: 380px) {
+  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 7px; font-size: 11px; }
+}
+
 .sr-listing-img {
   width: 100%;
   max-height: 180px;
