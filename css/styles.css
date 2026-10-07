@@ -945,6 +945,15 @@ body {
 
   .meta { padding: 6px 22px; }
 
+  /* Watchlist toolbar + filter bar sit between .meta and .list, so they need the same
+     left offset (fixed nav) and 22px gutters as the cards below them. */
+  #wl-toolbar,
+  #wl-filters {
+    margin-left: calc(var(--nav-w) + 22px);
+    margin-right: 22px;
+    max-width: 1076px;
+  }
+
   .list {
     padding: 16px 22px 60px;
     max-width: 1120px;
@@ -978,6 +987,8 @@ body {
 }
 
 @media (min-width: 1100px) {
+  #wl-toolbar,
+  #wl-filters { max-width: 1196px; }
   .list { max-width: 1240px; }
   .list.grid-2 { grid-template-columns: 1fr 1fr; gap: 10px; }
 }
