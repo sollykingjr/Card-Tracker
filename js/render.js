@@ -924,9 +924,11 @@ function wlHasFilters() {
   return wlFilter.auctionsOnly || !!wlFilter.seller || !!wlFilter.q.trim();
 }
 
-// Auction = standard auction ('Chinese') or auction with a Buy It Now option ('AuctionWithBIN').
+// eBay's watchlist reports auctions as 'Auction' (older/other calls use 'Chinese' or 'AuctionWithBIN').
+// Fixed-price listings ('FixedPriceItem', 'StoreInventory') are not auctions.
+const WL_AUCTION_TYPES = new Set(['Auction', 'Chinese', 'AuctionWithBIN']);
 function wlIsAuction(item) {
-  return item.listingType === 'Chinese' || item.listingType === 'AuctionWithBIN';
+  return WL_AUCTION_TYPES.has(item.listingType);
 }
 
 // Returns [{ item, i }] where i is the item's index in watchlistItems (modals use that index).
@@ -950,8 +952,11 @@ function wlBuildFilterBar() {
   const hasMeta = watchlistItems.some(it => 'listingType' in it);
   const counts = {};
   watchlistItems.forEach(it => { if (it.seller) counts[it.seller] = (counts[it.seller] || 0) + 1; });
-  const sellers = Object.keys(counts).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  if (wlFilter.seller && !counts[wlFilter.seller]) wlFilter.seller = '';
+  // Only sellers with 2+ saved listings, most listings first (ties alphabetical).
+  const sellers = Object.keys(counts)
+    .filter(s => counts[s] > 1)
+    .sort((a, b) => counts[b] - counts[a] || a.toLowerCase().localeCompare(b.toLowerCase()));
+  if (wlFilter.seller && !sellers.includes(wlFilter.seller)) wlFilter.seller = '';
 
   const bar = document.createElement('div');
   bar.id = 'wl-filters';
@@ -962,10 +967,10 @@ function wlBuildFilterBar() {
     ${hasMeta ? `
     <div class="wl-filter-row">
       <button class="wl-chip${wlFilter.auctionsOnly ? ' on' : ''}" onclick="wlToggleAuctions(this)">Auctions only</button>
-      <select class="wl-select${wlFilter.seller ? ' on' : ''}" onchange="this.classList.toggle('on', !!this.value);wlSetFilter('seller', this.value)">
+      ${sellers.length ? `<select class="wl-select${wlFilter.seller ? ' on' : ''}" onchange="this.classList.toggle('on', !!this.value);wlSetFilter('seller', this.value)">
         <option value="">All sellers</option>
         ${sellers.map(s => `<option value="${wlEsc(s)}"${s === wlFilter.seller ? ' selected' : ''}>${wlEsc(s)} (${counts[s]})</option>`).join('')}
-      </select>
+      </select>` : ''}
       <button id="wl-clear" class="wl-chip" onclick="wlClearFilters()"${wlHasFilters() ? '' : ' hidden'}>Clear</button>
     </div>` : `<div class="wl-filter-hint">Tap refresh to enable auction and seller filters.</div>`}
   `;
