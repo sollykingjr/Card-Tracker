@@ -924,12 +924,17 @@ function wlHasFilters() {
   return wlFilter.auctionsOnly || !!wlFilter.seller || !!wlFilter.q.trim();
 }
 
+// Auction = standard auction ('Chinese') or auction with a Buy It Now option ('AuctionWithBIN').
+function wlIsAuction(item) {
+  return item.listingType === 'Chinese' || item.listingType === 'AuctionWithBIN';
+}
+
 // Returns [{ item, i }] where i is the item's index in watchlistItems (modals use that index).
 function wlVisibleItems() {
   const words = wlFilter.q.toLowerCase().split(/\s+/).filter(Boolean);
   const out = [];
   watchlistItems.forEach((item, i) => {
-    if (wlFilter.auctionsOnly && !item.isAuction) return;
+    if (wlFilter.auctionsOnly && !wlIsAuction(item)) return;
     if (wlFilter.seller && item.seller !== wlFilter.seller) return;
     if (words.length) {
       const hay = wlDecode(`${item.savedTitle || ''} ${item.title || ''}`).toLowerCase();
