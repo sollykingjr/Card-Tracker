@@ -99,6 +99,8 @@ export async function fetchWatchlistFromEbay(env) {
     if (endTime && new Date(endTime).getTime() < now) continue;
 
     const galleryMatch = block.match(/<GalleryURL>(.*?)<\/GalleryURL>/);
+    const sellerMatch = block.match(/<Seller>[\s\S]*?<UserID>(.*?)<\/UserID>/);
+    const listingType = get('ListingType');
 
     rawItems.push({
       itemId: get('ItemID'),
@@ -107,6 +109,10 @@ export async function fetchWatchlistFromEbay(env) {
       currentPrice: get('CurrentPrice'),
       currency: get('CurrencyID'),
       image: galleryMatch ? galleryMatch[1] : null,
+      listingType,
+      isAuction: listingType === 'Chinese',
+      seller: sellerMatch ? sellerMatch[1].trim() : null,
+      bidCount: parseInt(get('BidCount'), 10) || 0,
     });
   }
 
