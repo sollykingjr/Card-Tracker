@@ -911,17 +911,94 @@ async function removeSelectedFromWatchlist() {
 }
 
 // ── Watchlist render ──────────────────────────────────────────────────────────
+// ── Watchlist filters (client-side only; no extra API calls) ──────────────────
+let wlFilter = { auctionsOnly: false, seller: '', q: '' };
+
+function wlDecode(s) {
+  return (s || '').replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+}
+function wlEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function wlHasFilters() {
+  return wlFilter.auctionsOnly || !!wlFilter.seller || !!wlFilter.q.trim();
+}
+
+// Returns [{ item, i }] where i is the item's index in watchlistItems (modals use that index).
+function wlVisibleItems() {
+  const words = wlFilter.q.toLowerCase().split(/\s+/).filter(Boolean);
+  const out = [];
+  watchlistItems.forEach((item, i) => {
+    if (wlFilter.auctionsOnly && !item.isAuction) return;
+    if (wlFilter.seller && item.seller !== wlFilter.seller) return;
+    if (words.length) {
+      const hay = wlDecode(`${item.savedTitle || ''} ${item.title || ''}`).toLowerCase();
+      if (!words.every(w => hay.includes(w))) return;
+    }
+    out.push({ item, i });
+  });
+  return out;
+}
+
+function wlBuildFilterBar() {
+  // Items cached before the backend added these fields have no listingType key at all.
+  const hasMeta = watchlistItems.some(it => 'listingType' in it);
+  const counts = {};
+  watchlistItems.forEach(it => { if (it.seller) counts[it.seller] = (counts[it.seller] || 0) + 1; });
+  const sellers = Object.keys(counts).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  if (wlFilter.seller && !counts[wlFilter.seller]) wlFilter.seller = '';
+
+  const bar = document.createElement('div');
+  bar.id = 'wl-filters';
+  bar.className = 'wl-filter-bar';
+  bar.innerHTML = `
+    <input id="wl-search" class="wl-search" type="search" placeholder="Search titles..." value="${wlEsc(wlFilter.q)}"
+      oninput="wlSetFilter('q', this.value)" autocomplete="off" autocapitalize="off" spellcheck="false">
+    ${hasMeta ? `
+    <div class="wl-filter-row">
+      <button class="wl-chip${wlFilter.auctionsOnly ? ' on' : ''}" onclick="wlToggleAuctions(this)">Auctions only</button>
+      <select class="wl-select${wlFilter.seller ? ' on' : ''}" onchange="this.classList.toggle('on', !!this.value);wlSetFilter('seller', this.value)">
+        <option value="">All sellers</option>
+        ${sellers.map(s => `<option value="${wlEsc(s)}"${s === wlFilter.seller ? ' selected' : ''}>${wlEsc(s)} (${counts[s]})</option>`).join('')}
+      </select>
+      <button id="wl-clear" class="wl-chip" onclick="wlClearFilters()"${wlHasFilters() ? '' : ' hidden'}>Clear</button>
+    </div>` : `<div class="wl-filter-hint">Tap refresh to enable auction and seller filters.</div>`}
+  `;
+  return bar;
+}
+
+function wlSetFilter(key, val) {
+  wlFilter[key] = val;
+  wlRenderCards();
+}
+function wlToggleAuctions(btn) {
+  wlFilter.auctionsOnly = !wlFilter.auctionsOnly;
+  btn.classList.toggle('on', wlFilter.auctionsOnly);
+  wlRenderCards();
+}
+function wlClearFilters() {
+  wlFilter = { auctionsOnly: false, seller: '', q: '' };
+  renderWatchlist();
+}
+
+// Keeps the select-mode label and action bar in step after the visible set changes.
+function wlSyncSelectionUI() {
+  const lbl = document.querySelector('#wl-toolbar .wl-toolbar-label');
+  if (lbl && watchlistSelectMode) lbl.textContent = `${watchlistSelected.size} selected`;
+  updateWatchlistActionBar();
+}
+
+// Full render: toolbar + filter bar + cards. Used on load, refresh, select-mode toggle, removals.
 function renderWatchlist() {
   const list = document.getElementById('list');
   const cnt  = document.getElementById('cntlbl');
 
   if (!watchlistItems.length) {
+    document.getElementById('wl-filters')?.remove();
     list.innerHTML = '<div class="empty-msg">No active watchlist items</div>';
     cnt.textContent = '0 items';
     return;
   }
-
-  cnt.textContent = `${watchlistItems.length} item${watchlistItems.length===1?'':'s'}`;
 
   document.getElementById('wl-toolbar')?.remove();
   const toolbar = document.createElement('div');
@@ -933,7 +1010,36 @@ function renderWatchlist() {
   `;
   list.parentNode.insertBefore(toolbar, list);
 
-  const cardsHtml = watchlistItems.map((item, i) => {
+  document.getElementById('wl-filters')?.remove();
+  list.parentNode.insertBefore(wlBuildFilterBar(), list);
+
+  list.classList.add('wl-grid');
+  wlRenderCards();
+}
+
+// Cards only: used while typing/filtering so the search box keeps focus.
+function wlRenderCards() {
+  const list = document.getElementById('list');
+  const cnt  = document.getElementById('cntlbl');
+  const visible = wlVisibleItems();
+  const total = watchlistItems.length;
+
+  cnt.textContent = visible.length === total
+    ? `${total} item${total===1?'':'s'}`
+    : `${visible.length} of ${total} items`;
+  document.getElementById('wl-clear')?.toggleAttribute('hidden', !wlHasFilters());
+
+  // Never leave hidden items selected: "Remove Selected" must only act on what's on screen.
+  const visIds = new Set(visible.map(v => v.item.itemId));
+  for (const id of [...watchlistSelected]) if (!visIds.has(id)) watchlistSelected.delete(id);
+
+  if (!visible.length) {
+    list.innerHTML = '<div class="empty-msg" style="grid-column:1/-1">No watchlist items match your filters</div>';
+    wlSyncSelectionUI();
+    return;
+  }
+
+  const cardsHtml = visible.map(({ item, i }) => {
     const { text: cdText, cls: cdCls } = getCountdown(item.endTime);
     const price = item.currentPrice ? `$${parseFloat(item.currentPrice).toFixed(2)}` : '';
     const isSelected = watchlistSelected.has(item.itemId);
@@ -969,9 +1075,9 @@ function renderWatchlist() {
         style="padding:10px 16px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Remove Selected</button>
     </div>`;
 
-  list.classList.add('wl-grid');
   list.innerHTML = cardsHtml + actionBarHtml;
 
+  wlSyncSelectionUI();
   startCountdownTick();
 }
 
