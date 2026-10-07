@@ -2,8 +2,8 @@
 const WORKER = API_BASE;
 
 async function addToWatch(itemId, btn) {
-  btn.disabled = true;
-  btn.textContent = '...';
+  btn.style.minWidth = btn.getBoundingClientRect().width + 'px';  // ☆ and ✓ differ by a pixel or two; lock the size
+  btn.disabled = true;  // greyed out while the request runs; label unchanged so the button keeps its size
   try {
     const res = await fetch(`${WORKER}/watch-add`, {
       method: 'POST',
@@ -12,7 +12,8 @@ async function addToWatch(itemId, btn) {
     });
     const data = await res.json();
     if (data.ok) {
-      btn.textContent = '✓ Watching';
+      // Same label length as before so the button doesn't resize; it stays disabled, which greys it out.
+      btn.textContent = '✓ Watch';
     } else {
       btn.textContent = '☆ Watch';
       btn.disabled = false;
@@ -1365,6 +1366,14 @@ function srGetScrolledPast() {
     .filter(item => item && !item.seen);
 }
 
+// Search Options (Card Ladder / COMC / eBay) for a card on screen: same menu as the Watchlist cards.
+function srOpenSearchOptions(idx) {
+  const item = srRenderedItems[idx];
+  if (!item) return;
+  const itemId = item.url.match(/itm\/(\d+)/)?.[1];
+  showSearchOptionsModal(item.title, itemId ? 'wl:' + itemId : 'sr:' + item.url);
+}
+
 function renderDigestItems(allItems, sortMode, filterText, key, showAll = false) {
   const list = document.getElementById('sr-digest-list');
   if (!list) return;
@@ -1421,6 +1430,7 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
         <div class="sr-listing-bottom">
           <div class="sr-listing-price"><span style="color:${priceColor}">$${item.price}</span>${evHtml}</div>
           ${itemId ? `<button class="sr-listing-link sr-listing-copy" onclick="copyText('${itemId}', this)">Copy ID</button>` : ''}
+          <button class="sr-listing-search" title="Search Options" onclick="srOpenSearchOptions(${idx})">🔍<span class="sr-btn-full"> Search</span></button>
           ${item.type === 'Auction' ? `<button class="sr-listing-snipe" onclick="openSnipeModal('${item.url.match(/itm\/(\d+)/)?.[1]}')">🎯 Snipe</button>` : ''}
           <button class="sr-listing-watch" onclick="addToWatch('${item.url.match(/itm\/(\d+)/)?.[1]}', this)">☆ Watch</button>
        </div>

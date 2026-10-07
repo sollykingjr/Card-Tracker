@@ -1239,15 +1239,19 @@ body {
   .sr-wrap { padding: 20px 22px 60px; }
   #sr-digest-list {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: 10px;
   }
   .sr-listing-img {
     max-height: 140px;
   }
 }
-/* 3 columns once there's room; iPad portrait stays at 2 so the one-line button row fits */
-@media (min-width: 1100px) {
+/* Columns by width, so each card is wide enough for the one-line price + button row:
+   1 column on iPad portrait, 2 on mid-size iPads / small laptops, 3 on iPad Pro landscape and desktop */
+@media (min-width: 960px) {
+  #sr-digest-list { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1366px) {
   #sr-digest-list { grid-template-columns: repeat(3, 1fr); }
 }
 /* ── Search Results Digest View ───────────────────────────────────────────── */
@@ -1308,7 +1312,8 @@ body {
 }
 .sr-listing-snipe:hover { opacity: .8; }
 
-.sr-listing-watch {
+.sr-listing-watch,
+.sr-listing-search {
   font-size: 12px;
   font-weight: 600;
   color: var(--tx2);
@@ -1318,31 +1323,29 @@ body {
   background: var(--surf2);
   cursor: pointer;
 }
-.sr-listing-watch:hover { opacity: .8; }
-.sr-listing-watch:disabled { opacity: .5; cursor: default; }
+.sr-listing-watch:hover, .sr-listing-search:hover { opacity: .8; }
+.sr-listing-watch:disabled { opacity: .5; cursor: default; }  /* greyed out once watched */
 
 /* All widths: price + Copy ID / Snipe / Watch on a single row (Exp value tucked under the price) */
 .sr-listing-bottom { gap: 6px; }  /* still wraps on very narrow screens rather than overlapping */
 .sr-listing-price { flex: 1 1 auto; white-space: nowrap; }
 .sr-listing-ev { display: block; font-size: 9px; font-weight: 600; opacity: .75; letter-spacing: -.02em; }
-.sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 9px; white-space: nowrap; flex-shrink: 0; }
+.sr-listing-link, .sr-listing-snipe, .sr-listing-watch, .sr-listing-search { padding: 5px 9px; white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 767px) { .sr-btn-full { display: none; } }  /* phones: icon only, keeps the row on one line */
+
 /* Tablets / small laptops: cards are narrower than on a big desktop, so use the same tight sizing as small phones */
-@media (min-width: 768px) and (max-width: 1399px) {
+@media (min-width: 768px) and (max-width: 1599px) {
   .sr-listing-card { padding: 13px 10px; }
   .sr-listing-bottom { gap: 4px; }
   .sr-listing-price { font-size: 13px; }
-  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 5px; font-size: 11px; }
-}
-/* Narrowest tablets (768px): not enough width for 2 columns with the one-line row */
-@media (min-width: 768px) and (max-width: 799px) {
-  #sr-digest-list { grid-template-columns: 1fr; }
+  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch, .sr-listing-search { padding: 5px 5px; font-size: 11px; }
 }
 @media (max-width: 420px) {
   .sr-listing-price { font-size: 14px; }
-  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 8px; }
+  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch, .sr-listing-search { padding: 5px 8px; }
 }
 @media (max-width: 380px) {
-  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch { padding: 5px 7px; font-size: 11px; }
+  .sr-listing-link, .sr-listing-snipe, .sr-listing-watch, .sr-listing-search { padding: 5px 7px; font-size: 11px; }
 }
 
 .sr-listing-img {

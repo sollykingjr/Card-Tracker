@@ -805,14 +805,19 @@ function wlOpenSearch(platform) {
 }
 
 function openSearchOptionsModal(itemId, i) {
-  const existing = document.getElementById('searchopts-modal');
-  if (existing) existing.remove();
-
   const item = watchlistItems[i];
   const rawTitle = item.savedTitle || item.title || '';
   const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+  showSearchOptionsModal(safeTitle, 'wl:' + item.itemId);
+}
 
-  wlSearchCtx = { text: safeTitle, key: 'wl:' + item.itemId };
+// Shared by the Watchlist and Search Results cards. `key` is where the edited search text is remembered
+// ('wl:<itemId>' on both pages, so an edit made on one shows up on the other).
+function showSearchOptionsModal(text, key) {
+  const existing = document.getElementById('searchopts-modal');
+  if (existing) existing.remove();
+
+  wlSearchCtx = { text, key };
 
   const modal = document.createElement('div');
   modal.id = 'searchopts-modal';
