@@ -760,11 +760,9 @@ async function submitSnipe(itemId, btn) {
   btn.textContent = '✓ Copied!';
   setTimeout(() => {
     document.getElementById('snipe-modal')?.remove();
-    // Home-screen web apps open links in the in-app browser (no saved logins), where the deep link errors;
-    // use the Gixen home page there. Normal browser tabs (desktop or mobile Safari) keep the direct link.
-    const isStandalone = navigator.standalone === true ||
-      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    window.open(isStandalone ? 'https://www.gixen.com' : 'https://www.gixen.com/main/home_2.php', '_blank');
+    // Same as the Card Ladder/COMC searches: from the iOS Home Screen app this leaves the in-app viewer
+    // (no saved logins) for real Safari; everywhere else it's a normal new tab.
+    ctOpenExternal('https://www.gixen.com/main/home_2.php');
   }, 800);
 }
 
