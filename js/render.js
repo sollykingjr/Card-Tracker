@@ -1062,7 +1062,9 @@ function wlRenderCards() {
     const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
 
     return `<div class="wl-card${isSelected ? ' wl-selected' : ''}" ${cardClickAttr}>
-      ${item.image ? `<img class="wl-img" src="${item.image}" alt="">` : ''}
+      ${item.image ? (watchlistSelectMode
+        ? `<img class="wl-img" src="${item.image}" alt="">`  /* Select mode: tapping the photo selects the card, like the rest of it */
+        : `<img class="wl-img wl-img-link" src="${item.image}" alt="" onclick="window.open('${ebayUrl}','_blank')">`) : ''}
       <div class="wl-top">
         <span class="wl-countdown ${cdCls}" data-end="${item.endTime||''}">${cdText}</span>
         ${price ? `<span class="wl-price">${price}</span>` : ''}

@@ -1412,14 +1412,15 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
       priceColor = pct <= -10 ? '#4ade80' : pct >= 10 ? '#f87171' : '#eab308';
       evHtml = ` <span class="sr-listing-ev" style="color:#fff">Exp: ${fmtMoney(ev)}</span>`;
     }
+    const itemId = item.url.match(/itm\/(\d+)/)?.[1];
     return `
       <div class="sr-listing-card" data-i="${idx}">
-        ${item.image ? `<img class="sr-listing-img" src="${item.image}" alt="${item.title}" loading="lazy">` : ''}
-        <div class="sr-listing-title">${item.title}</div>
+        ${item.image ? `<a class="sr-listing-imglink" href="${item.url}" target="_blank" rel="noopener"><img class="sr-listing-img" src="${item.image}" alt="${item.title}" loading="lazy"></a>` : ''}
+        <a class="sr-listing-title" href="${item.url}" target="_blank" rel="noopener">${item.title}</a>
         <div class="sr-listing-meta">${item.type} · Listed ${date}${endDate ? ` · Ends ${endDate}` : ''}</div>
         <div class="sr-listing-bottom">
           <div class="sr-listing-price"><span style="color:${priceColor}">$${item.price}</span>${evHtml}</div>
-             <a href="${item.url}" target="_blank" class="sr-listing-link"><span class="sr-lnk-full">View on </span>eBay →</a>
+          ${itemId ? `<button class="sr-listing-link sr-listing-copy" onclick="copyText('${itemId}', this)">Copy ID</button>` : ''}
           ${item.type === 'Auction' ? `<button class="sr-listing-snipe" onclick="openSnipeModal('${item.url.match(/itm\/(\d+)/)?.[1]}')">🎯 Snipe</button>` : ''}
           <button class="sr-listing-watch" onclick="addToWatch('${item.url.match(/itm\/(\d+)/)?.[1]}', this)">☆ Watch</button>
        </div>
