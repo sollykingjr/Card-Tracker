@@ -701,6 +701,13 @@ function ctPickerHTML(key, scope) {
   `;
 }
 
+// What you actually took back on a sold card: sale price minus tax, fees and shipping (= net profit + cost).
+// One number everywhere: row tiles, card tiles, the "Sale Price" sort and the card modal's Sale price tile
+// (and the breakdown's "Net proceeds" row). c.salePrice itself is the gross amount the buyer paid.
+function ctSaleProceeds(c) {
+  return safeNum(c.netProfit, true) + safeNum(c.purchasePrice);
+}
+
 function ctDateLine(c) {
   const pDate = fmtShortDate(c.datePurchased);
   const sDate = c.salePrice ? fmtShortDate(c.transactionDate) : null;
@@ -733,7 +740,7 @@ function ctListRowHTML(c) {
         </div>
         <div style="text-align:right">
           <div style="font-size:12px;color:var(--tx3);font-weight:600">Sale Price</div>
-          <div style="font-size:16px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+          <div style="font-size:16px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + ctSaleProceeds(c).toFixed(2) : 'Not sold'}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px">
@@ -767,7 +774,7 @@ function ctCardBoxHTML(c) {
           </div>
           <div style="text-align:right">
             <div style="font-size:8px;color:var(--tx3);font-weight:600">Sale</div>
-            <div style="font-size:11px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + safeNum(c.salePrice).toFixed(2) : 'Not sold'}</div>
+            <div style="font-size:11px;color:var(--tx);font-weight:700">${c.salePrice ? '$' + ctSaleProceeds(c).toFixed(2) : 'Not sold'}</div>
           </div>
         </div>
       </div>
@@ -799,7 +806,11 @@ function ctSortMatches(matches) {
   if (ctSort === 'purchaseDate') arr.sort((a, b) => dir * (new Date(a.datePurchased || 0) - new Date(b.datePurchased || 0)));
   else if (ctSort === 'saleDate') arr.sort((a, b) => dir * (new Date(a.transactionDate || 0) - new Date(b.transactionDate || 0)));
   else if (ctSort === 'purchasePrice') arr.sort((a, b) => dir * (safeNum(a.purchasePrice) - safeNum(b.purchasePrice)));
-  else if (ctSort === 'salePrice') arr.sort((a, b) => dir * (safeNum(a.salePrice) - safeNum(b.salePrice)));
+  else if (ctSort === 'salePrice') {
+    // Sort by the number the tiles show (what you took back); unsold cards count as 0
+    const proceeds = c => c.salePrice ? ctSaleProceeds(c) : 0;
+    arr.sort((a, b) => dir * (proceeds(a) - proceeds(b)));
+  }
   return arr;
 }
 
@@ -950,9 +961,8 @@ function ctOpenCard(idx) {
       <div class="scard"><div class="slbl">Purchase price</div><div class="sval">$${safeNum(c.purchasePrice).toFixed(2)}</div></div>
       ${(() => {
         if (c.salePrice) {
-          // Shown as net proceeds (sale minus tax, fees and shipping), same as the breakdown's "Net proceeds" row
-          const netProceeds = safeNum(c.netProfit, true) + safeNum(c.purchasePrice);
-          return `<div class="scard"><div class="slbl">Sale price</div><div class="sval">$${netProceeds.toFixed(2)}</div></div>`;
+          // Shown as net proceeds (sale minus tax, fees and shipping), same as the row tiles and the breakdown's "Net proceeds" row
+          return `<div class="scard"><div class="slbl">Sale price</div><div class="sval">$${ctSaleProceeds(c).toFixed(2)}</div></div>`;
         }
         if (ctIsInHand(c)) {
           const ep =ctTargetPrice(c.purchasePrice, 'ebay');
