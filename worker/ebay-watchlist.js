@@ -44,21 +44,11 @@ export async function handleCallback(request, env) {
 export const WATCHLIST_CACHE_KEY = 'watchlist-cache';
 export const WATCHLIST_CACHE_TTL = 1200; // 20 min — slightly longer than the 15-min cron, so a missed run falls back to live rather than serving stale data indefinitely
 
-export async function fetchWatchlistFromEbay(env) {
-  let accessToken = await env.CACHE.get('ebay_access_token');
+const WATCHLIST_PAGE_SIZE = 200; // eBay's maximum entries per page for GetMyeBayBuying
+const WATCHLIST_MAX_PAGES = 5;    // safety stop (1,000 items), far above eBay's watch list limit
 
-  if (!accessToken) {
-    const refreshToken = await env.CACHE.get('ebay_refresh_token');
-    if (!refreshToken) {
-      return { error: 'not_authenticated', authUrl: '/auth' };
-    }
-    accessToken = await refreshAccessToken(refreshToken, env);
-    if (!accessToken) {
-      return { error: 'refresh_failed', authUrl: '/auth' };
-    }
-  }
-
-  const watchRes = await fetch('https://api.ebay.com/ws/api.dll', {
+async function fetchWatchlistPage(accessToken, page) {
+  const res = await fetch('https://api.ebay.com/ws/api.dll', {
     method: 'POST',
     headers: {
       'X-EBAY-API-SITEID': '0',
@@ -75,45 +65,87 @@ export async function fetchWatchlistFromEbay(env) {
         <WatchList>
           <Include>true</Include>
           <Pagination>
-            <EntriesPerPage>200</EntriesPerPage>
-            <PageNumber>1</PageNumber>
+            <EntriesPerPage>${WATCHLIST_PAGE_SIZE}</EntriesPerPage>
+            <PageNumber>${page}</PageNumber>
           </Pagination>
         </WatchList>
         <DetailLevel>ReturnAll</DetailLevel>
       </GetMyeBayBuyingRequest>`
   });
+  const xml = await res.text();
+  return { xml, ok: res.ok && /<Ack>(Success|Warning)<\/Ack>/.test(xml) };
+}
 
-  const xml = await watchRes.text();
+export async function fetchWatchlistFromEbay(env) {
+  let accessToken = await env.CACHE.get('ebay_access_token');
+
+  if (!accessToken) {
+    const refreshToken = await env.CACHE.get('ebay_refresh_token');
+    if (!refreshToken) {
+      return { error: 'not_authenticated', authUrl: '/auth' };
+    }
+    accessToken = await refreshAccessToken(refreshToken, env);
+    if (!accessToken) {
+      return { error: 'refresh_failed', authUrl: '/auth' };
+    }
+  }
+
+  // eBay returns at most 200 watch list entries per call, so keep fetching pages until they're all in.
   const now = Date.now();
-  const itemMatches = xml.matchAll(/<Item>([\s\S]*?)<\/Item>/g);
-
   const rawItems = [];
-  for (const match of itemMatches) {
-    const block = match[1];
-        const get = (tag) => {
-      const m = block.match(new RegExp(`<${tag}[^>]*>(.*?)<\/${tag}>`));
-      return m ? m[1] : null;
-    };
+  const seenIds = new Set();
+  let partial = false;
+  let totalPages = null;
 
-    const endTime = get('EndTime');
-    if (endTime && new Date(endTime).getTime() < now) continue;
+  for (let page = 1; page <= WATCHLIST_MAX_PAGES; page++) {
+    const { xml, ok } = await fetchWatchlistPage(accessToken, page);
+    // A later page failing must not look like "the rest of the list is gone": hand back what we have, flagged partial.
+    if (page > 1 && !ok) { partial = true; break; }
 
-    const galleryMatch = block.match(/<GalleryURL>(.*?)<\/GalleryURL>/);
-    const sellerMatch = block.match(/<Seller>[\s\S]*?<UserID>(.*?)<\/UserID>/);
-    const listingType = get('ListingType');
+    if (page === 1) {
+      const section = xml.match(/<WatchList>([\s\S]*?)<\/WatchList>/);
+      const pagesMatch = (section ? section[1] : xml).match(/<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/);
+      totalPages = pagesMatch ? parseInt(pagesMatch[1], 10) : null;
+    }
 
-    rawItems.push({
-      itemId: get('ItemID'),
-      title: get('Title'),
-      endTime,
-      currentPrice: get('CurrentPrice'),
-      currency: get('CurrencyID'),
-      image: galleryMatch ? galleryMatch[1] : null,
-      listingType,
-      isAuction: listingType === 'Chinese',
-      seller: sellerMatch ? sellerMatch[1].trim() : null,
-      bidCount: parseInt(get('BidCount'), 10) || 0,
-    });
+    const blocks = [...xml.matchAll(/<Item>([\s\S]*?)<\/Item>/g)].map(m => m[1]);
+
+    for (const block of blocks) {
+      const get = (tag) => {
+        const m = block.match(new RegExp(`<${tag}[^>]*>(.*?)<\/${tag}>`));
+        return m ? m[1] : null;
+      };
+
+      const itemId = get('ItemID');
+      if (itemId) {
+        if (seenIds.has(itemId)) continue; // the list can shift between page calls
+        seenIds.add(itemId);
+      }
+
+      const endTime = get('EndTime');
+      if (endTime && new Date(endTime).getTime() < now) continue;
+
+      const galleryMatch = block.match(/<GalleryURL>(.*?)<\/GalleryURL>/);
+      const sellerMatch = block.match(/<Seller>[\s\S]*?<UserID>(.*?)<\/UserID>/);
+      const listingType = get('ListingType');
+
+      rawItems.push({
+        itemId,
+        title: get('Title'),
+        endTime,
+        currentPrice: get('CurrentPrice'),
+        currency: get('CurrencyID'),
+        image: galleryMatch ? galleryMatch[1] : null,
+        listingType,
+        isAuction: listingType === 'Chinese',
+        seller: sellerMatch ? sellerMatch[1].trim() : null,
+        bidCount: parseInt(get('BidCount'), 10) || 0,
+      });
+    }
+
+    // Another page if eBay says there is one; if it didn't say, a completely full page means there may be more.
+    const more = totalPages != null ? page < totalPages : blocks.length >= WATCHLIST_PAGE_SIZE;
+    if (!more || blocks.length === 0) break;
   }
 
   const savedTitles = await Promise.all(
@@ -132,7 +164,7 @@ export async function fetchWatchlistFromEbay(env) {
     return new Date(a.endTime) - new Date(b.endTime);
   });
 
-  return { items, count: items.length };
+  return partial ? { items, count: items.length, partial: true } : { items, count: items.length };
 }
 
 export async function refreshWatchlistCache(env) {
@@ -143,6 +175,7 @@ export async function refreshWatchlistCache(env) {
     }
     return; // don't overwrite a good cache with an auth failure
   }
+  if (data.partial) return; // a page failed: keep the last complete copy rather than caching a half-loaded list
   await env.CACHE.put(WATCHLIST_CACHE_KEY, JSON.stringify(data), { expirationTtl: WATCHLIST_CACHE_TTL });
 }
 
@@ -164,7 +197,7 @@ export async function handleWatchlist(request, env, cors) {
     });
   }
 
-  await env.CACHE.put(WATCHLIST_CACHE_KEY, JSON.stringify(data), { expirationTtl: WATCHLIST_CACHE_TTL });
+  if (!data.partial) await env.CACHE.put(WATCHLIST_CACHE_KEY, JSON.stringify(data), { expirationTtl: WATCHLIST_CACHE_TTL });
   return new Response(JSON.stringify(data), {
     headers: { ...cors, 'Content-Type': 'application/json' }
   });
