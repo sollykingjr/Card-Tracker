@@ -763,7 +763,7 @@ async function submitSnipe(itemId, btn) {
     // Same as the Card Ladder/COMC searches: from the iOS Home Screen app this leaves the in-app viewer
     // (no saved logins) for real Safari; everywhere else it's a normal new tab.
     // Named tab 'gixen': a Gixen tab this app opened earlier gets reused and focused instead of a new one.
-    ctOpenExternal('https://www.gixen.com/main/home_2.php', 'gixen');
+    ctOpenExternal('https://www.gixen.com/main/home_2.php', 'gixen', true);
   }, 800);
 }
 

@@ -901,10 +901,21 @@ function ctIsIOSHomeScreenApp() {
 // tabName: reuse one tab per site (e.g. 'cardladder') instead of opening a new one each time.
 // Browsers only reuse a tab this app opened and that's still open; otherwise a new tab opens.
 // (From the iPhone Home Screen app, Safari always opens a new tab — iOS doesn't allow targeting one.)
-function ctOpenExternal(url, tabName) {
+function ctOpenExternal(url, tabName, keepIfOpen) {
   if (ctIsIOSHomeScreenApp() && /^https:\/\//.test(url)) {
     window.location.href = 'x-safari-' + url;
   } else {
+    if (tabName && keepIfOpen) {
+      // Look up the named tab without navigating it. If it already exists (cross-origin, so reading its
+      // location throws) just bring it forward; if it was just created (blank), load the URL into it.
+      const w = window.open('', tabName);
+      let fresh = false;
+      try { fresh = !w || w.location.href === 'about:blank'; } catch (e) { fresh = false; }
+      if (fresh && w) w.location.href = url;
+      else if (!w) window.open(url, tabName);
+      if (w) { try { w.focus(); } catch (e) {} }
+      return;
+    }
     const w = window.open(url, tabName || '_blank');
     if (w && tabName) { try { w.focus(); } catch (e) {} }
   }
