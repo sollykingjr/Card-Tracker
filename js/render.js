@@ -729,42 +729,14 @@ function openPlayerFromPortfolio(nameLower) {
   if(c) showDetail({name:c.player.replace(/\b\w/g,l=>l.toUpperCase()),team:'',pos:'',aff:''},'player');
 }
 
-// ── Snipe modal ───────────────────────────────────────────────────────────────
+// ── Snipe ─────────────────────────────────────────────────────────────────────
+// No confirmation popup: copy the Item ID, then go straight to Gixen.
 function openSnipeModal(itemId) {
-  const existing = document.getElementById('snipe-modal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'snipe-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
-  modal.innerHTML = `
-    <div style="background:var(--surf);border-radius:14px;padding:20px;width:100%;max-width:320px">
-      <div style="font-size:15px;font-weight:600;margin-bottom:4px">Set Snipe</div>
-      <div style="font-size:12px;color:var(--tx2);margin-bottom:14px">Item ID: ${itemId}</div>
-      <div style="font-size:13px;color:var(--tx2);margin-bottom:14px">Item ID will be copied to your clipboard and Gixen will open.</div>
-      <div style="display:flex;gap:8px">
-        <button onclick="document.getElementById('snipe-modal').remove()"
-          style="flex:1;padding:10px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx2);font-size:14px;cursor:pointer;font-family:inherit">Cancel</button>
-        <button id="snipe-confirm-btn" onclick="submitSnipe('${itemId}', this)"
-          style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--acc);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Set Snipe</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.getElementById('snipe-bid')?.focus();
-}
-
-async function submitSnipe(itemId, btn) {
-  await navigator.clipboard.writeText(itemId);
-  btn.textContent = '✓ Copied!';
-  setTimeout(() => {
-    document.getElementById('snipe-modal')?.remove();
-    // Same as the Card Ladder/COMC searches: from the iOS Home Screen app this leaves the in-app viewer
-    // (no saved logins) for real Safari; everywhere else it's a normal new tab.
-    // Named tab 'gixen': a Gixen tab this app opened earlier gets reused and focused instead of a new one.
-    ctOpenExternal('https://www.gixen.com/main/home_2.php', 'gixen', true);
-  }, 800);
+  try { navigator.clipboard.writeText(String(itemId)).catch(() => {}); } catch (e) {}
+  // Same as the Card Ladder/COMC searches: from the iOS Home Screen app this leaves the in-app viewer
+  // (no saved logins) for real Safari. Named tab 'gixen': a Gixen tab this app opened earlier is
+  // switched to (not reloaded) instead of opening a new one.
+  ctOpenExternal('https://www.gixen.com/main/home_2.php', 'gixen', true);
 }
 
 // ── Edit Name modal ────────────────────────────────────────────────────────────
