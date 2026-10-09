@@ -804,6 +804,17 @@ function wlOpenSearch(platform) {
   openSearchEditor({ platform, text: wlSearchCtx.text, key: wlSearchCtx.key });
 }
 
+// Copy Name: copies the same name the searches start from, then closes the menu
+function wlCopyName(btn) {
+  if (!wlSearchCtx || !navigator.clipboard) return;
+  navigator.clipboard.writeText(wlSearchCtx.text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.style.background = 'var(--b5-bg)';
+    btn.style.color = 'var(--b5-tx)';
+    setTimeout(() => document.getElementById('searchopts-modal')?.remove(), 700);
+  }).catch(() => { btn.textContent = 'Copy failed'; });
+}
+
 function openSearchOptionsModal(itemId, i) {
   const item = watchlistItems[i];
   const rawTitle = item.savedTitle || item.title || '';
@@ -832,6 +843,8 @@ function showSearchOptionsModal(text, key) {
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">COMC</button>
         <button onclick="wlOpenSearch('ebay')"
           style="padding:12px;border-radius:8px;border:.5px solid var(--bdr2);background:none;color:var(--tx);font-size:14px;cursor:pointer;font-family:inherit;text-align:left">eBay Search</button>
+        <button onclick="wlCopyName(this)"
+          style="padding:12px;border-radius:8px;border:.5px solid var(--acc-bdr);background:var(--acc-bg);color:var(--acc);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left">Copy Name</button>
       </div>
     </div>
   `;
