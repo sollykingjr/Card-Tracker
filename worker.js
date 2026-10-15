@@ -17,6 +17,7 @@ import { handleScanIndexVersion, handleScanIndexGet, handleScanIndexRebuild, han
 import { handleEbayPublish, handleEbayListingStatus, handleEbayFeePreview, handleEbayDiscard } from './worker/ebay-publish.js';
 import { handleEbayMyListings, handleEbayListingDetail, handleEbayListingUpdate, handleEbayListingEnd } from './worker/ebay-listings.js';
 import { handleCardDb, runCardSyncJobs, runBackupJob } from './worker/card-db.js';
+import { handleProspects } from './worker/prospects.js';
 
 
 
@@ -149,6 +150,8 @@ export default {
     if (path === '/ebay-listing-end' && request.method === 'POST') return handleEbayListingEnd(request, env, cors);
     if (path === '/rate-limit-check' && request.method === 'GET') return handleRateLimitCheck(env, cors);
     if (path === '/mi-test' && request.method === 'GET') return handleMarketplaceInsightsTest(env, cors);
+    const prospectRes = await handleProspects(request, env, cors);
+    if (prospectRes) return prospectRes;
     const cardDbRes = await handleCardDb(request, env, cors);
     if (cardDbRes) return cardDbRes;
     return new Response('card-app worker running', { headers: cors });
