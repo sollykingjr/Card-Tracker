@@ -164,6 +164,7 @@ function pibPostHTML(p) {
         <input class="intake-in" type="date" style="margin-top:0;max-width:150px" value="${pibEsc(ex.published_date || '')}" onchange="pibSetPost('${p.post_id}','published_date',this.value)">
       </div>
       ${ex.summary ? `<div class="pib-sum">${pibEsc(ex.summary)}</div>` : ''}
+      ${pibFlagsHTML(p)}
       ${players.map((pl, i) => pibPlayerHTML(p, pl, i)).join('')}
       <div class="intake-err" id="pib-e-${p.post_id}"></div>
       <div class="intake-row">
@@ -172,6 +173,18 @@ function pibPostHTML(p) {
       </div>
     </div>`;
 }
+
+// Review checks from the server: warnings (check before confirming) and notes.
+function pibFlagsHTML(p) {
+  const fl = p.flags || [];
+  if (!fl.length) return '<div class="pib-flags ok">Checks passed: nothing unusual found.</div>';
+  const warns = fl.filter(f => f.level === 'warn').length;
+  return `<div class="pib-flags${warns ? ' warn' : ''}">
+    <div class="pib-flags-hd">${warns ? `${warns} thing${warns === 1 ? '' : 's'} to check before confirming` : 'Notes'}</div>
+    ${fl.map(f => `<div class="pib-flag ${f.level}">${f.level === 'warn' ? '⚠ ' : '• '}${pibEsc(f.text)}</div>`).join('')}
+  </div>`;
+}
+const pibFlaggedNames = p => new Set((p.flags || []).filter(f => f.level === 'warn').flatMap(f => f.players || []));
 
 function pibPlayerHTML(p, pl, i) {
   const m = (p.matches || [])[i] || {};
@@ -200,7 +213,7 @@ function pibPlayerHTML(p, pl, i) {
     <details class="pib-player" id="pib-pl-${id}-${i}">
       <summary>
         <input type="checkbox" checked onclick="event.stopPropagation()" onchange="pibSetInclude('${id}',${i},this.checked)">
-        <b>${pibEsc(pl.name)}</b> <span class="intake-meta" style="margin:0">${pibEsc(pl.team || '')}${pl.age ? ' · ' + pl.age : ''}</span> ${badge}
+        <b>${pibEsc(pl.name)}</b> <span class="intake-meta" style="margin:0">${pibEsc(pl.team || '')}${pl.age ? ' · ' + pl.age : ''}</span> ${badge}${pibFlaggedNames(p).has(pl.name) ? '<span class="pib-badge warn">check</span>' : ''}
         ${pl.take && pl.take.stance !== 'none' ? `<span class="pib-badge stance">${pibEsc(pl.take.stance)}</span>` : ''}${pl.action ? `<span class="pib-badge stance">${pibEsc(pl.action)}</span>` : ''}
       </summary>
       ${ranks ? `<div class="intake-meta">${ranks}</div>` : ''}

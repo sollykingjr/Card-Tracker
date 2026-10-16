@@ -1729,6 +1729,10 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .pib-player { border-top: 1px solid var(--bdr); padding: 8px 0; }
 .pib-player summary { cursor: pointer; list-style: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
 .pib-player summary::-webkit-details-marker { display: none; }
+.pib-flags { margin: 8px 0; padding: 8px 10px; border-radius: 10px; background: var(--surf2); font-size: 12px; line-height: 1.45; color: var(--tx2); }
+.pib-flags.warn { background: var(--b3-bg); color: var(--b3-tx); }
+.pib-flags-hd { font-weight: 700; margin-bottom: 4px; }
+.pib-flag { margin-top: 3px; }
 .pib-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; background: var(--surf2); color: var(--tx2); font-size: 10px; font-weight: 700; }
 .pib-badge.new { background: var(--acc-bg); color: var(--acc); }
 .pib-badge.warn { background: var(--b3-bg); color: var(--b3-tx); }

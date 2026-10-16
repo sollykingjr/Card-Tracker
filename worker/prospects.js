@@ -281,14 +281,71 @@ export async function submitPost(env, { text, images = [], title = null, publish
   return { postId, duplicate: false, status: 'pending', extraction, usage };
 }
 
+// Checks run on every pending post so odd extractions are visible before he confirms. Returns [{ level, text, players }].
+const BUILTIN_LISTS = ['top 200 hitters', 'top 100 pitchers', 'hobby rank', 'mlb', 'dd', 'roto', 'sts', 'ba'];
+export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
+  const flags = [], players = ex.players || [];
+  const add = (level, text, names = []) => flags.push({ level, text, players: [...new Set(names)] });
+  const list = (names, n = 8) => names.slice(0, n).join(', ') + (names.length > n ? ` and ${names.length - n} more` : '');
+  if (!players.length) { add('warn', 'No players were extracted from this post. Reject it and send it again, or check the screenshots.'); return flags; }
+
+  // list names we have never seen before
+  const known = new Set([...BUILTIN_LISTS, ...knownLists.map(x => String(x).toLowerCase())]);
+  const unknown = new Map();
+  for (const p of players) for (const r of p.rankings || []) if (!known.has(r.list.toLowerCase())) unknown.set(r.list, [...(unknown.get(r.list) || []), p.name]);
+  for (const [l, names] of unknown) add('warn', `New rank list "${l}" (${names.length} player${names.length === 1 ? '' : 's'}). Not one of the lists on file.`, names);
+
+  // the post's own list: ranks past its size, repeats, gaps, players with no rank
+  const own = ownListFromTitle(ex.title);
+  if (own) {
+    const ranked = players.map(p => ({ p, r: (p.rankings || []).find(x => x.list === own.list) })).filter(x => x.r);
+    const unranked = players.filter(p => !(p.rankings || []).some(x => x.list === own.list));
+    const over = ranked.filter(x => x.r.rank > own.cap || x.r.rank < 1).map(x => x.p.name);
+    if (over.length) add('warn', `Rank outside 1-${own.cap} on ${own.list}: ${list(over)}.`, over);
+    const seen = new Map(); for (const x of ranked) seen.set(x.r.rank, [...(seen.get(x.r.rank) || []), x.p.name]);
+    const dupes = [...seen].filter(([, n]) => n.length > 1);
+    if (dupes.length) add('warn', `Same ${own.list} rank used twice: ${dupes.slice(0, 5).map(([r, n]) => `#${r} (${n.join(' / ')})`).join(', ')}.`, dupes.flatMap(([, n]) => n));
+    if (unranked.length) add(ranked.length ? 'warn' : 'info', `${unranked.length} player${unranked.length === 1 ? ' has' : 's have'} no ${own.list} rank: ${list(unranked.map(p => p.name))}.`, unranked.map(p => p.name));
+    if (ranked.length >= own.cap * 0.5) {
+      const missing = []; for (let i = 1; i <= own.cap; i++) if (!seen.has(i)) missing.push(i);
+      if (missing.length) add('warn', `${missing.length} rank${missing.length === 1 ? '' : 's'} missing from 1-${own.cap}: ${list(missing.map(String), 12)}.`);
+    }
+  }
+
+  // possible duplicate players: same name twice, or names a letter or two apart
+  const norms = players.map(p => normName(p.name)), dup = [];
+  for (let i = 0; i < norms.length; i++) for (let j = i + 1; j < norms.length; j++) {
+    const [fi, ...li] = norms[i].split(' '), [fj, ...lj] = norms[j].split(' ');   // same rule as the merge: first names match, last names one letter apart
+    if (norms[i] === norms[j] || (fi === fj && li.join(' ').length >= 5 && editDistance(li.join(' '), lj.join(' ')) === 1)) dup.push([players[i].name, players[j].name]);
+  }
+  if (dup.length) add('warn', `Possible duplicate players: ${dup.slice(0, 6).map(d => d.join(' / ')).join(', ')}.`, dup.flat());
+
+  // values that look wrong
+  const odd = [];
+  for (const p of players) {
+    if (p.buy_rating != null && (p.buy_rating < 1 || p.buy_rating > 5)) odd.push(`${p.name} buy rating ${p.buy_rating}`);
+    for (const x of p.prices || []) for (const c of [x.base_auto_cents, x.expected_cents]) if (c != null && (c <= 0 || c > 500000)) odd.push(`${p.name} price $${(c / 100).toFixed(2)}`);
+    if (p.age != null && (p.age < 15 || p.age > 35)) odd.push(`${p.name} age ${p.age}`);
+  }
+  if (odd.length) add('warn', `Unusual values: ${list(odd)}.`, odd.map(o => o.replace(/ (buy rating|price|age) .*$/, '')));
+
+  const fresh = matches.filter(m => m.status === 'new').length;
+  if (fresh >= 10) add('info', `${fresh} players are new (not on file yet).`);
+  const ambiguous = matches.filter(m => m.status === 'ambiguous').map(m => m.name);
+  if (ambiguous.length) add('warn', `Name matches several players on file: ${list(ambiguous)}.`, ambiguous);
+  return flags;
+}
+
 export async function listPendingPosts(env) {
   const { results } = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, extraction_json, created_at, model, input_tokens, output_tokens, cost_micros
     FROM prospect_posts WHERE status = 'pending' ORDER BY created_at`).all();
+  const knownLists = ((await env.DB.prepare(`SELECT DISTINCT lower(list_name) l FROM prospect_rankings`).all()).results || []).map(x => x.l);
   return { pending: results.length, posts: await Promise.all(results.map(async r => {
     const extraction = sanitizeExtraction(JSON.parse(r.extraction_json || '{}'), r.published_at);   // re-clean on read so fixes also apply to cards already waiting
     const { input_tokens, output_tokens, cost_micros, ...rest } = r;
+    const matches = await previewMatches(env, extraction.players || []);
     return { ...rest, extraction_json: undefined, extraction, usage: input_tokens == null ? null : { input_tokens, output_tokens, cost_micros },
-      matches: await previewMatches(env, extraction.players || []) };
+      matches, flags: reviewFlags(extraction, { knownLists, matches }) };
   })) };
 }
 

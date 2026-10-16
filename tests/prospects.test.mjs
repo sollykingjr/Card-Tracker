@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -347,6 +347,24 @@ await t('a Top 200 post\'s Rank column lands on "top 200 hitters" however the mo
   assert.deepEqual(c.players[2].rankings, []); assert.deepEqual(c.players[3].rankings, [{ list: 'top 200 hitters', rank: 77 }]);
   const o = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'E Five', rankings: [{ list: 'Rank', rank: 9 }] }] });
   assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 9 }]);   // other posts keep the list as named
+});
+
+await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {
+  const mk = (n, rank, extra = {}) => ({ name: n, rankings: rank ? [{ list: 'top 200 hitters', rank }] : [], prices: [], ...extra });
+  const clean = { title: 'Top 200 Hitters', players: Array.from({ length: 200 }, (_, i) => mk(`Name${i} Surname${'x'.repeat(i % 7)}${i}`, i + 1)) };
+  assert.deepEqual(reviewFlags(clean), []);
+  assert.match(reviewFlags({ title: 'x', players: [] })[0].text, /No players/);
+  const bad = { title: 'Bowman Rankings - Top 200 Hitters', players: [
+    ...clean.players.slice(0, 74), ...clean.players.slice(76, 150),   // ranks 75,76 and 151-200 missing
+    mk('Ralphy Velasquez', 20), mk('Ralphy Velazquez', 20), mk('Odd Rank', 260), mk('No Rank', null),
+    { name: 'Weird Values', rankings: [{ list: 'Mystery List', rank: 4 }], buy_rating: 7, prices: [{ date: '2026-08-28', base_auto_cents: 99999999 }] }] };
+  const f = reviewFlags(bad, { matches: [{ name: 'X', status: 'ambiguous' }] }); const all = f.map(x => x.text).join(' | ');
+  assert.match(all, /New rank list "Mystery List"/); assert.match(all, /outside 1-200 on top 200 hitters: Odd Rank/); assert.match(all, /used twice: #20/);
+  assert.match(all, /no top 200 hitters rank: .*No Rank/); assert.match(all, /ranks? missing from 1-200/); assert.match(all, /Possible duplicate players: Ralphy Velasquez \/ Ralphy Velazquez/);
+  assert.match(all, /buy rating 7/); assert.match(all, /Name matches several/);
+  assert.ok(f.find(x => /Odd Rank/.test(x.text)).players.includes('Odd Rank'));
+  // a list already on file is not new
+  assert.equal(reviewFlags({ title: 'z', players: [{ name: 'A B', rankings: [{ list: 'AFL hot hitters rank', rank: 1 }] }] }, { knownLists: ['afl hot hitters rank'] }).length, 0);
 });
 
 console.log(`\n${passed} tests passed`);
