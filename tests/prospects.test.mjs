@@ -77,14 +77,14 @@ await t('sanitizeExtraction drops junk and converts dollars to cents', () => {
   const ex = sanitizeExtraction({
     post_type: 'bogus', summary: 'x',
     players: [{ name: ' ' }, { name: 'A B', age: 'abc', prices: [{ date: '10/12', base_auto: 5 }, { date: '2026-10-12', base_auto: '$5' }, { date: '2026-10-12', base_auto: 4.99 }],
-      rankings: [{ list: 'l', rank: 'x' }, { list: 'l', rank: 7 }], take: { stance: 'moon', summary: 'hi' }, stat_lines: [{ context: 'c', stats: {} }] }]
+      rankings: [{ list: 'MLB', rank: 'x' }, { list: 'MLB', rank: 7 }], take: { stance: 'moon', summary: 'hi' }, stat_lines: [{ context: 'c', stats: {} }] }]
   });
   assert.equal(ex.post_type, 'other');
   assert.equal(ex.players.length, 1);
   const p = ex.players[0];
   assert.equal(p.age, null);
   assert.deepEqual(p.prices, [{ date: '2026-10-12', base_auto_cents: 499, expected_cents: null }]);
-  assert.deepEqual(p.rankings, [{ list: 'l', rank: 7 }]);
+  assert.deepEqual(p.rankings, [{ list: 'MLB', rank: 7 }]);
   assert.equal(p.take.stance, 'none');
   assert.equal(p.stat_lines.length, 0);
 });
@@ -347,7 +347,7 @@ await t('a Top 200 post\'s Rank column lands on "top 200 hitters" however the mo
   assert.deepEqual(c.players[2].rankings, [{ list: 'top 200 hitters', rank: 260 }]);   // past 200 is still his rank, kept
    assert.deepEqual(c.players[3].rankings, [{ list: 'top 200 hitters', rank: 77 }]);
   const o = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'E Five', rankings: [{ list: 'Rank', rank: 9 }] }] });
-  assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 9 }]);   // a bare Rank is not assumed to be hobby rank
+  assert.deepEqual(o.players[0].rankings, []); assert.deepEqual(o.ignored_ranks, { Rank: 1 });   // a bare Rank is not a hobby rank: not saved, listed on the card
   const h = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'F Six', rankings: [{ list: 'Hobby', rank: 14 }, { list: 'Hobby Rank', rank: 14 }, { list: 'mlb', rank: 3 }] }] });
   assert.deepEqual(h.players[0].rankings, [{ list: 'hobby rank', rank: 14 }, { list: 'MLB', rank: 3 }]);   // same list twice is one ranking
 });
@@ -356,9 +356,9 @@ await t('only a column named hobby is hobby rank; rankings mentioned in an artic
   const art = sanitizeExtraction({ title: 'Bowman Chrome Sleepers', post_type: 'analysis', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'MLB Pipeline org', rank: 22 }, { list: 'Baseball America', rank: 90 }, { list: 'Hobby Ranking', rank: 259 }] }] });
   assert.deepEqual(art.players[0].rankings, [{ list: 'hobby rank', rank: 259 }]);
   const bare = sanitizeExtraction({ title: 'Bowman Chrome Rankings', post_type: 'rankings', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'Rank', rank: 5 }] }] });
-  assert.deepEqual(bare.players[0].rankings, [{ list: 'Rank', rank: 5 }]);   // his own list, not hobby: left as named for review
+  assert.deepEqual(bare.players[0].rankings, []);   // not hobby, not a known list: ignored
   const col = sanitizeExtraction({ title: 'Hitter Hot Sheet - Week 23', post_type: 'hot_sheet', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'MLB', rank: 4 }, { list: 'Rank', rank: 5 }] }] });
-  assert.deepEqual(col.players[0].rankings, [{ list: 'MLB', rank: 4 }, { list: 'Rank', rank: 5 }]);   // table columns still count; bare Rank is left for review
+  assert.deepEqual(col.players[0].rankings, [{ list: 'MLB', rank: 4 }]);   // known third-party columns still count; bare Rank does not
 });
 
 await t('a players list handed back as a JSON string still counts', () => {
@@ -417,9 +417,19 @@ await t('dated price-rank columns are not saved, and a price dated last year on 
     { name: 'Angelbel Gomez', rankings: [{ list: 'Rank', rank: 19 }, { list: '9/17 rank', rank: 3 }, { list: '9/24 Rank', rank: 2 }, { list: 'hobby rank', rank: 19 }],
       prices: [{ date: '2025-09-17', base_auto: 132.35 }, { date: '2025-09-24', base_auto: 108.44 }, { date: '2026-09-24', base_auto: 108.44, expected: 73.8 }] },
     { name: 'Old Price', prices: [{ date: '2026-03-02', base_auto: 5 }] }] });
-  assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 19 }, { list: 'hobby rank', rank: 19 }]);
+  assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 19 }]);
   assert.deepEqual(o.players[0].prices, [{ date: '2026-09-17', base_auto_cents: 13235, expected_cents: null }, { date: '2026-09-24', base_auto_cents: 10844, expected_cents: 7380 }]);
   assert.equal(o.players[1].prices[0].date, '2026-03-02');   // a genuinely older price keeps its date
+});
+
+await t('only hobby, his own list and known third-party lists are saved; others are ignored and listed', () => {
+  const o = sanitizeExtraction({ title: 'AFL Hot Sheet', post_type: 'hot_sheet', summary: 's', players: [
+    { name: 'Gavin Fien', rankings: [{ list: 'AFL Table Rank', rank: 3 }, { list: 'Hobby Rank', rank: 41 }, { list: 'Baseball America', rank: 77 }, { list: 'Mystery List', rank: 4 }] },
+    { name: 'Eli Willits', rankings: [{ list: 'AFL Table Rank', rank: 9 }] }] });
+  assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 41 }, { list: 'BA', rank: 77 }]);
+  assert.deepEqual(o.ignored_ranks, { 'AFL Table Rank': 2, 'Mystery List': 1 });
+  assert.ok(reviewFlags(o).some(f => f.level === 'info' && /AFL Table Rank \(2\)/.test(f.text)));
+  assert.deepEqual(sanitizeExtraction(JSON.parse(JSON.stringify(o))).ignored_ranks, o.ignored_ranks);   // cleaning twice does not double count
 });
 
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {
@@ -432,7 +442,8 @@ await t('review checks flag the things that went wrong before, and stay quiet on
     mk('Ralphy Velasquez', 20), mk('Ralphy Velazquez', 20), mk('Odd Rank', 260), mk('No Rank', null),
     { name: 'Weird Values', rankings: [{ list: 'Mystery List', rank: 4 }], buy_rating: 7, prices: [{ date: '2026-08-28', base_auto_cents: 99999999 }] }] };
   const f = reviewFlags(bad, { matches: [{ name: 'X', status: 'ambiguous' }] }); const all = f.map(x => x.text).join(' | ');
-  assert.match(all, /New rank list "Mystery List"/); assert.doesNotMatch(all, /Odd Rank/);   // a rank past 200 is kept, not flagged; assert.match(all, /used twice: #20/);
+  assert.doesNotMatch(all, /Odd Rank/);   // a rank past 200 is kept, not flagged
+  assert.match(all, /used twice: #20/);
   assert.match(all, /no top 200 hitters rank: .*No Rank/); assert.match(all, /ranks? missing from 1-200/); assert.match(all, /Possible duplicate players: Ralphy Velasquez \/ Ralphy Velazquez/);
   assert.match(all, /buy rating 7/); assert.match(all, /Name matches several/);
   assert.ok(f.find(x => /Weird Values/.test(x.text)).players.includes('Weird Values'));

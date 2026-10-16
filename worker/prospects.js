@@ -93,6 +93,7 @@ Rules:
 - A column labelled "Last Week", "Prior Week" or "Previous Week" (no date printed) is dated exactly 7 days before the post date, and "This Week"/"Current" is the post date. Never guess another date.
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
 - Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating, also called Buy Score or BS (a number around 1-5, put in buy_rating; this is the most important number he publishes, so read it off every row of every table that has the column, never skip a row) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
+- ONLY these ranks are ever recorded: his hobby rank (a column or line named Hobby / Hobby Rank / Hobby Ranking), the post's own list rank, and the known third-party lists MLB, DD, Roto, StS, BA, BP when they are a table column. Any other rank (an AFL table rank, a rank within a chart, a plain unlabeled "Rank" in a table of another kind) is NOT recorded.
 - A rank column that sits beside a dated price column ("9/17 Rank", "9/24 Rank") is the player's rank by price that week, not a ranking list: do not record it as a ranking.
 - Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too, but ONLY when they are a column in a table or the post is itself a ranking update from that source: one ranking entry per column, list named as the header. NEVER record a ranking that is only mentioned inside the writing ("ranked 22nd in the org by MLB Pipeline", "top 100 on Baseball America"): that stays in the analysis text and is not a ranking entry. "Hobby Ranking: 273" printed for a player IS his hobby rank (list "hobby rank").
 - Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
@@ -126,7 +127,8 @@ const OWN_LIST_ALIASES = /^(rank|own rank|post rank|ranking|hobby|hobby rank|hit
 // "Hobby rank" (the market/chase list, one number across hitters and pitchers) and his own Top N list are different things and are never merged.
 // Only a column literally named hobby / hobby rank / hobby ranking is hobby rank. A bare "Rank" (or anything else) is left as named, so the review flags it instead of guessing.
 const HOBBY_NAMES = new Set(['hobby', 'hobby rank', 'hobby ranking', 'hobby rankings']);
-const THIRD_PARTY = { mlb: 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA' };
+const THIRD_PARTY = { mlb: 'MLB', 'mlb pipeline': 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA', 'baseball america': 'BA', bp: 'BP', 'baseball prospectus': 'BP' };
+const KNOWN_LISTS = new Set(['hobby rank', 'top 200 hitters', 'top 100 pitchers', ...Object.values(THIRD_PARTY)]);
 const canonicalListName = n => { const k = String(n).trim().toLowerCase();
   return HOBBY_NAMES.has(k) ? 'hobby rank' : THIRD_PARTY[k] || (k === 'top 200 hitters' || k === 'top 100 pitchers' ? k : String(n).trim()); };
 export function ownListFromTitle(title) {
@@ -152,6 +154,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
   r.players = jsonIfString(r.players);   // on very long answers the model sometimes hands back the players list as a JSON string instead of a list
   const date = isoDate(r.published_date) || isoDate(fallbackDate);
   const own = ownListFromTitle(r.title);
+  const ignored = { ...(r.ignored_ranks && typeof r.ignored_ranks === 'object' ? r.ignored_ranks : {}) };   // rank columns that are not his hobby/own/known lists: not saved, listed on the card
   const prose = r.post_type === 'analysis' || r.post_type === 'other';   // an article: only hobby rank / his own list count, never other lists he mentions in passing
   const players = (Array.isArray(r.players) ? r.players : []).filter(p => p && String(p.name || '').trim()).map(p => {
     const take = p.take && String(p.take.summary || '').trim() ? {
@@ -174,8 +177,9 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
         const out = [];
         for (const x of list) {
           const rank = intOrNull(x.rank); let name = canonicalListName(x.list);
-          if (prose && !/^hobby/i.test(name) && !(own && name.toLowerCase() === own.list) && !(own && OWN_LIST_ALIASES.test(name))) continue;
-          if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; }   // ranks past the title's size (a 214 in a "Top 200" table) are real data from his other charts: kept
+          const isOwn = own && (name.toLowerCase() === own.list || OWN_LIST_ALIASES.test(name));
+          if (prose ? !(/^hobby/i.test(name) || isOwn) : !(isOwn || /^hobby/i.test(name) || KNOWN_LISTS.has(name))) { ignored[name] = (ignored[name] || 0) + 1; continue; }   // only hobby ranks, his own Top N list and the known third-party lists are saved
+          if (isOwn) { name = own.list; }   // ranks past the title's size (a 214 in a "Top 200" table) are real data from his other charts: kept
           if (!out.some(y => y.list.toLowerCase() === name.toLowerCase())) out.push({ list: name, rank });   // the same list twice ("Hobby" and "Hobby Rank") is one ranking
         }
         const pr = intOrNull(p.post_rank);
@@ -200,6 +204,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
   return {
     title: r.title ? String(r.title).trim() : null,
     post_type: POST_TYPES.includes(r.post_type) ? r.post_type : 'other',
+    ignored_ranks: Object.keys(ignored).length ? ignored : undefined,
     published_date: date,
     summary: String(r.summary || '').trim(),
     thesis: r.thesis ? String(r.thesis).trim() : null,
@@ -369,6 +374,9 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
   const add = (level, text, names = []) => flags.push({ level, text, players: [...new Set(names)] });
   const list = (names, n = 8) => names.slice(0, n).join(', ') + (names.length > n ? ` and ${names.length - n} more` : '');
   if (!players.length) { add('warn', 'No players were extracted from this post. Reject it and send it again, or check the screenshots.'); return flags; }
+
+  const ign = Object.entries(ex.ignored_ranks || {});
+  if (ign.length) add('info', `Rank columns ignored (not hobby ranks): ${ign.map(([l, n]) => `${l} (${n})`).join(', ')}.`);
 
   // list names we have never seen before
   const known = new Set([...BUILTIN_LISTS, ...knownLists.map(x => String(x).toLowerCase())]);
