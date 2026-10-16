@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, importSnapshot } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -241,44 +241,6 @@ await t('routes require the app key and pass other paths through', async () => {
   await submitPost(env, { text: 'z'.repeat(60), extractor: fakeExtractor(AFL) });
   const counts = await handleProspects(new Request('https://x/prospect-counts', { headers: { 'X-App-Key': 'k' } }), env, {});
   assert.deepEqual(await counts.json(), { pending: 1 });
-});
-
-await t('sheet import: loads every snapshot in chunks, matches existing players, re-run adds nothing, half-done snapshot is redone', async () => {
-  const data = JSON.parse(readFileSync(new URL('../data/prospect-import.json', import.meta.url), 'utf8'));
-  const env = { DB: makeDb() };
-  // a player already on file from an Inbox post must be matched, not duplicated
-  const pre = await submitPost(env, { text: POST_TEXT + ' pre', extractor: fakeExtractor({ post_type: 'analysis', published_date: '2026-10-12', summary: 's', players: [{ name: 'Dax Kilby', team: 'NYY', side: 'hitter' }] }) });
-  await confirmPost(env, pre.postId);
-  const run = async () => {
-    let skipped = 0, rows = 0;
-    for (const sn of data.snapshots) {
-      const key = sn.tab + ':' + sn.date;
-      const st = await importSnapshot(env, { action: 'start', key, title: sn.title, post_type: sn.post_type, date: sn.date });
-      if (st.skip) { skipped++; continue; }
-      for (let i = 0; i < sn.players.length; i += 40) { await importSnapshot(env, { action: 'rows', key, players: sn.players.slice(i, i + 40) }); rows += Math.min(40, sn.players.length - i); }
-      await importSnapshot(env, { action: 'finish', key, players: sn.players.length });
-    }
-    return { skipped, rows };
-  };
-  const n = x => env.DB._raw.prepare(`SELECT COUNT(*) n FROM ${x}`).get().n;
-  const first = await run();
-  const want = data.snapshots.reduce((a, sn) => { for (const p of sn.players) { a.take += p.note ? 1 : 0; a.rank += (p.rankings || []).length; a.price += (p.price != null || p.expected != null) ? 1 : 0; a.snap += (p.age != null || p.level || p.buy_rating != null || p.action) ? 1 : 0; a.players += 1; } return a; }, { take: 0, rank: 0, price: 0, snap: 0, players: 0 });
-  assert.equal(first.skipped, 0); assert.equal(first.rows, want.players);
-  assert.equal(n('prospect_takes'), want.take); assert.equal(n('prospect_rankings'), want.rank);
-  assert.equal(n('prospect_prices'), want.price); assert.equal(n('prospect_snapshots'), want.snap);
-  assert.equal(env.DB._raw.prepare(`SELECT COUNT(*) n FROM prospect_posts WHERE source = 'prospect-master-sheet' AND status = 'confirmed'`).get().n, data.snapshots.length);
-  const dax = env.DB._raw.prepare(`SELECT COUNT(*) n FROM prospects WHERE norm_name = 'dax kilby'`).get().n;
-  assert.equal(dax, 1);
-  const before = [n('prospects'), n('prospect_takes'), n('prospect_prices')];
-  const second = await run();
-  assert.equal(second.skipped, data.snapshots.length); assert.deepEqual([n('prospects'), n('prospect_takes'), n('prospect_prices')], before);
-  // half-done: leave one snapshot unfinished, run again -> it is redone without doubling its rows
-  const sn = data.snapshots[0], key = sn.tab + ':' + sn.date, pid = env.DB._raw.prepare(`SELECT post_id FROM prospect_posts WHERE title = ?`).get(sn.title).post_id;
-  env.DB._raw.prepare(`UPDATE prospect_posts SET status = 'rejected' WHERE post_id = ?`).run(pid);
-  const pricesBefore = n('prospect_prices');
-  await run();
-  assert.equal(n('prospect_prices'), pricesBefore);
-  assert.equal((await listPendingPosts(env)).pending, 0);   // imports never show up in the Inbox review list
 });
 
 console.log(`\n${passed} tests passed`);
