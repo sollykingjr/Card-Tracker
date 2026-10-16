@@ -309,6 +309,9 @@ export function mergeExtractions(base, extras) {
 }
 
 const LONG_ARTICLE = 8000;   // characters
+// A long post only skips its screenshots when it reads like prose. If the text talks about base autos, buy ratings, expected values or hobby ranks, the screenshots are price/rank tables and must be read.
+const tableCues = text => { const t = String(text).toLowerCase(), n = re => (t.match(re) || []).length;   // prose articles mention "base auto" a few times; table posts mention it, buy ratings and averages a lot
+  return n(/base auto/g) + 3 * n(/buy rating|buy score|avg\.? base/g) + 2 * n(/expected (value|price)/g); };
 const TABLE_PASS_NOTE = 'TABLE-IMAGE PASS: Extract EVERY player row shown in the attached image and nothing else (skip players that appear only in the text). Include every row, even those with no price. Do not write takes or summaries for this pass; keep the summary to one short line.';
 
 // Posts with several table screenshots (like a Top 200) are too big for one answer, so the text and each image are read separately and merged.
@@ -317,7 +320,7 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
   const model = env.PROSPECT_MODEL || DEFAULT_MODEL;
   const head = `${title ? `Email/post title: ${title}\n` : ''}${publishedAt ? `Post date: ${publishedAt}\n` : ''}\nPOST TEXT:\n${text}`;
   let blocks = images.slice(0, 20).map(imgBlock).filter(Boolean);
-  const skippedImages = text.length >= LONG_ARTICLE && blocks.length ? blocks.length : 0;   // charts in a long prose article hold no table data worth the tokens
+  const skippedImages = text.length >= LONG_ARTICLE && tableCues(text) < 10 && blocks.length ? blocks.length : 0;   // charts in a long prose article hold no table data worth the tokens
   if (skippedImages) blocks = [];
   let results;
   if (blocks.length < 3) {

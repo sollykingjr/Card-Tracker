@@ -511,6 +511,8 @@ await t('screenshots in a long prose article are not sent to the model, short ta
     const img = { media_type: 'image/png', base64: 'AAAA' };
     const long = await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'word '.repeat(2000), images: [img, img, img] });
     assert.deepEqual(seen, [0]); assert.match(long.extraction.summary, /3 screenshots were not read because this is a long article/);
+    seen.length = 0; await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'word '.repeat(2000) + ' base auto base auto base auto base auto base auto base auto base auto base auto prices, buy rating and expected value tables below', images: [img, img, img] });
+    assert.deepEqual(seen.sort(), [0, 1, 1, 1]);   // a long post that talks about base autos still has its 3 screenshots read (text pass + one pass per image)
     seen.length = 0; await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'word '.repeat(300), images: [img] });
     assert.deepEqual(seen, [1]);
   } finally { globalThis.fetch = realFetch; }
