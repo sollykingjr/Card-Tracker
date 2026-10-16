@@ -186,10 +186,25 @@ function pibFlagsHTML(p) {
 }
 const pibFlaggedNames = p => new Set((p.flags || []).filter(f => f.level === 'warn').flatMap(f => f.players || []));
 
+// A spelling that looks like a player already on file: one tap says they are the same person (and the spelling is remembered).
+function pibLinkHTML(id, i, m) {
+  const pid = m.status === 'linked' ? m.prospect_id : m.suggestion.prospect_id, nm = m.status === 'linked' ? m.linked_to : m.suggestion.name;
+  const on = m.status === 'linked';
+  return `<div class="intake-meta"><button class="intake-btn" data-pid="${pibEsc(pid)}" data-nm="${pibEsc(nm)}" onclick="pibLinkSame('${id}',${i},this)">${on ? 'Same player as ' + pibEsc(nm) + ' (tap to undo)' : 'Same player as ' + pibEsc(nm) + ' (on file)'}</button></div>`;
+}
+function pibLinkSame(id, i, btn) {
+  const pl = pibPost(id).extraction.players[i], pid = btn.dataset.pid, nm = btn.dataset.nm;
+  const m = (pibPost(id).matches || [])[i] || {};
+  if (pl.match_id === pid) { delete pl.match_id; m.status = 'suggest'; m.suggestion = { prospect_id: pid, name: nm }; btn.textContent = 'Same player as ' + nm + ' (on file)'; }
+  else { pl.match_id = pid; btn.textContent = 'Linked to ' + nm + ' (tap to undo)'; }
+}
+
 function pibPlayerHTML(p, pl, i) {
   const m = (p.matches || [])[i] || {};
   const badge = m.status === 'existing' ? '<span class="pib-badge">on file</span>'
     : m.status === 'ambiguous' ? '<span class="pib-badge warn">name matches several</span>'
+    : m.status === 'linked' ? `<span class="pib-badge">same as ${pibEsc(m.linked_to)}</span>`
+    : m.status === 'suggest' ? `<span class="pib-badge warn">looks like ${pibEsc(m.suggestion.name)}</span>`
     : '<span class="pib-badge new">new</span>';
   const id = p.post_id;
   const ranks = (pl.rankings || []).map(r => `${pibEsc(r.list)} #${r.rank}`).join(' · ');
@@ -217,6 +232,7 @@ function pibPlayerHTML(p, pl, i) {
         <b>${pibEsc(pl.name)}</b> <span class="intake-meta" style="margin:0">${pibEsc(pl.team || '')}${pl.age ? ' · ' + pl.age : ''}</span> ${badge}${pibFlaggedNames(p).has(pl.name) ? '<span class="pib-badge warn">check</span>' : ''}
         ${pl.take && pl.take.stance !== 'none' ? `<span class="pib-badge stance">${pibEsc(pl.take.stance)}</span>` : ''}${pl.action ? `<span class="pib-badge stance">${pibEsc(pl.action)}</span>` : ''}
       </summary>
+      ${m.status === 'suggest' || m.status === 'linked' ? pibLinkHTML(id, i, m) : ''}
       ${ranks ? `<div class="intake-meta">${ranks}</div>` : ''}
       ${prices}${stats}${take}
     </details>`;

@@ -157,6 +157,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
       buy_rating: isFinite(Number(p.buy_rating)) && p.buy_rating != null && p.buy_rating !== '' && Number(p.buy_rating) > 0 ? Number(p.buy_rating) : null,
       action: p.action && String(p.action).trim() && String(p.action).trim() !== '-' ? String(p.action).trim() : null,
       post_rank: intOrNull(p.post_rank),
+      match_id: p.match_id ? String(p.match_id) : null,   // set on the review screen when you confirm a spelling is an existing player
       rankings: ((list) => {   // one canonical list name per ranking: the post's own list (from its title) or 'hobby rank' for a plain Rank/Hobby column; third-party names keep the case already on file
         const out = [];
         for (const x of list) {
@@ -207,7 +208,7 @@ function foldPlayer(m, p) {
 function dedupePlayers(players) {
   const out = [];
   for (const p of players) {
-    const m = out.find(x => normName(x.name) === normName(p.name) && (!x.side || !p.side || x.side === p.side));
+    const m = out.find(x => samePlayerInPost(x, p));
     if (m) foldPlayer(m, p); else out.push(p);
   }
   return out;
@@ -259,15 +260,30 @@ const editDistance = (a, b) => {
     d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
   return d[a.length][b.length];
 };
+// Two spellings of one player: same number of name parts, exactly one part differs by one letter (parts of 5+ letters, so Fien/Kilen stay different people).
+export function typoMatch(a, b) {
+  const x = normName(a).split(' '), y = normName(b).split(' ');
+  if (x.length !== y.length) return false;
+  const diff = x.map((t, i) => [t, y[i]]).filter(([s, t]) => s !== t);
+  return diff.length === 1 && Math.min(diff[0][0].length, diff[0][1].length) >= 5 && editDistance(diff[0][0], diff[0][1]) === 1;
+}
+const ageOk = (a, b, tol = 1) => a == null || b == null || Math.abs(a - b) <= tol;
+// Inside one post: the same player written two ways. Teams are ignored (players get traded); age and the rank slot are the connectors.
+function samePlayerInPost(a, b) {
+  if (a.side && b.side && a.side !== b.side) return false;
+  if (!ageOk(a.age, b.age)) return false;
+  const na = normName(a.name), nb = normName(b.name);
+  if (na === nb || typoMatch(a.name, b.name)) return true;
+  return a.post_rank != null && a.post_rank === b.post_rank && editDistance(na, nb) <= 2;   // one rank slot cannot hold two players
+}
 export function mergeExtractions(base, extras) {
   const byName = new Map(base.players.map(p => [normName(p.name), p]));
   for (const ex of extras) for (const p of ex.players) {
     const k = normName(p.name);
     let m = byName.get(k);
-    if (!m) {   // the post text has typos the tables don't ("Velasquez" vs "Velazquez"): same player only if the first names match and the last names differ by ONE letter, with a single candidate
-      const [first, ...rest] = k.split(' '), last = rest.join(' ');
-      const near = last.length >= 5 ? [...byName].filter(([n]) => { const [f, ...r] = n.split(' '); return f === first && editDistance(r.join(' '), last) === 1; }) : [];
-      if (near.length === 1) { m = near[0][1]; m.name = p.name; byName.set(k, m); }   // the table's spelling wins
+    if (!m) {   // the text has typos the tables don't (or the reverse): fold into the one player that is clearly the same, and the table's spelling wins
+      const near = base.players.filter(x => samePlayerInPost(x, p));
+      if (near.length === 1) { m = near[0]; m.name = p.name; byName.set(k, m); }
     }
     if (!m) { const c = { ...p }; base.players.push(c); byName.set(k, c); continue; }
     foldPlayer(m, p);
@@ -330,7 +346,7 @@ export async function submitPost(env, { text, images = [], title = null, publish
       text, images.length ? JSON.stringify(images.map(i => i.url).filter(Boolean)) : null,
       extraction.summary, extraction.thesis, JSON.stringify(extraction), model,
       usage?.input_tokens ?? null, usage?.output_tokens ?? null, usage?.cost_micros ?? null).run();
-  await notifyNewPost(env, extraction, await previewMatches(env, extraction.players || []), deps.notifyFetch);
+  await notifyNewPost(env, extraction, await previewMatches(env, extraction.players || [], extraction.published_date), deps.notifyFetch);
   return { postId, duplicate: false, status: 'pending', extraction, usage };
 }
 
@@ -366,11 +382,9 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
   }
 
   // possible duplicate players: same name twice, or names a letter or two apart
-  const norms = players.map(p => normName(p.name)), dup = [];
-  for (let i = 0; i < norms.length; i++) for (let j = i + 1; j < norms.length; j++) {
-    const [fi, ...li] = norms[i].split(' '), [fj, ...lj] = norms[j].split(' ');   // same rule as the merge: first names match, last names one letter apart
-    if (norms[i] === norms[j] || (fi === fj && li.join(' ').length >= 5 && editDistance(li.join(' '), lj.join(' ')) === 1)) dup.push([players[i].name, players[j].name]);
-  }
+  const dup = [];
+  for (let i = 0; i < players.length; i++) for (let j = i + 1; j < players.length; j++)
+    if (samePlayerInPost(players[i], players[j]) || typoMatch(players[i].name, players[j].name)) dup.push([players[i].name, players[j].name]);
   if (dup.length) add('warn', `Possible duplicate players: ${dup.slice(0, 6).map(d => d.join(' / ')).join(', ')}.`, dup.flat());
 
   // values that look wrong
@@ -384,6 +398,8 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
 
   const fresh = matches.filter(m => m.status === 'new').length;
   if (fresh >= 10) add('info', `${fresh} players are new (not on file yet).`);
+  const suggest = matches.filter(m => m.status === 'suggest');
+  if (suggest.length) add('warn', `Spelled almost like a player already on file: ${suggest.slice(0, 6).map(m => `${m.name} / ${m.suggestion.name}`).join(', ')}${suggest.length > 6 ? ` and ${suggest.length - 6} more` : ''}. Open each one and tap "Same player" if it is.`, suggest.map(m => m.name));
   const ambiguous = matches.filter(m => m.status === 'ambiguous').map(m => m.name);
   if (ambiguous.length) add('warn', `Name matches several players on file: ${list(ambiguous)}.`, ambiguous);
   return flags;
@@ -414,7 +430,7 @@ export async function listPendingPosts(env) {
   return { pending: results.length, posts: await Promise.all(results.map(async r => {
     const extraction = sanitizeExtraction(JSON.parse(r.extraction_json || '{}'), r.published_at);   // re-clean on read so fixes also apply to cards already waiting
     const { input_tokens, output_tokens, cost_micros, ...rest } = r;
-    const matches = await previewMatches(env, extraction.players || []);
+    const matches = await previewMatches(env, extraction.players || [], extraction.published_date);
     return { ...rest, extraction_json: undefined, extraction, usage: input_tokens == null ? null : { input_tokens, output_tokens, cost_micros },
       matches, flags: reviewFlags(extraction, { knownLists, matches }) };
   })) };
@@ -427,21 +443,58 @@ export async function usageSummary(env) {
   return { month: await row(`AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`), all_time: await row('') };
 }
 
-// For each extracted player: which existing prospect it matches (so the review screen can flag new/ambiguous ones).
-async function previewMatches(env, players) {
+// Existing players a name could be: exact spelling, or a spelling you already confirmed as an alias.
+async function nameCandidates(env, norm) {
+  const { results } = await env.DB.prepare(`SELECT prospect_id, name, org FROM prospects WHERE norm_name = ?
+    UNION SELECT p.prospect_id, p.name, p.org FROM prospect_aliases a JOIN prospects p ON p.prospect_id = a.prospect_id WHERE a.alias_norm = ?`).bind(norm, norm).all();
+  return results;
+}
+// How far a player's age is from what we have on file, moved forward to the post's date. Unknown on either side counts as close.
+async function ageClose(env, pid, age, postDate) {
+  if (age == null) return true;
+  const row = await env.DB.prepare(`SELECT age, dated FROM prospect_snapshots WHERE prospect_id = ? AND age IS NOT NULL ORDER BY dated DESC LIMIT 1`).bind(pid).first();
+  if (!row) return true;
+  const years = row.dated && postDate ? (Date.parse(postDate) - Date.parse(row.dated)) / 31557600000 : 0;
+  return Math.abs(age - (row.age + (isFinite(years) ? years : 0))) <= 1.5;
+}
+// Same name on several players (trades, shared names): age picks first, then team.
+async function pickCandidate(env, p, postDate, cands) {
+  if (cands.length <= 1) return cands;
+  const byAge = []; for (const c of cands) if (await ageClose(env, c.prospect_id, p.age, postDate)) byAge.push(c);
+  const pool = byAge.length ? byAge : cands;
+  if (pool.length === 1) return pool;
+  const byTeam = p.team ? pool.filter(r => r.org === p.team) : [];
+  return byTeam.length ? byTeam : pool;
+}
+
+// For each extracted player: which existing prospect it matches (so the review screen can flag new/ambiguous ones),
+// or, for a name nobody has, a single on-file player it is probably a typo of.
+async function previewMatches(env, players, postDate = null) {
+  let roster = null;
   return Promise.all(players.map(async p => {
-    const { results } = await env.DB.prepare(`SELECT prospect_id, name, org FROM prospects WHERE norm_name = ?`).bind(normName(p.name)).all();
-    const pick = results.length > 1 && p.team ? results.filter(r => r.org === p.team) : results;
-    return { name: p.name, status: pick.length === 1 ? 'existing' : pick.length === 0 ? 'new' : 'ambiguous', prospect_id: pick.length === 1 ? pick[0].prospect_id : null };
+    if (p.match_id) { const r = await env.DB.prepare(`SELECT prospect_id, name FROM prospects WHERE prospect_id = ?`).bind(p.match_id).first();
+      if (r) return { name: p.name, status: 'linked', prospect_id: r.prospect_id, linked_to: r.name }; }
+    const pick = await pickCandidate(env, p, postDate, await nameCandidates(env, normName(p.name)));
+    if (pick.length) return { name: p.name, status: pick.length === 1 ? 'existing' : 'ambiguous', prospect_id: pick.length === 1 ? pick[0].prospect_id : null };
+    roster ??= (await env.DB.prepare(`SELECT prospect_id, name, org FROM prospects`).all()).results;
+    const near = []; for (const r of roster) if (typoMatch(p.name, r.name) && await ageClose(env, r.prospect_id, p.age, postDate)) near.push(r);
+    return near.length === 1 ? { name: p.name, status: 'suggest', prospect_id: null, suggestion: { prospect_id: near[0].prospect_id, name: near[0].name, org: near[0].org } }
+      : { name: p.name, status: 'new', prospect_id: null };
   }));
 }
 
-async function resolveProspect(env, p) {
+async function resolveProspect(env, p, postDate = null) {
   const norm = normName(p.name);
-  const { results } = await env.DB.prepare(`SELECT prospect_id, org FROM prospects WHERE norm_name = ?`).bind(norm).all();
-  let hit = null;
-  if (results.length === 1) hit = results[0];
-  else if (results.length > 1) hit = results.find(r => r.org === p.team) || null;
+  if (p.match_id) {   // you confirmed this spelling is that player: use them, and remember the spelling for next time
+    const r = await env.DB.prepare(`SELECT prospect_id, norm_name FROM prospects WHERE prospect_id = ?`).bind(p.match_id).first();
+    if (r) {
+      if (r.norm_name !== norm) await env.DB.prepare(`INSERT OR IGNORE INTO prospect_aliases (alias_norm, prospect_id) VALUES (?, ?)`).bind(norm, r.prospect_id).run();
+      await env.DB.prepare(`UPDATE prospects SET org = COALESCE(?, org), side = COALESCE(side, ?), updated_at = datetime('now') WHERE prospect_id = ?`).bind(p.team, p.side, r.prospect_id).run();
+      return r.prospect_id;
+    }
+  }
+  const results = await nameCandidates(env, norm);
+  const hit = (await pickCandidate(env, p, postDate, results)).filter((_, __, a) => a.length === 1)[0] || null;
   if (hit) {
     await env.DB.prepare(`UPDATE prospects SET org = COALESCE(?, org), side = COALESCE(side, ?), updated_at = datetime('now') WHERE prospect_id = ?`)
       .bind(p.team, p.side, hit.prospect_id).run();
@@ -465,7 +518,7 @@ export async function confirmPost(env, postId, edited = null) {
   const stmts = [];
   const prep = (sql, ...binds) => env.DB.prepare(sql).bind(...binds);
   for (const p of ex.players) {
-    const pid = await resolveProspect(env, p);
+    const pid = await resolveProspect(env, p, dated);
     counts.prospects++;
     if (p.take) { stmts.push(prep(`INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, analysis, key_points, post_rank, dated) VALUES (?,?,?,?,?,?,?,?)`,
       postId, pid, p.take.stance, p.take.summary, p.take.analysis, JSON.stringify(p.take.key_points), p.post_rank, dated)); counts.takes++; }

@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
+import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -363,6 +363,43 @@ await t('only a column named hobby is hobby rank; rankings mentioned in an artic
 await t('a players list handed back as a JSON string still counts', () => {
   const o = sanitizeExtraction({ title: 'T', post_type: 'analysis', summary: 's', players: JSON.stringify([{ name: 'Joseph Sullivan', team: 'HOU' }]) });
   assert.equal(o.players.length, 1);
+});
+
+await t('typos: one-letter spellings are the same player, rank slot and age decide the rest', () => {
+  assert.ok(typoMatch('Angelbel Gomez', 'Angeibel Gomez') && typoMatch('Johnssy Colome', 'Johenssy Colome'));
+  assert.ok(!typoMatch('Gavin Fien', 'Gavin Kilen') && !typoMatch('Luis Hernandez', 'Luis Perez'));
+  const d = sanitizeExtraction({ title: 'Top 200 Hitters', post_type: 'rankings', summary: 's', players: [
+    { name: 'Austin Overn', age: 21.1, post_rank: 129 }, { name: 'Austin Ovem', age: 21.1, post_rank: 129, buy_rating: 3.2 },
+    { name: 'Angelbel Gomez', age: 18.6, post_rank: 20 }, { name: 'Angeibel Gomez', age: 18.6 },
+    { name: 'Marcos Silva', age: 18.0 }, { name: 'Marcos Silvas', age: 24.0 }] });
+  assert.deepEqual(d.players.map(p => p.name), ['Austin Overn', 'Angelbel Gomez', 'Marcos Silva', 'Marcos Silvas']);   // the last two are 6 years apart: different players
+  assert.equal(d.players[0].buy_rating, 3.2);
+});
+
+await t('across posts: a typo is suggested, confirming it links the player and remembers the spelling', async () => {
+  const env = { DB: makeDb() };
+  const mk = (name, extra = {}) => ({ post_type: 'analysis', published_date: '2026-10-14', summary: 's', players: [{ name, team: 'KC', age: 18.6, side: 'hitter', prices: [{ date: '2026-10-14', base_auto: 50 }], ...extra }] });
+  const first = await submitPost(env, { text: POST_TEXT + ' one', extractor: fakeExtractor(mk('Angeibel Gomez')) });
+  await confirmPost(env, first.postId);
+  const second = await submitPost(env, { text: POST_TEXT + ' two', extractor: fakeExtractor(mk('Angelbel Gomez')) });
+  const m = (await listPendingPosts(env)).posts[0].matches[0];
+  assert.equal(m.status, 'suggest'); assert.equal(m.suggestion.name, 'Angeibel Gomez');
+  const ex = JSON.parse(JSON.stringify((await listPendingPosts(env)).posts[0].extraction)); ex.players[0].match_id = m.suggestion.prospect_id;
+  const c = await confirmPost(env, second.postId, ex);
+  assert.equal(c.counts.prospects, 1);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) n FROM prospects').first()).n, 1);   // linked, not a second player
+  const third = await submitPost(env, { text: POST_TEXT + ' three', extractor: fakeExtractor(mk('Angelbel Gomez')) });
+  assert.equal((await listPendingPosts(env)).posts[0].matches[0].status, 'existing');   // the spelling is remembered
+});
+
+await t('same name on two players: age picks the right one', async () => {
+  const env = { DB: makeDb() };
+  const db = env.DB._raw;
+  db.exec(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES ('luis-hernandez','Luis Hernandez','luis hernandez','SF','hitter'),('luis-hernandez-2','Luis Hernandez','luis hernandez','SF','pitcher');
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, age) VALUES ('x','luis-hernandez','2026-10-01',19.0),('x','luis-hernandez-2','2026-10-01',24.0);`);
+  const mk = age => ({ post_type: 'analysis', published_date: '2026-10-14', summary: 's', players: [{ name: 'Luis Hernandez', team: 'SF', age }] });
+  await submitPost(env, { text: POST_TEXT + ' a', extractor: fakeExtractor(mk(19.1)) });
+  assert.equal((await listPendingPosts(env)).posts[0].matches[0].prospect_id, 'luis-hernandez');
 });
 
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {

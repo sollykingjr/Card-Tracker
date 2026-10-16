@@ -92,3 +92,11 @@ CREATE TABLE IF NOT EXISTS prospect_snapshots (
   action TEXT                            -- e.g. 'Strongest Buy', 'Slightly Overvalued'
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_prospect ON prospect_snapshots(prospect_id, dated);
+
+-- Spellings he got wrong that you confirmed are the same player ("Angeibel Gomez" -> angeibel gomez's real record). Next time that spelling matches on its own.
+CREATE TABLE IF NOT EXISTS prospect_aliases (
+  alias_norm TEXT NOT NULL,
+  prospect_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (alias_norm, prospect_id)
+);
