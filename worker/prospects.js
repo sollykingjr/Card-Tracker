@@ -374,11 +374,13 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
     const seen = new Map(); for (const x of ranked) seen.set(x.r.rank, [...(seen.get(x.r.rank) || []), x.p.name]);
     const dupes = [...seen].filter(([, n]) => n.length > 1);
     if (dupes.length) add('warn', `Same ${own.list} rank used twice: ${dupes.slice(0, 5).map(([r, n]) => `#${r} (${n.join(' / ')})`).join(', ')}.`, dupes.flatMap(([, n]) => n));
-    if (unranked.length) add(ranked.length ? 'warn' : 'info', `${unranked.length} player${unranked.length === 1 ? ' has' : 's have'} no ${own.list} rank: ${list(unranked.map(p => p.name))}.`, unranked.map(p => p.name));
     if (ranked.length >= own.cap * 0.5) {
       const missing = []; for (let i = 1; i <= own.cap; i++) if (!seen.has(i)) missing.push(i);
       if (missing.length) add('warn', `${missing.length} rank${missing.length === 1 ? '' : 's'} missing from 1-${own.cap}: ${list(missing.map(String), 12)}.`);
     }
+    // every slot 1-N filled means the unranked players came from his other tables (gainers, price moves): worth a note, not a warning
+    const slotsFull = ranked.length >= own.cap * 0.5 && ![...Array(own.cap).keys()].some(i => !seen.has(i + 1));
+    if (unranked.length) add(ranked.length && !slotsFull ? 'warn' : 'info', `${unranked.length} player${unranked.length === 1 ? ' has' : 's have'} no ${own.list} rank${slotsFull ? ' (the list itself is complete, so these came from his other tables)' : ''}: ${list(unranked.map(p => p.name))}.`, unranked.map(p => p.name));
   }
 
   // possible duplicate players: same name twice, or names a letter or two apart

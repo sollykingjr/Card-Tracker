@@ -402,6 +402,15 @@ await t('same name on two players: age picks the right one', async () => {
   assert.equal((await listPendingPosts(env)).posts[0].matches[0].prospect_id, 'luis-hernandez');
 });
 
+await t('players with no rank are only a note when the list itself is complete', () => {
+  const mk = n => Array.from({ length: n }, (_, i) => ({ name: 'Player Number' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26)), rankings: [{ list: 'top 200 hitters', rank: i + 1 }] }));
+  const extra = { name: 'Kyle Lodise', rankings: [], prices: [{ date: '2026-09-11', base_auto_cents: 500 }] };
+  const full = reviewFlags({ title: 'Top 200 Hitters', players: [...mk(200), extra] }).find(f => /no top 200 hitters rank/.test(f.text));
+  assert.equal(full.level, 'info'); assert.ok(full.players.includes('Kyle Lodise'));
+  const gap = reviewFlags({ title: 'Top 200 Hitters', players: [...mk(150), extra] }).find(f => /no top 200 hitters rank/.test(f.text));
+  assert.equal(gap.level, 'warn');
+});
+
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {
   const mk = (n, rank, extra = {}) => ({ name: n, rankings: rank ? [{ list: 'top 200 hitters', rank }] : [], prices: [], ...extra });
   const clean = { title: 'Top 200 Hitters', players: Array.from({ length: 200 }, (_, i) => mk(`Name${i} Surname${'x'.repeat(i % 7)}${i}`, i + 1)) };
