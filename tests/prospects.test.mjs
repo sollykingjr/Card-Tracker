@@ -351,6 +351,11 @@ await t('a Top 200 post\'s Rank column lands on "top 200 hitters" however the mo
   assert.deepEqual(h.players[0].rankings, [{ list: 'hobby rank', rank: 14 }, { list: 'MLB', rank: 3 }]);   // same list twice is one ranking
 });
 
+await t('rank columns named after the post or the site are his hobby rank', () => {
+  const o = sanitizeExtraction({ title: 'Pitcher Hot Sheet - Week 22', summary: 's', players: [{ name: 'G Seven', rankings: [{ list: 'Hot Sheet', rank: 18 }, { list: 'Prospect Analytics', rank: 18 }] }] });
+  assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 18 }]);
+});
+
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {
   const mk = (n, rank, extra = {}) => ({ name: n, rankings: rank ? [{ list: 'top 200 hitters', rank }] : [], prices: [], ...extra });
   const clean = { title: 'Top 200 Hitters', players: Array.from({ length: 200 }, (_, i) => mk(`Name${i} Surname${'x'.repeat(i % 7)}${i}`, i + 1)) };

@@ -122,7 +122,7 @@ async function sha256(text) {
 
 // The post's own ranking list, named from its title ("Top 200 Hitters" -> 'top 200 hitters'), so a plain "Rank" column always lands on the right list.
 const OWN_LIST_ALIASES = /^(rank|own rank|post rank|ranking|hobby|hobby rank|hitters? rank|pitchers? rank|top \d+ (hitters|pitchers))$/i;
-const LIST_CANON = { rank: 'hobby rank', 'own rank': 'hobby rank', ranking: 'hobby rank', hobby: 'hobby rank', 'hobby rank': 'hobby rank', 'hobby ranking': 'hobby rank', 'overall rank': 'hobby rank',
+const LIST_CANON = { rank: 'hobby rank', 'own rank': 'hobby rank', ranking: 'hobby rank', hobby: 'hobby rank', 'hobby rank': 'hobby rank', 'hobby ranking': 'hobby rank', 'overall rank': 'hobby rank', 'hot sheet': 'hobby rank', 'hot sheet rank': 'hobby rank', 'prospect analytics': 'hobby rank', 'prospect analytics rank': 'hobby rank', pa: 'hobby rank',
   mlb: 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA', 'top 200 hitters': 'top 200 hitters', 'top 100 pitchers': 'top 100 pitchers' };
 const canonicalListName = n => { const k = String(n).trim().toLowerCase(); return LIST_CANON[k] || String(n).trim(); };
 export function ownListFromTitle(title) {
