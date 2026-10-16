@@ -94,6 +94,8 @@ const EXTRACT_SYSTEM = `You extract structured data from posts written by a pros
 Rules:
 - Use ONLY what the post (text and any screenshots) states. Never invent numbers, ranks, prices or opinions. Omit a field rather than guess.
 - Screenshots are tables whose columns change from post to post. Read the column headers and map each value to the right field. "Rank" is his own ranking. "Base Auto"/"Price" columns are base autograph prices in dollars; a price column labelled with a date applies to that date.
+- Only columns whose header is a date (e.g. "10/12 Price", "10/3 Price") or says Base Auto/Price are prices. Columns named "$ Diff", "% Diff", "Change", "Gain" or similar are the difference between two prices: NEVER record them as a price. For each row, the two price entries are the dollar values under the two dated price headers, read across the same row.
+- Dates: write each price date as YYYY-MM-DD, using the month and day exactly as printed in the column header (10/3 -> the 3rd, not the 2nd) and the year from the post date.
 - Prices are dollars as numbers ($1,234.50 -> 1234.5). Percent stats keep their number (21.9% -> 21.9). Do not convert units.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
