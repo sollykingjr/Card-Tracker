@@ -90,6 +90,7 @@ Rules:
 - Dates: write each price date as YYYY-MM-DD, using the month and day exactly as printed in the column header (10/3 -> the 3rd, not the 2nd) and the year from the post date.
 - Prices written in the text count too ("his base auto is $12", "currently around $4.21", "sitting at $30"): record each one as a price for that player. If the text gives no date for it, use the post date. If the author states a different date for a price ("was $20 in September"), use that date. Record "expected" only when the author gives an expected or fair value.
 - One price entry per date per player: if a table gives a base auto and an Expected value for the same date, put both on that one entry (never a second entry with the same date).
+- A column labelled "Last Week", "Prior Week" or "Previous Week" (no date printed) is dated exactly 7 days before the post date, and "This Week"/"Current" is the post date. Never guess another date.
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
 - Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating, also called Buy Score or BS (a number around 1-5, put in buy_rating; this is the most important number he publishes, so read it off every row of every table that has the column, never skip a row) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
 - Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too: one ranking entry per column, list named as the header.
