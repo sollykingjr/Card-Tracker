@@ -91,7 +91,9 @@ function pibDraw() {
       </div>
       <div class="srow-t" style="margin:16px 0 8px">To review${pibPending.length ? ` · ${pibPending.length}` : ''}</div>
       ${pibPending.length ? pibPending.map(pibPostHTML).join('') : '<div class="intake-empty">Nothing waiting.</div>'}
+      <div id="pib-imp" style="margin-top:16px"></div>
     </div>`;
+  if (typeof pibImpDraw === 'function') pibImpDraw();
   const ta = document.getElementById('pib-text');
   ta.addEventListener('paste', e => {                 // pasting a copied image works too
     const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));

@@ -307,8 +307,80 @@ export async function prospectDetail(env, name) {
   return { found: true, matches: out };
 }
 
+// ── One-time import of the old Prospect Master Sheet (data/prospect-import.json) ───────────────────
+// Each sheet tab+date becomes one saved "post". Three steps per snapshot so big ones go in safe chunks:
+//   start  -> creates the post (hidden while loading) or says skip if it was already imported
+//   rows   -> writes up to ~40 players in one atomic batch
+//   finish -> marks it confirmed. Re-running is safe: finished snapshots are skipped, half-done ones are redone.
+const IMPORT_SOURCE = 'prospect-master-sheet';
+export async function importSnapshot(env, b) {
+  const key = String(b.key || '');
+  if (!key) throw new Error('key required');
+  const postId = await sha256('sheet-import:' + key);
+  const prep = (sql, ...binds) => env.DB.prepare(sql).bind(...binds);
+  if (b.action === 'start') {
+    const date = isoDate(b.date);
+    if (!date) throw new Error('bad date');
+    const ex = await env.DB.prepare(`SELECT status FROM prospect_posts WHERE post_id = ?`).bind(postId).first();
+    if (ex && ex.status === 'confirmed') return { skip: true };
+    const stmts = ['prospect_takes', 'prospect_rankings', 'prospect_prices', 'prospect_snapshots', 'prospect_stats', 'prospect_posts']
+      .map(t => prep(`DELETE FROM ${t} WHERE post_id = ?`, postId));   // clears a half-finished earlier attempt
+    stmts.push(prep(`INSERT INTO prospect_posts (post_id, source, title, post_type, published_at, raw_text, model, status) VALUES (?,?,?,?,?,?,?, 'rejected')`,
+      postId, IMPORT_SOURCE, String(b.title || key).slice(0, 200), POST_TYPES.includes(b.post_type) ? b.post_type : 'other', date,
+      `Imported from the Prospect Master Sheet: ${key}`, 'sheet-import'));
+    await env.DB.batch(stmts);
+    return { started: true };
+  }
+  const post = await env.DB.prepare(`SELECT status, published_at FROM prospect_posts WHERE post_id = ? AND source = ?`).bind(postId, IMPORT_SOURCE).first();
+  if (!post) throw new Error('call start first');
+  if (post.status === 'confirmed') throw new Error('already finished');
+  if (b.action === 'finish') {
+    await env.DB.prepare(`UPDATE prospect_posts SET status = 'confirmed', confirmed_at = datetime('now'), summary = ? WHERE post_id = ?`)
+      .bind(`Imported ${Number(b.players) || 0} players from the Prospect Master Sheet (${key}).`, postId).run();
+    return { finished: true };
+  }
+  if (b.action !== 'rows') throw new Error('unknown action');
+  const dated = post.published_at;
+  const players = (Array.isArray(b.players) ? b.players : []).slice(0, 60).filter(p => p && String(p.name || '').trim());
+  const { results: known } = await env.DB.prepare(`SELECT prospect_id, norm_name, org FROM prospects`).all();
+  const byNorm = new Map(), ids = new Set(known.map(k => k.prospect_id));
+  for (const k of known) (byNorm.get(k.norm_name) || byNorm.set(k.norm_name, []).get(k.norm_name)).push(k);
+  const stmts = [], counts = { prospects: 0, new_prospects: 0, takes: 0, rankings: 0, prices: 0, snapshots: 0 };
+  for (const p of players) {
+    const name = String(p.name).trim(), norm = normName(name), team = p.team ? String(p.team).toUpperCase() : null;
+    const cand = byNorm.get(norm) || [];
+    let hit = cand.length === 1 ? cand[0] : cand.find(c => c.org === team) || null;
+    if (!hit) {
+      const base = slug(name) || 'player';
+      let id = base, n = 1;
+      while (ids.has(id)) id = `${base}-${++n}`;
+      ids.add(id);
+      hit = { prospect_id: id, norm_name: norm, org: team };
+      byNorm.set(norm, [...cand, hit]);
+      stmts.push(prep(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES (?,?,?,?,?)`, id, name, norm, team, ['hitter', 'pitcher'].includes(p.side) ? p.side : null));
+      counts.new_prospects++;
+    } else if (p.side) {
+      stmts.push(prep(`UPDATE prospects SET side = COALESCE(side, ?) WHERE prospect_id = ?`, p.side, hit.prospect_id));
+    }
+    const pid = hit.prospect_id;
+    counts.prospects++;
+    if (p.note) { stmts.push(prep(`INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, key_points, post_rank, dated) VALUES (?,?,?,?,?,?,?)`,
+      postId, pid, 'none', String(p.note), '[]', null, dated)); counts.takes++; }
+    for (const r of (Array.isArray(p.rankings) ? p.rankings : [])) {
+      if (!r || !r[0] || intOrNull(r[1]) == null) continue;
+      stmts.push(prep(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES (?,?,?,?,?)`, postId, pid, String(r[0]), intOrNull(r[1]), dated)); counts.rankings++;
+    }
+    if (p.price != null || p.expected != null) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
+      postId, pid, dated, intOrNull(p.price), intOrNull(p.expected))); counts.prices++; }
+    if (p.age != null || p.level || p.buy_rating != null || p.action) { stmts.push(prep(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES (?,?,?,?,?,?,?,?)`,
+      postId, pid, dated, team, p.age ?? null, p.level ?? null, p.buy_rating ?? null, p.action ?? null)); counts.snapshots++; }
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return { counts };
+}
+
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-import', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -323,6 +395,7 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-counts': return out({ pending: (await env.DB.prepare(`SELECT COUNT(*) n FROM prospect_posts WHERE status = 'pending'`).first()).n });
       case '/prospect-confirm': { const b = await request.json(); return out(await confirmPost(env, b.post_id, b.extraction || null)); }
       case '/prospect-reject': { const b = await request.json(); return out(await rejectPost(env, b.post_id)); }
+      case '/prospect-import': { const b = await request.json(); return out(await importSnapshot(env, b)); }
       case '/prospect': return out(await prospectDetail(env, url.searchParams.get('name') || ''));
     }
     return null;
