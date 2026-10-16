@@ -3,6 +3,19 @@
 const DEFAULT_MODEL = 'claude-haiku-5-5';   // one setting: switch to 'claude-sonnet-5-5' (env PROSPECT_MODEL) if screenshots misread
 const MAX_TEXT = 120000;
 
+// USD per million tokens (platform.claude.com pricing, checked 2026-10-15). tokens x $/MTok = micro-dollars.
+// Haiku 5.5 charges more when the whole prompt is over 100K tokens; Sonnet 5.5 is flat. Unknown model: no dollar estimate.
+const RATES = {
+  'claude-haiku-5-5': { inp: 0.10, out: 0.50, longInp: 0.50, longOut: 2.50, threshold: 100000 },
+  'claude-sonnet-5-5': { inp: 2, out: 10 }
+};
+export function costMicros(model, usage) {
+  const r = RATES[model];
+  if (!r || !usage) return null;
+  const long = r.threshold && usage.input_tokens > r.threshold;
+  return Math.round(usage.input_tokens * (long ? r.longInp : r.inp) + usage.output_tokens * (long ? r.longOut : r.out));
+}
+
 const POST_TYPES = ['analysis', 'rankings', 'hot_sheet', 'price_update', 'other'];
 const STANCES = ['buy', 'hold', 'sell', 'watch', 'avoid', 'none'];
 
@@ -167,7 +180,11 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
   const block = (d.content || []).find(b => b.type === 'tool_use' && b.name === EXTRACT_TOOL.name);
   if (!block) throw new Error('Model returned no structured result');
   if (d.stop_reason === 'max_tokens') throw new Error('Extraction was cut off (post too long)');
-  return { extraction: sanitizeExtraction(block.input, publishedAt), model };
+  // Total prompt tokens include cached ones; images are billed as ordinary input tokens.
+  const u = d.usage || {};
+  const usage = { input_tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), output_tokens: u.output_tokens || 0 };
+  usage.cost_micros = costMicros(model, usage);
+  return { extraction: sanitizeExtraction(block.input, publishedAt), model, usage };
 }
 
 // ── Pending / review ──────────────────────────────────────────────────────────
@@ -180,21 +197,31 @@ export async function submitPost(env, { text, images = [], title = null, publish
   const existing = await env.DB.prepare(`SELECT post_id, status FROM prospect_posts WHERE post_id = ?`).bind(postId).first();
   if (existing && existing.status !== 'rejected') return { postId, duplicate: true, status: existing.status };
   if (existing) await env.DB.prepare(`DELETE FROM prospect_posts WHERE post_id = ?`).bind(postId).run();   // a rejected post can be sent again
-  const { extraction, model } = await extractor(env, { text, images, title, publishedAt });
-  await env.DB.prepare(`INSERT INTO prospect_posts (post_id, source, title, post_type, published_at, raw_text, image_urls, summary, thesis, extraction_json, model)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(postId, source, extraction.title || title, extraction.post_type, extraction.published_date,
+  const { extraction, model, usage = null } = await extractor(env, { text, images, title, publishedAt });
+  await env.DB.prepare(`INSERT INTO prospect_posts (post_id, source, title, post_type, published_at, raw_text, image_urls, summary, thesis, extraction_json, model, input_tokens, output_tokens, cost_micros)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(postId, source, extraction.title || title, extraction.post_type, extraction.published_date,
       text, images.length ? JSON.stringify(images.map(i => i.url).filter(Boolean)) : null,
-      extraction.summary, extraction.thesis, JSON.stringify(extraction), model).run();
-  return { postId, duplicate: false, status: 'pending', extraction };
+      extraction.summary, extraction.thesis, JSON.stringify(extraction), model,
+      usage?.input_tokens ?? null, usage?.output_tokens ?? null, usage?.cost_micros ?? null).run();
+  return { postId, duplicate: false, status: 'pending', extraction, usage };
 }
 
 export async function listPendingPosts(env) {
-  const { results } = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, extraction_json, created_at
+  const { results } = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, extraction_json, created_at, model, input_tokens, output_tokens, cost_micros
     FROM prospect_posts WHERE status = 'pending' ORDER BY created_at`).all();
   return { pending: results.length, posts: await Promise.all(results.map(async r => {
     const extraction = JSON.parse(r.extraction_json || '{}');
-    return { ...r, extraction_json: undefined, extraction, matches: await previewMatches(env, extraction.players || []) };
+    const { input_tokens, output_tokens, cost_micros, ...rest } = r;
+    return { ...rest, extraction_json: undefined, extraction, usage: input_tokens == null ? null : { input_tokens, output_tokens, cost_micros },
+      matches: await previewMatches(env, extraction.players || []) };
   })) };
+}
+
+// Running total of what extraction has cost: this calendar month (UTC) and all time.
+export async function usageSummary(env) {
+  const row = async where => env.DB.prepare(`SELECT COUNT(*) posts, COALESCE(SUM(input_tokens),0) input_tokens, COALESCE(SUM(output_tokens),0) output_tokens, COALESCE(SUM(cost_micros),0) cost_micros
+    FROM prospect_posts WHERE input_tokens IS NOT NULL ${where}`).first();
+  return { month: await row(`AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`), all_time: await row('') };
 }
 
 // For each extracted player: which existing prospect it matches (so the review screen can flag new/ambiguous ones).
@@ -279,7 +306,7 @@ export async function prospectDetail(env, name) {
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -290,6 +317,7 @@ export async function handleProspects(request, env, cors) {
     switch (url.pathname) {
       case '/prospect-extract': { const b = await request.json(); return out(await submitPost(env, b)); }
       case '/prospect-pending': return out(await listPendingPosts(env));
+      case '/prospect-usage': return out(await usageSummary(env));
       case '/prospect-counts': return out({ pending: (await env.DB.prepare(`SELECT COUNT(*) n FROM prospect_posts WHERE status = 'pending'`).first()).n });
       case '/prospect-confirm': { const b = await request.json(); return out(await confirmPost(env, b.post_id, b.extraction || null)); }
       case '/prospect-reject': { const b = await request.json(); return out(await rejectPost(env, b.post_id)); }

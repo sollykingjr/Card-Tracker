@@ -6,6 +6,12 @@ let pibPending = [];          // posts waiting for review (with extraction + mat
 let pibImages = [];           // screenshots attached in the paste box: { name, media_type, base64 }
 let pibBusy = false;
 let pibMsg = '';
+let pibUsage = null;          // { month, all_time } extraction cost totals from the Worker
+
+// Cost is stored in micro-dollars. Show 4 decimals for tiny amounts so a $0.003 post doesn't read as $0.00.
+const pibCost = m => m == null ? '' : '$' + (m / 1e6).toFixed(m < 100000 ? 4 : 2);
+const pibTok = n => Number(n || 0).toLocaleString('en-US');
+const pibUsageLine = u => u ? `${pibTok(u.input_tokens)} tokens in · ${pibTok(u.output_tokens)} out${u.cost_micros != null ? ' · ≈ ' + pibCost(u.cost_micros) : ''}` : '';
 
 const pibEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pibToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -53,7 +59,8 @@ async function renderProspectInbox() {
   document.getElementById('sortchips').innerHTML = '';
   document.getElementById('cntlbl').textContent = '';
   if (!pibPending.length) listEl.innerHTML = '<div class="spin"><div class="spin-ring"></div>Loading…</div>';
-  const d = await pibCall('/prospect-pending');
+  const [d, u] = await Promise.all([pibCall('/prospect-pending'), pibCall('/prospect-usage')]);
+  pibUsage = u && !u.error ? u : null;
   if (tab !== 'inbox') return;                       // user switched tabs while loading
   if (d.error) { listEl.innerHTML = `<div class="intake-card"><div class="intake-err">${pibEsc(d.error)}</div></div>`; return; }
   pibPending = d.posts || [];
@@ -80,6 +87,7 @@ function pibDraw() {
         </div>
         <input id="pib-file" type="file" accept="image/*" multiple style="display:none" onchange="pibAddFiles(this.files); this.value=''">
         <div class="intake-err" id="pib-err">${pibEsc(pibMsg)}</div>
+        ${pibUsage && pibUsage.all_time.posts ? `<div class="intake-meta">Extraction cost · this month ${pibUsage.month.posts} post${pibUsage.month.posts === 1 ? '' : 's'}, ≈ ${pibCost(pibUsage.month.cost_micros)} · all time ≈ ${pibCost(pibUsage.all_time.cost_micros)}</div>` : ''}
       </div>
       <div class="srow-t" style="margin:16px 0 8px">To review${pibPending.length ? ` · ${pibPending.length}` : ''}</div>
       ${pibPending.length ? pibPending.map(pibPostHTML).join('') : '<div class="intake-empty">Nothing waiting.</div>'}
@@ -150,6 +158,7 @@ function pibPostHTML(p) {
     <div class="intake-card" id="pib-p-${p.post_id}">
       <div class="intake-name">${pibEsc(ex.title || p.title || 'Untitled post')}</div>
       <div class="intake-meta">${pibEsc((ex.post_type || '').replace('_', ' '))} · ${players.length} player${players.length === 1 ? '' : 's'} · ${nTakes} with analysis</div>
+      ${p.usage ? `<div class="intake-meta">Cost of this extraction: ${pibEsc(pibUsageLine(p.usage))}</div>` : ''}
       <div class="intake-row" style="align-items:center;margin-top:6px">
         <span class="intake-meta" style="margin:0">Post date</span>
         <input class="intake-in" type="date" style="margin-top:0;max-width:150px" value="${pibEsc(ex.published_date || '')}" onchange="pibSetPost('${p.post_id}','published_date',this.value)">

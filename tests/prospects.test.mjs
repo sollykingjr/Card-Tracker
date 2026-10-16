@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -111,6 +111,27 @@ await t('same post sent twice is a duplicate and does not call the model again',
   const again = await submitPost(env, { text: POST_TEXT, extractor: fakeExtractor(BOUNCE_BACK) });
   assert.equal(again.duplicate, true);
   assert.equal(calls.length, 1);
+});
+
+await t('cost math: Haiku 5.5 normal and over-100K tiers, Sonnet flat, unknown model has no estimate', () => {
+  assert.equal(costMicros('claude-haiku-5-5', { input_tokens: 10000, output_tokens: 2000 }), 2000);        // $0.002
+  assert.equal(costMicros('claude-haiku-5-5', { input_tokens: 150000, output_tokens: 1000 }), 77500);      // long-prompt rates
+  assert.equal(costMicros('claude-sonnet-5-5', { input_tokens: 10000, output_tokens: 2000 }), 40000);      // $0.04
+  assert.equal(costMicros('some-future-model', { input_tokens: 1, output_tokens: 1 }), null);
+});
+
+await t('token usage is stored on the post, returned, shown in pending, and summed', async () => {
+  const env = { DB: makeDb() };
+  const withUsage = ex => async (e, args) => ({ extraction: sanitizeExtraction(ex, args.publishedAt), model: 'claude-haiku-5-5', usage: { input_tokens: 20000, output_tokens: 3000, cost_micros: costMicros('claude-haiku-5-5', { input_tokens: 20000, output_tokens: 3000 }) } });
+  const r = await submitPost(env, { text: POST_TEXT, extractor: withUsage(BOUNCE_BACK) });
+  assert.deepEqual(r.usage, { input_tokens: 20000, output_tokens: 3000, cost_micros: 3500 });
+  const pend = await listPendingPosts(env);
+  assert.deepEqual(pend.posts[0].usage, { input_tokens: 20000, output_tokens: 3000, cost_micros: 3500 });
+  await submitPost(env, { text: POST_TEXT + ' another post', extractor: withUsage(AFL) });
+  await submitPost(env, { text: 'no usage reported here, long enough to store', extractor: fakeExtractor(AFL) });   // usage unknown: not counted
+  const u = await usageSummary(env);
+  assert.deepEqual({ ...u.month }, { posts: 2, input_tokens: 40000, output_tokens: 6000, cost_micros: 7000 });
+  assert.deepEqual({ ...u.all_time }, { ...u.month });
 });
 
 await t('a rejected post can be submitted again; a confirmed one cannot', async () => {

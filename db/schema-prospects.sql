@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS prospect_posts (
   thesis TEXT,
   extraction_json TEXT,                  -- what the model returned, shown on the review screen
   model TEXT,
+  input_tokens INTEGER, output_tokens INTEGER,   -- what the extraction call used (added 2026-10-15 via ALTER on the live DB)
+  cost_micros INTEGER,                           -- cost in millionths of a dollar at the rate in effect when it ran
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','confirmed','rejected')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   confirmed_at TEXT
