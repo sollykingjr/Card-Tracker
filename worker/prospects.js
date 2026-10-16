@@ -384,14 +384,16 @@ export async function exportForApp(env) {
       out.players.push({ date, team: r.team || '', pos, name: r.name, age: r.age ?? null, price: dollars(r.price_c), mlb: r.ranks['MLB'] ?? null, dd: r.ranks['DD'] ?? null,
         roto: r.ranks['Roto'] ?? null, sts: r.ranks['StS'] ?? null, ba: r.ranks['BA'] ?? null, hobby: r.ranks['hobby rank'] ?? null, buy: r.buy ?? null, lastYr: null, chg: null, notes: note });
     }
-    if (r.post_type === 'hot_sheet') {
-      out.hotsheet.push({ date, week: weekOf(r.dated), pos, level: r.level || '', name: r.name, age: r.age ?? null, aff: r.team || '', auto: dollars(r.price_c),
+    const hasBuyData = r.buy != null || r.action || r.expected_c != null;
+    // Hot-sheet posts, plus any other post's prices/takes (rankings, analysis, price updates) that no other list carries, so the player modal sees them.
+    if (r.post_type === 'hot_sheet' || (!isBaseline && !hasBuyData && (r.price_c != null || note))) {
+      out.hotsheet.push({ date, week: r.post_type === 'hot_sheet' ? weekOf(r.dated) : null, pos, level: r.level || '', name: r.name, age: r.age ?? null, aff: r.team || '', auto: dollars(r.price_c),
         hobby: r.ranks['hobby rank'] ?? null, buyScore: r.buy ?? null, notes: note });
     }
     for (const [list, key] of Object.entries(TOP_LISTS)) if (r.ranks[list] != null) {
       out[key].push({ date, rank: r.ranks[list], name: r.name, team: r.team || '', age: r.age ?? null, prev: null, diff: null, price: dollars(r.price_c), notes: note });
     }
-    if (r.post_type !== 'hot_sheet' && !isBaseline && (r.buy != null || r.action || r.expected_c != null)) {
+    if (r.post_type !== 'hot_sheet' && !isBaseline && hasBuyData) {
       const list = Object.keys(TOP_LISTS).find(l => r.ranks[l] != null);
       out.buyScores.push({ date, pos, rank: list ? r.ranks[list] : null, name: r.name, team: r.team || '', age: r.age ?? null, price: dollars(r.price_c),
         score: r.buy ?? null, notes: r.action || null, expectedValue: dollars(r.expected_c) });
