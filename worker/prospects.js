@@ -61,18 +61,6 @@ const EXTRACT_TOOL = {
                 }
               }
             },
-            stat_lines: {
-              type: 'array',
-              description: 'Performance lines. Keep his stat names as written (OPS, wRC+, K%, ERA, SO9...). Values are numbers.',
-              items: {
-                type: 'object', required: ['context', 'stats'],
-                properties: {
-                  context: { type: 'string', description: "e.g. 'AFL 2026', '2026 season'" },
-                  level: { type: 'string', description: "e.g. 'A/A+', 'AFL'" },
-                  stats: { type: 'object', additionalProperties: { type: 'number' } }
-                }
-              }
-            },
             take: {
               type: 'object',
               description: "His opinion of this player. Only fill when the post actually says something about the player beyond listing numbers.",
@@ -96,7 +84,8 @@ Rules:
 - Screenshots are tables whose columns change from post to post. Read the column headers and map each value to the right field. "Rank" is his own ranking. "Base Auto"/"Price" columns are base autograph prices in dollars; a price column labelled with a date applies to that date.
 - Only columns whose header is a date (e.g. "10/12 Price", "10/3 Price") or says Base Auto/Price are prices. Columns named "$ Diff", "% Diff", "Change", "Gain" or similar are the difference between two prices: NEVER record them as a price. For each row, the two price entries are the dollar values under the two dated price headers, read across the same row.
 - Dates: write each price date as YYYY-MM-DD, using the month and day exactly as printed in the column header (10/3 -> the 3rd, not the 2nd) and the year from the post date.
-- Prices are dollars as numbers ($1,234.50 -> 1234.5). Percent stats keep their number (21.9% -> 21.9). Do not convert units.
+- Prices are dollars as numbers ($1,234.50 -> 1234.5).
+- Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
 - Put each player in the list once, merging data from the text and from tables.
@@ -142,8 +131,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
         base_auto_cents: x.base_auto_cents != null ? intOrNull(x.base_auto_cents) : cents(x.base_auto),
         expected_cents: x.expected_cents != null ? intOrNull(x.expected_cents) : cents(x.expected)
       })).filter(x => x && isoDate(x.date) && x.base_auto_cents != null),
-      stat_lines: (Array.isArray(p.stat_lines) ? p.stat_lines : []).filter(x => x && x.stats && typeof x.stats === 'object' && Object.keys(x.stats).length)
-        .map(x => ({ context: String(x.context || '').trim() || 'unspecified', level: x.level ? String(x.level).trim() : null, stats: x.stats })),
+      stat_lines: [],   // stat lines are deliberately not extracted or stored (saves tokens; prospect_stats table stays unused)
       take
     };
   });

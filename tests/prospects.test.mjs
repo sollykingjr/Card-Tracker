@@ -152,13 +152,13 @@ await t('pending list flags new players; confirm writes every table', async () =
   assert.equal(pend.pending, 1);
   assert.ok(pend.posts[0].matches.every(m => m.status === 'new'));
   const c = await confirmPost(env, postId);
-  assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, stats: 3 });
+  assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, stats: 0 });
   assert.equal((await listPendingPosts(env)).pending, 0);
   const d = await prospectDetail(env, 'ramiro dominguez');
   assert.equal(d.matches[0].prospect.org, 'MIN');
   assert.equal(d.matches[0].prices[0].base_auto_cents, 421);
   assert.equal(d.matches[0].takes[0].key_points[0], 'PullAir% 93rd percentile');
-  assert.equal(d.matches[0].stats[0].stats.ISO, 0.174);
+  assert.equal(d.matches[0].stats.length, 0);   // stats are no longer stored
 });
 
 await t('second post matches existing players (no duplicates) and builds a price/take timeline', async () => {
@@ -208,7 +208,7 @@ await t('edited extraction on confirm is what gets saved; reject saves nothing; 
 await t('a failing write rolls the whole post back (nothing half-saved)', async () => {
   const env = { DB: makeDb() };
   const { postId } = await submitPost(env, { text: POST_TEXT, extractor: fakeExtractor(BOUNCE_BACK) });
-  env.DB._raw.exec('DROP TABLE prospect_stats');   // force a mid-batch failure
+  env.DB._raw.exec('DROP TABLE prospect_rankings');   // force a mid-batch failure
   await assert.rejects(() => confirmPost(env, postId));
   assert.equal(env.DB._raw.prepare('SELECT COUNT(*) n FROM prospect_takes').get().n, 0);
   assert.equal(env.DB._raw.prepare('SELECT status FROM prospect_posts WHERE post_id = ?').get(postId).status, 'pending');
