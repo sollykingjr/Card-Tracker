@@ -199,8 +199,9 @@ export function mergeExtractions(base, extras) {
   for (const ex of extras) for (const p of ex.players) {
     const k = normName(p.name);
     let m = byName.get(k);
-    if (!m && k.length >= 8) {   // the post text has typos the tables don't ("Velasquez" vs "Velazquez"): same player if the names are 1-2 letters apart and only one candidate fits
-      const near = [...byName].filter(([n]) => Math.abs(n.length - k.length) <= 2 && editDistance(n, k) <= 2);
+    if (!m) {   // the post text has typos the tables don't ("Velasquez" vs "Velazquez"): same player only if the first names match and the last names differ by ONE letter, with a single candidate
+      const [first, ...rest] = k.split(' '), last = rest.join(' ');
+      const near = last.length >= 5 ? [...byName].filter(([n]) => { const [f, ...r] = n.split(' '); return f === first && editDistance(r.join(' '), last) === 1; }) : [];
       if (near.length === 1) { m = near[0][1]; m.name = p.name; byName.set(k, m); }   // the table's spelling wins
     }
     if (!m) { const c = { ...p }; base.players.push(c); byName.set(k, c); continue; }
