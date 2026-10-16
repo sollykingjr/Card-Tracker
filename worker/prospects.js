@@ -163,11 +163,11 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
         for (const x of list) {
           const rank = intOrNull(x.rank); let name = canonicalListName(x.list);
           if (prose && !/^hobby/i.test(name) && !(own && name.toLowerCase() === own.list) && !(own && OWN_LIST_ALIASES.test(name))) continue;
-          if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; if (rank > own.cap) continue; }
+          if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; }   // ranks past the title's size (a 214 in a "Top 200" table) are real data from his other charts: kept
           if (!out.some(y => y.list.toLowerCase() === name.toLowerCase())) out.push({ list: name, rank });   // the same list twice ("Hobby" and "Hobby Rank") is one ranking
         }
         const pr = intOrNull(p.post_rank);
-        if (own && pr != null && pr <= own.cap && !out.some(y => y.list === own.list)) out.push({ list: own.list, rank: pr });
+        if (own && pr != null && pr >= 1 && !out.some(y => y.list === own.list)) out.push({ list: own.list, rank: pr });
         return out;
       })((Array.isArray(p.rankings) ? p.rankings : []).filter(x => x && x.list && intOrNull(x.rank) != null)),
       // Accepts dollars (model output) or cents (already-cleaned output), so cleaning twice is safe.
@@ -369,8 +369,8 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
   if (own) {
     const ranked = players.map(p => ({ p, r: (p.rankings || []).find(x => x.list === own.list) })).filter(x => x.r);
     const unranked = players.filter(p => !(p.rankings || []).some(x => x.list === own.list));
-    const over = ranked.filter(x => x.r.rank > own.cap || x.r.rank < 1).map(x => x.p.name);
-    if (over.length) add('warn', `Rank outside 1-${own.cap} on ${own.list}: ${list(over)}.`, over);
+    const over = ranked.filter(x => x.r.rank < 1).map(x => x.p.name);
+    if (over.length) add('warn', `Rank below 1 on ${own.list}: ${list(over)}.`, over);
     const seen = new Map(); for (const x of ranked) seen.set(x.r.rank, [...(seen.get(x.r.rank) || []), x.p.name]);
     const dupes = [...seen].filter(([, n]) => n.length > 1);
     if (dupes.length) add('warn', `Same ${own.list} rank used twice: ${dupes.slice(0, 5).map(([r, n]) => `#${r} (${n.join(' / ')})`).join(', ')}.`, dupes.flatMap(([, n]) => n));
