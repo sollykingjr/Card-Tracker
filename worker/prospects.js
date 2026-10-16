@@ -96,7 +96,7 @@ Rules:
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
 - Put each player in the list once, merging data from the text and from tables.
-- stance: use "buy", "hold", "sell", "watch" or "avoid" only when the author is clear about it for that player. BUY counts when he clearly recommends or endorses buying, even without the word "buy" (e.g. "absolute steal", "I love him under $10", "a target", "I'd be buying") or his action label says so (Strong Buy, Lean Buy). SELL / AVOID need him to actually say to sell, trim or stay away (or an action label like "Consider Selling"). Negative or cautious commentary alone is NOT a sell: "overvalued", "not going up", "I had him as overvalued", a slow start or a price drop is just his analysis, so leave the stance "none" and describe it in the take. Never infer a stance from stats, price moves, tone or a player being on a hot or cold list. If it is not clear, the stance is "none". A player who only appears in a table gets stance "none" and no take.`;
+- stance: ALWAYS "none" unless the post's data tables give one. It comes only from a player's Buy Rating / Action label in a table or buy list (Strong Buy, Lean Buy, Buy = "buy"; an explicit sell, avoid, hold or watch label = that word). His written analysis NEVER sets the stance, however positive or negative it sounds ("I'm cool with a buy at $5", "absolute steal", "overvalued" are all just analysis: stance "none", and describe it in the take). Never infer a stance from stats, price moves, tone or a hot/cold list.`;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 export function normName(name) {
@@ -173,9 +173,40 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
     published_date: date,
     summary: String(r.summary || '').trim(),
     thesis: r.thesis ? String(r.thesis).trim() : null,
-    players
+    players: dedupePlayers(players)
   };
 }
+
+// The same player listed twice in one post (the model sometimes repeats someone) becomes one entry. A real two-way player (hitter and pitcher) stays two.
+function foldPlayer(m, p) {
+  for (const f of ['team', 'side', 'age', 'level', 'buy_rating', 'action', 'post_rank']) m[f] ??= p[f];
+  for (const r of p.rankings) if (!m.rankings.some(x => x.list.toLowerCase() === r.list.toLowerCase())) m.rankings.push(r);
+  for (const pr of p.prices) {
+    const same = m.prices.find(x => x.date === pr.date);
+    if (!same) m.prices.push({ ...pr }); else { same.base_auto_cents ??= pr.base_auto_cents; same.expected_cents ??= pr.expected_cents; }
+  }
+  if (!m.take || (p.take && p.take.summary.length > m.take.summary.length)) m.take = p.take || m.take;
+}
+function dedupePlayers(players) {
+  const out = [];
+  for (const p of players) {
+    const m = out.find(x => normName(x.name) === normName(p.name) && (!x.side || !p.side || x.side === p.side));
+    if (m) foldPlayer(m, p); else out.push(p);
+  }
+  return out;
+}
+
+// The stance tag comes only from the data tables (buy rating / action label), never from his written analysis.
+export function stanceFromTable(p) {
+  const a = String(p.action || '').toLowerCase();
+  if (/\b(sell|selling|trim)\b/.test(a)) return 'sell';
+  if (/\bavoid\b/.test(a)) return 'avoid';
+  if (/\bhold\b/.test(a)) return 'hold';
+  if (/\bwatch\b/.test(a)) return 'watch';
+  if (/\bbuy\b/.test(a) || (p.buy_rating != null && p.buy_rating >= 3.5)) return 'buy';
+  return 'none';
+}
+export function applyStanceRule(ex) { for (const p of ex.players) if (p.take) p.take.stance = stanceFromTable(p); return ex; }
 
 // ── Claude call ───────────────────────────────────────────────────────────────
 // images: [{ url } | { base64, media_type }]. Returns the sanitized extraction.
@@ -222,13 +253,7 @@ export function mergeExtractions(base, extras) {
       if (near.length === 1) { m = near[0][1]; m.name = p.name; byName.set(k, m); }   // the table's spelling wins
     }
     if (!m) { const c = { ...p }; base.players.push(c); byName.set(k, c); continue; }
-    for (const f of ['team', 'side', 'age', 'level', 'buy_rating', 'action', 'post_rank']) m[f] ??= p[f];
-    for (const r of p.rankings) if (!m.rankings.some(x => x.list === r.list)) m.rankings.push(r);
-    for (const pr of p.prices) {
-      const same = m.prices.find(x => x.date === pr.date);
-      if (!same) m.prices.push({ ...pr }); else { same.base_auto_cents ??= pr.base_auto_cents; same.expected_cents ??= pr.expected_cents; }
-    }
-    m.take ??= p.take;
+    foldPlayer(m, p);
   }
   return base;
 }
@@ -257,6 +282,7 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
     const merged = mergeExtractions(results[0].extraction, results.slice(1).map(r => r.extraction));
     if (failed) merged.summary += ` (Warning: ${failed} of ${blocks.length} table images could not be read, so some players may be missing.)`;
   }
+  applyStanceRule(results[0].extraction);
   const usage = { input_tokens: results.reduce((t, r) => t + r.usage.input_tokens, 0), output_tokens: results.reduce((t, r) => t + r.usage.output_tokens, 0) };
   usage.cost_micros = costMicros(model, usage);
   return { extraction: results[0].extraction, model, usage };

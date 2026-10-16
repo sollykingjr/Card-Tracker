@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -365,6 +365,26 @@ await t('review checks flag the things that went wrong before, and stay quiet on
   assert.ok(f.find(x => /Odd Rank/.test(x.text)).players.includes('Odd Rank'));
   // a list already on file is not new
   assert.equal(reviewFlags({ title: 'z', players: [{ name: 'A B', rankings: [{ list: 'AFL hot hitters rank', rank: 1 }] }] }, { knownLists: ['afl hot hitters rank'] }).length, 0);
+});
+
+await t('buy/sell tag comes only from the table (buy rating / action), never from his analysis; repeated players merge', async () => {
+  assert.equal(stanceFromTable({ action: 'Strong Buy' }), 'buy'); assert.equal(stanceFromTable({ action: 'Lean Buy', buy_rating: 3.9 }), 'buy');
+  assert.equal(stanceFromTable({ buy_rating: 4.1 }), 'buy'); assert.equal(stanceFromTable({ buy_rating: 3.2, action: 'Slightly Undervalued' }), 'none');
+  assert.equal(stanceFromTable({ action: 'Very Overvalued', buy_rating: 2.0 }), 'none'); assert.equal(stanceFromTable({ action: 'Consider Selling' }), 'sell');
+  assert.equal(stanceFromTable({}), 'none');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'record_post', input: { post_type: 'analysis', summary: 's', players: [
+    { name: 'Andri Hidalgo', take: { stance: 'buy', summary: 'cool with a buy if cheap' } },
+    { name: 'Argenis Cayama', take: { stance: 'none', summary: 'short' } }, { name: 'Argenis Cayama', hobby: 1, rankings: [{ list: 'Hobby Rank', rank: 52 }], take: { stance: 'none', summary: 'a much longer take about him' } },
+    { name: 'Josh Owens', side: 'hitter', take: { stance: 'none', summary: 'h' } }, { name: 'Josh Owens', side: 'pitcher', take: { stance: 'none', summary: 'p' } },
+    { name: 'Cheap Guy', buy_rating: 4.2, action: 'Buy', take: { stance: 'none', summary: 'ok' } }] } }], stop_reason: 'tool_use', usage: { input_tokens: 10, output_tokens: 10 } }), { status: 200 });
+  try {
+    const e = (await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'x'.repeat(100), images: [] })).extraction;
+    const by = n => e.players.filter(p => p.name === n);
+    assert.equal(by('Andri Hidalgo')[0].take.stance, 'none'); assert.equal(by('Cheap Guy')[0].take.stance, 'buy');
+    assert.equal(by('Argenis Cayama').length, 1); assert.equal(by('Argenis Cayama')[0].take.summary, 'a much longer take about him'); assert.equal(by('Argenis Cayama')[0].rankings[0].rank, 52);
+    assert.equal(by('Josh Owens').length, 2);   // two-way player stays two entries
+  } finally { globalThis.fetch = realFetch; }
 });
 
 console.log(`\n${passed} tests passed`);
