@@ -367,16 +367,16 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
 
 const knownListNames = async env => ((await env.DB.prepare(`SELECT DISTINCT lower(list_name) l FROM prospect_rankings`).all()).results || []).map(x => x.l);
 
-// Pushover alert when a post lands in the Inbox. Silent no-op unless PUSHOVER_APP_TOKEN and PUSHOVER_USER_KEY are set; never blocks or fails the post.
+// Pushover alert when a post lands in the Inbox. Silent no-op unless PUSHOVER_TOKEN and PUSHOVER_USER are set; never blocks or fails the post.
 export async function notifyNewPost(env, extraction, matches = [], doFetch = fetch) {
-  if (!env.PUSHOVER_APP_TOKEN || !env.PUSHOVER_USER_KEY) return false;
+  if (!env.PUSHOVER_TOKEN || !env.PUSHOVER_USER) return false;
   try {
     const players = extraction.players || [], withNotes = players.filter(p => p.take).length;
     const warns = reviewFlags(extraction, { knownLists: await knownListNames(env), matches }).filter(f => f.level === 'warn').length;
     const message = `${players.length} player${players.length === 1 ? '' : 's'} · ${withNotes} with analysis${warns ? ` · ${warns} thing${warns === 1 ? '' : 's'} to check` : ' · checks passed'}`;
     const res = await doFetch('https://api.pushover.net/1/messages.json', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(5000),
-      body: JSON.stringify({ token: env.PUSHOVER_APP_TOKEN, user: env.PUSHOVER_USER_KEY, title: `New prospect post: ${extraction.title || 'Untitled'}`.slice(0, 250), message,
+      body: JSON.stringify({ token: env.PUSHOVER_TOKEN, user: env.PUSHOVER_USER, title: `New prospect post: ${extraction.title || 'Untitled'}`.slice(0, 250), message,
         url: env.APP_URL || 'https://sollykingjr.github.io/Card-Tracker/', url_title: 'Review in Card Tracker' })
     });
     return res.ok;

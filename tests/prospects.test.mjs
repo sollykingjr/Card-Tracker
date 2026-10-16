@@ -409,7 +409,7 @@ await t('Pushover alert goes out for a new post, never for a duplicate, and a fa
   const extractor = async () => ({ extraction: sanitizeExtraction({ title: 'Cayama post', post_type: 'analysis', summary: 's', published_date: '2026-10-16', players: [{ name: 'Argenis Cayama', take: { stance: 'none', summary: 'x' } }] }), model: 'fake' });
   const off = { DB: makeDb() };   // no Pushover secrets: silent
   await submitPost(off, { text: POST_TEXT + ' push-off', extractor, deps: { notifyFetch } }); assert.equal(sent.length, 0);
-  const env = { DB: makeDb(), PUSHOVER_APP_TOKEN: 'tok', PUSHOVER_USER_KEY: 'usr' };
+  const env = { DB: makeDb(), PUSHOVER_TOKEN: 'tok', PUSHOVER_USER: 'usr' };
   await submitPost(env, { text: POST_TEXT + ' push-on', extractor, deps: { notifyFetch } });
   assert.equal(sent.length, 1); assert.equal(sent[0].url, 'https://api.pushover.net/1/messages.json');
   assert.equal(sent[0].body.token, 'tok'); assert.equal(sent[0].body.user, 'usr'); assert.match(sent[0].body.title, /Cayama post/); assert.match(sent[0].body.message, /1 player · 1 with analysis/);
