@@ -228,7 +228,7 @@ async function callClaude(env, model, content, publishedAt) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
-      model, max_tokens: 16000, system: EXTRACT_SYSTEM,
+      model, max_tokens: 40000, system: EXTRACT_SYSTEM,
       tools: [EXTRACT_TOOL], tool_choice: { type: 'tool', name: EXTRACT_TOOL.name },
       messages: [{ role: 'user', content }]
     })
