@@ -533,32 +533,48 @@ export async function exportForApp(env) {
   const baseline = new Map();   // first "Players All" row per prospect = the baseline entry the old sheet had
   for (const r of rows.slice().sort((a, b) => String(a.dated).localeCompare(String(b.dated)))) {
     const date = usDate(r.dated), pos = posLabel(r.side, r.ranks), note = r.take ? r.take.summary : null;
-    // Imported sheet notes ARE his original words, so they count as the analysis; newer takes keep his analysis and the model's summary apart.
-    const imported = r.source === 'prospect-master-sheet';
-    const analysis = r.take ? (r.take.analysis || (imported ? r.take.summary : null)) : null;
-    const summary = r.take && !imported ? r.take.summary : null;
+
     const isBaseline = r.source === 'prospect-master-sheet' && /^Players All/.test(r.title || '');
     if (isBaseline && !baseline.has(r.prospect_id)) {
       baseline.set(r.prospect_id, true);
       out.players.push({ date, team: r.team || '', pos, name: r.name, age: r.age ?? null, price: dollars(r.price_c), mlb: r.ranks['MLB'] ?? null, dd: r.ranks['DD'] ?? null,
-        roto: r.ranks['Roto'] ?? null, sts: r.ranks['StS'] ?? null, ba: r.ranks['BA'] ?? null, hobby: r.ranks['hobby rank'] ?? null, buy: r.buy ?? null, lastYr: null, chg: null, notes: note, analysis, summary });
+        roto: r.ranks['Roto'] ?? null, sts: r.ranks['StS'] ?? null, ba: r.ranks['BA'] ?? null, hobby: r.ranks['hobby rank'] ?? null, buy: r.buy ?? null, lastYr: null, chg: null });
     }
     const hasBuyData = r.buy != null || r.action || r.expected_c != null;
     // Hot-sheet posts, plus any other post's prices/takes (rankings, analysis, price updates) that no other list carries, so the player modal sees them.
     if (r.post_type === 'hot_sheet' || (!isBaseline && !hasBuyData && (r.price_c != null || note))) {
       out.hotsheet.push({ date, week: r.post_type === 'hot_sheet' ? weekOf(r.dated) : null, pos, level: r.level || '', name: r.name, age: r.age ?? null, aff: r.team || '', auto: dollars(r.price_c),
-        hobby: r.ranks['hobby rank'] ?? null, buyScore: r.buy ?? null, notes: note, analysis, summary });
+        hobby: r.ranks['hobby rank'] ?? null, buyScore: r.buy ?? null });
     }
     for (const [list, key] of Object.entries(TOP_LISTS)) if (r.ranks[list] != null) {
-      out[key].push({ date, rank: r.ranks[list], name: r.name, team: r.team || '', age: r.age ?? null, prev: null, diff: null, price: dollars(r.price_c), notes: note, analysis, summary });
+      out[key].push({ date, rank: r.ranks[list], name: r.name, team: r.team || '', age: r.age ?? null, prev: null, diff: null, price: dollars(r.price_c) });
     }
     if (r.post_type !== 'hot_sheet' && !isBaseline && hasBuyData) {
       const list = Object.keys(TOP_LISTS).find(l => r.ranks[l] != null);
       out.buyScores.push({ date, pos, rank: list ? r.ranks[list] : null, name: r.name, team: r.team || '', age: r.age ?? null, price: dollars(r.price_c),
-        score: r.buy ?? null, notes: r.action || null, expectedValue: dollars(r.expected_c), analysis, summary });
+        score: r.buy ?? null, notes: r.action || null, expectedValue: dollars(r.expected_c) });
     }
   }
   return out;
+}
+
+// A player's notes, fetched when his modal opens (the startup export carries no text). Imported sheet notes are his own words, so they count as the analysis.
+export async function playerTakes(env, name, offset = 0, limit = 3) {
+  const { results: found } = await env.DB.prepare(`SELECT prospect_id FROM prospects WHERE norm_name = ?`).bind(normName(name)).all();
+  if (!found.length) return { found: false, total: 0, latest: { note: null, summary: null }, takes: [] };
+  const ids = found.map(f => f.prospect_id), ph = ids.map(() => '?').join(',');
+  const base = `FROM prospect_takes t JOIN prospect_posts p ON p.post_id = t.post_id WHERE p.status = 'confirmed' AND t.prospect_id IN (${ph})`;
+  const cols = `t.dated, t.stance, t.summary, t.analysis, t.key_points, p.title, p.post_id, p.source`;
+  const shape = t => { const imp = t.source === 'prospect-master-sheet';
+    return { dated: t.dated, stance: t.stance, title: t.title, post_id: t.post_id, analysis: t.analysis || (imp ? t.summary : null), summary: imp ? null : t.summary, key_points: JSON.parse(t.key_points || '[]') }; };
+  const one = async extra => { const r = await env.DB.prepare(`SELECT ${cols} ${base} ${extra} ORDER BY t.dated DESC, t.id DESC LIMIT 1`).bind(...ids).first(); return r ? shape(r) : null; };
+  const total = (await env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...ids).first()).n;
+  const lim = Math.min(Math.max(+limit || 3, 1), 10), off = Math.max(+offset || 0, 0);
+  const { results } = await env.DB.prepare(`SELECT ${cols} ${base} ORDER BY t.dated DESC, t.id DESC LIMIT ? OFFSET ?`).bind(...ids, lim, off).all();
+  return { found: true, total, latest: {
+      note: await one(`AND (t.analysis IS NOT NULL OR p.source = 'prospect-master-sheet')`),
+      summary: await one(`AND COALESCE(p.source, '') <> 'prospect-master-sheet' AND t.summary IS NOT NULL`)
+    }, takes: results.map(shape) };
 }
 
 // Posts view: list of saved posts, newest first.
@@ -644,7 +660,7 @@ export async function submitEmail(env, b, deps = {}) {
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -663,6 +679,7 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-export': return out(await exportForApp(env));
       case '/prospect-posts': return out(await listPosts(env));
       case '/prospect-post': return out(await postDetail(env, url.searchParams.get('id') || ''));
+      case '/prospect-takes': return out(await playerTakes(env, url.searchParams.get('name') || '', url.searchParams.get('offset'), url.searchParams.get('limit')));
       case '/prospect': return out(await prospectDetail(env, url.searchParams.get('name') || ''));
     }
     return null;

@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -257,9 +257,9 @@ await t('app export, posts list and post detail (sheet-shaped arrays for the exi
     INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES ('pa','dax-kilby','2026-03-12','NYY',19.3,NULL,4,NULL),('hs','dax-kilby','2026-04-14','NYY',19.4,'A+',2.3,NULL),('bs','kade-anderson','2026-05-31','SEA',21.8,NULL,4.5,'Strong Buy');`);
   const ex = await exportForApp(env);
   assert.equal(ex.players.length, 1);   // only the Players All baseline
-  assert.deepEqual({ ...ex.players[0] }, { date: '3/12/2026', team: 'NYY', pos: 'Hitter', name: 'Dax Kilby', age: 19.3, price: '84', mlb: 4, dd: null, roto: null, sts: null, ba: null, hobby: 20, buy: 4, lastYr: null, chg: null, notes: 'Long baseline note', analysis: 'Long baseline note', summary: null });
+  assert.deepEqual({ ...ex.players[0] }, { date: '3/12/2026', team: 'NYY', pos: 'Hitter', name: 'Dax Kilby', age: 19.3, price: '84', mlb: 4, dd: null, roto: null, sts: null, ba: null, hobby: 20, buy: 4, lastYr: null, chg: null });
   assert.equal(ex.hotsheet.length, 1);
-  assert.deepEqual({ ...ex.hotsheet[0] }, { date: '4/14/2026', week: 2, pos: 'Hitter', level: 'A+', name: 'Dax Kilby', age: 19.4, aff: 'NYY', auto: '84.53', hobby: 44, buyScore: 2.3, notes: null, analysis: null, summary: null });
+  assert.deepEqual({ ...ex.hotsheet[0] }, { date: '4/14/2026', week: 2, pos: 'Hitter', level: 'A+', name: 'Dax Kilby', age: 19.4, aff: 'NYY', auto: '84.53', hobby: 44, buyScore: 2.3 });
   assert.deepEqual(ex.top100.map(r => [r.name, r.rank, r.date, r.price]), [['Kade Anderson', 1, '5/31/2026', '128']]);
   assert.deepEqual(ex.buyScores.map(r => [r.name, r.rank, r.score, r.notes, r.expectedValue]), [['Kade Anderson', 1, 4.5, 'Strong Buy', '150']]);
   assert.equal(ex.top200.length, 0);
@@ -394,8 +394,12 @@ await t('his full analysis is saved apart from the summary and reaches the expor
   const { postId } = await submitPost(env, { text: POST_TEXT + ' analysis', extractor: async () => ({ extraction: sanitizeExtraction(ex), model: 'fake' }) });
   assert.equal((await listPendingPosts(env)).posts[0].extraction.players[0].take.analysis, 'Para one.\n\nPara two, word for word.');
   await confirmPost(env, postId);
-  const out = await exportForApp(env); const h = out.hotsheet.concat(out.buyScores, out.top100, out.top200).find(x => x.name === 'Argenis Cayama');
-  assert.equal(h.analysis, 'Para one.\n\nPara two, word for word.'); assert.equal(h.summary, 'Author is very high on him.');
+  const out = await exportForApp(env); const h = [...out.hotsheet, ...out.buyScores, ...out.top100, ...out.top200, ...out.players].find(x => x.name === 'Argenis Cayama');
+  assert.ok(!JSON.stringify(out).includes('Para one') && !JSON.stringify(out).includes('very high on him'));   // the startup export carries no text
+  const pt = await playerTakes(env, 'Argenis Cayama', 0, 3);
+  assert.equal(pt.total, 1); assert.equal(pt.latest.note.analysis, 'Para one.\n\nPara two, word for word.'); assert.equal(pt.latest.summary.summary, 'Author is very high on him.');
+  assert.equal(pt.takes[0].analysis, 'Para one.\n\nPara two, word for word.'); assert.equal((await playerTakes(env, 'Argenis Cayama', 1, 3)).takes.length, 0);
+  assert.equal((await playerTakes(env, 'Nobody Here')).found, false);
   const d = await postDetail(env, postId); assert.equal(d.players[0].take.analysis, 'Para one.\n\nPara two, word for word.');
   assert.equal(sanitizeExtraction({ players: [{ name: 'A B', take: { summary: 'x' } }] }).players[0].take.analysis, null);
 });

@@ -422,20 +422,55 @@ function attachModalEvents() {
   document.getElementById('closebtn').onclick = () => document.getElementById('mwrap').classList.remove('on');
 }
 
-// Newest text of one kind ('analysis' = his original words, 'summary' = the API's short version) across every source for a player.
-function mostRecentText(nm, field) {
-  const c = [];
-  [...players, ...buyScores, ...top200, ...top100, ...hotsheet].filter(e => normName(e.name) === nm && e[field]).forEach(e => c.push({ ts: parseDate(e.date) || 0, text: e[field], date: e.date }));
-  return c.length ? c.reduce((a, b) => b.ts > a.ts ? b : a) : null;
-}
-function recentTextRow(label, best) {
-  if (!best) return '';
+// ── Player notes (loaded when the modal opens; the startup data carries no text) ──
+const PN_PAGE = 3;
+let _pn = { name: '', total: 0, shown: 0 };
+const pnDate = d => d ? fmtShortDate(d.replace(/^(\d{4})-(\d{2})-(\d{2}).*$/, (m, y, mo, da) => `${+mo}/${+da}/${y}`)) : '';
+function pnToggleRow(label, text, dated, sub) {
   return `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
     <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
-      <span class="lbl">${label}</span><span style="font-size:10px;color:var(--tx3);margin-left:6px">${fmtShortDate(best.date)}</span><span class="arr">▼</span>
+      <span class="lbl">${label}</span><span style="font-size:10px;color:var(--tx3);margin-left:6px">${pnDate(dated)}</span><span class="arr">▼</span>
     </button>
-    <div class="notes-body" style="display:none"><p style="white-space:pre-wrap">${pibEsc(best.text)}</p></div>
+    <div class="notes-body" style="display:none">${sub ? `<div style="font-size:10px;color:var(--tx3);margin-bottom:6px">${pibEsc(sub)}</div>` : ''}<p style="white-space:pre-wrap">${pibEsc(text)}</p></div>
   </div>`;
+}
+function pnItemHtml(t) {
+  const stance = t.stance && t.stance !== 'none' ? ` <span class="pib-badge stance">${pibEsc(t.stance)}</span>` : '';
+  const kp = (t.key_points || []).length ? `<ul class="intake-list">${t.key_points.map(k => `<li>${pibEsc(k)}</li>`).join('')}</ul>` : '';
+  return `<details style="padding:8px 0;border-top:.5px solid var(--bdr2)"><summary style="cursor:pointer;font-size:12px"><b>${pnDate(t.dated)}</b> <span style="color:var(--tx3)">${pibEsc(t.title || '')}</span>${stance}</summary>
+    ${t.summary ? `<div style="font-size:13px;line-height:1.5;margin-top:6px;white-space:pre-wrap"><b>Summary</b><br>${pibEsc(t.summary)}</div>` : ''}${kp}
+    ${t.analysis ? `<div style="font-size:13px;line-height:1.55;margin-top:6px;white-space:pre-wrap"><b>Note</b><br>${pibEsc(t.analysis)}</div>` : ''}</details>`;
+}
+async function pnFetch(name, offset) {
+  const res = await fetch(`${API_BASE}/prospect-takes?name=${encodeURIComponent(name)}&offset=${offset}&limit=${PN_PAGE}`, { headers: { 'X-App-Key': APP_KEY } });
+  if (!res.ok) throw new Error('notes ' + res.status);
+  return res.json();
+}
+// keeps the Back button's saved copy of the modal in step with what is on screen
+function pnSync() { const mc = document.getElementById('mcontent'); if (mc && document.getElementById('pn-box')) _modalMainHtml = mc.innerHTML; }
+async function loadModalNotes(name) {
+  _pn = { name, total: 0, shown: 0 };
+  try {
+    const d = await pnFetch(name, 0);
+    const box = document.getElementById('pn-box'); if (!box || _modalCurrentPlayer !== name) return;
+    _pn.total = d.total;
+    const n = d.latest && d.latest.note, s = d.latest && d.latest.summary;
+    box.innerHTML = (n ? pnToggleRow('Most Recent Note', n.analysis, n.dated, n.title) : '') + (s ? pnToggleRow('Most Recent Summary', s.summary, s.dated, s.title) : '') +
+      (d.total ? `<button class="notes-toggle" id="pn-all" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);margin-bottom:9px" onclick="pnShowAll()"><span class="lbl">All notes</span><span style="float:right;color:var(--tx3)">${d.total} →</span></button><div id="pn-list"></div>` : '');
+    pnSync();
+  } catch (e) { const box = document.getElementById('pn-box'); if (box) { box.innerHTML = ''; pnSync(); } }
+}
+async function pnShowAll() {
+  const btn = document.getElementById('pn-all'), list = document.getElementById('pn-list'); if (!list) return;
+  if (btn) btn.disabled = true;
+  try {
+    const d = await pnFetch(_pn.name, _pn.shown);
+    list.insertAdjacentHTML('beforeend', d.takes.map(pnItemHtml).join(''));
+    _pn.shown += d.takes.length;
+    const left = _pn.total - _pn.shown;
+    if (btn) { btn.disabled = false; btn.innerHTML = left > 0 ? `<span class="lbl">Show ${Math.min(PN_PAGE, left)} more</span><span style="float:right;color:var(--tx3)">${left} left →</span>` : `<span class="lbl">All ${_pn.total} notes shown</span>`; if (left <= 0) btn.onclick = null; }
+    pnSync();
+  } catch (e) { if (btn) btn.disabled = false; }
 }
 
 function showDetail(p, tp) {
@@ -452,8 +487,6 @@ function showDetail(p, tp) {
   const hasBsEntry = buyScores.some(b=>normName(b.name)===nm);
   const bsDisplay  = d.buy ? `${d.buy}${!hasBsEntry?'*':''}` : '—';
 
-  // Most recent note (his original analysis, in full) and most recent summary (the short one the API wrote), each from its newest source
-  const noteHtml = recentTextRow('Most Recent Note', mostRecentText(nm, 'analysis')) + recentTextRow('Most Recent Summary', mostRecentText(nm, 'summary'));
 
  const html=`
     <div class="mname">${p.name}</div>
@@ -466,17 +499,17 @@ function showDetail(p, tp) {
       <div class="scard"><div class="slbl">Expected Value</div><div class="sval">${currentEV}</div></div>
     </div>
 ${modalCards(p.name)}
-    ${noteHtml}
+    <div id="pn-box"></div>
     ${buildHistoryCharts(p.name)}
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
       ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
       ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-      ${master&&master.notes?`<button onclick="showBuyNotesSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Buy Sheet Notes <span style="float:right;color:var(--tx3)">→</span></button>`:''}
     </div>`;
   _modalMainHtml = html;
   _modalCurrentPlayer = p.name;
   document.getElementById('mcontent').innerHTML = html;
   document.getElementById('mwrap').classList.add('on');
+  loadModalNotes(p.name);
 }
 
 
@@ -586,7 +619,6 @@ function modalHsHistory(hist) {
         <div><div class="hs-sl">Hobby</div><div class="hs-sv">${fmt(h.hobby)}</div></div>
         <div><div class="hs-sl">Buy Score</div><div class="hs-sv">${fmt(h.buyScore)}</div></div>
       </div>
-      ${h.notes?`<div class="hs-notes">${h.notes}</div>`:''}
     </div>`;
   }).join('');
   return `<div class="section-hdr">Hot Sheet History</div>${rows}`;
@@ -626,30 +658,6 @@ function showSourceRanksSubview() {
       <div><div class="sc-l">Hobby</div><div class="sc-v">${fmt(master.hobby)}</div></div>
     </div></div>`;
 }
-
-function showBuyNotesSubview() {
-  const name = _modalCurrentPlayer;
-  const nm = normName(name);
-  const master = players.find(b=>normName(b.name)===nm);
-  const noteCandidates = [];
-  buyScores.filter(b=>normName(b.name)===nm&&b.notes).forEach(b=>noteCandidates.push({ts:parseDate(b.date),note:b.notes,src:fmtShortDate(b.date)}));
-  [...top200,...top100].filter(e=>normName(e.name)===nm&&e.notes).forEach(e=>noteCandidates.push({ts:parseDate(e.date),note:e.notes,src:fmtShortDate(e.date)}));
-  hotsheet.filter(h=>normName(h.name)===nm&&h.notes).forEach(h=>noteCandidates.push({ts:parseDate(h.date),note:h.notes,src:fmtShortDate(h.date)}));
-  if(master&&master.notes) noteCandidates.push({ts:parseDate(master.date)||0,note:master.notes,src:fmtShortDate(master.date)});
-  if(!noteCandidates.length) return;
-  noteCandidates.sort((a,b)=>b.ts-a.ts);
-  const best = noteCandidates[0];
-  document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">Most Recent Note — ${name}</div>
-    <div style="font-size:10px;color:var(--tx3);margin-bottom:8px">${best.src}</div>
-    <div class="srow"><p style="font-size:13px;line-height:1.65;color:var(--tx)">${best.note}</p></div>`;
-}
-
-
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
 function renderProspectPortfolio() {
