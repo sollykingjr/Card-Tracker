@@ -422,6 +422,22 @@ function attachModalEvents() {
   document.getElementById('closebtn').onclick = () => document.getElementById('mwrap').classList.remove('on');
 }
 
+// Newest text of one kind ('analysis' = his original words, 'summary' = the API's short version) across every source for a player.
+function mostRecentText(nm, field) {
+  const c = [];
+  [...players, ...buyScores, ...top200, ...top100, ...hotsheet].filter(e => normName(e.name) === nm && e[field]).forEach(e => c.push({ ts: parseDate(e.date) || 0, text: e[field], date: e.date }));
+  return c.length ? c.reduce((a, b) => b.ts > a.ts ? b : a) : null;
+}
+function recentTextRow(label, best) {
+  if (!best) return '';
+  return `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
+    <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
+      <span class="lbl">${label}</span><span style="font-size:10px;color:var(--tx3);margin-left:6px">${fmtShortDate(best.date)}</span><span class="arr">▼</span>
+    </button>
+    <div class="notes-body" style="display:none"><p style="white-space:pre-wrap">${pibEsc(best.text)}</p></div>
+  </div>`;
+}
+
 function showDetail(p, tp) {
   const nm     = normName(p.name);
   const master = players.find(b=>normName(b.name)===nm);
@@ -436,22 +452,8 @@ function showDetail(p, tp) {
   const hasBsEntry = buyScores.some(b=>normName(b.name)===nm);
   const bsDisplay  = d.buy ? `${d.buy}${!hasBsEntry?'*':''}` : '—';
 
-  // Most recent note across all sources
-  let recentNote = null;
-  const noteCandidates = [];
-  buyScores.filter(b=>normName(b.name)===nm&&b.notes).forEach(b=>noteCandidates.push({ts:parseDate(b.date),note:b.notes}));
-  [...top200,...top100].filter(e=>normName(e.name)===nm&&e.notes).forEach(e=>noteCandidates.push({ts:parseDate(e.date),note:e.notes}));
-  hotsheet.filter(h=>normName(h.name)===nm&&h.notes).forEach(h=>noteCandidates.push({ts:parseDate(h.date),note:h.notes}));
-  if(master&&master.notes) noteCandidates.push({ts:parseDate(master.date)||0,note:master.notes});
-  if(noteCandidates.length) recentNote = noteCandidates.reduce((a,b)=>b.ts>a.ts?b:a).note;
-
-  const bestNote = noteCandidates.length ? noteCandidates.reduce((a,b)=>b.ts>a.ts?b:a) : null;
-  const noteHtml = bestNote ? `<div class="srow" style="padding:0;overflow:hidden;margin-bottom:9px">
-    <button class="notes-toggle" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.arr').textContent=b.style.display==='none'?'▼':'▲'">
-      <span class="lbl">Most Recent Note</span><span style="font-size:10px;color:var(--tx3);margin-left:6px">${fmtShortDate(new Date(bestNote.ts))}</span><span class="arr">▼</span>
-    </button>
-    <div class="notes-body" style="display:none"><p>${bestNote.note}</p></div>
-  </div>` : '';
+  // Most recent note (his original analysis, in full) and most recent summary (the short one the API wrote), each from its newest source
+  const noteHtml = recentTextRow('Most Recent Note', mostRecentText(nm, 'analysis')) + recentTextRow('Most Recent Summary', mostRecentText(nm, 'summary'));
 
  const html=`
     <div class="mname">${p.name}</div>

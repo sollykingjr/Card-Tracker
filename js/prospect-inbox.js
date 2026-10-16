@@ -208,6 +208,7 @@ function pibPlayerHTML(p, pl, i) {
       </select>
       <textarea class="intake-in" onchange="pibSetTake('${id}',${i},'summary',this.value)">${pibEsc(pl.take.summary)}</textarea>
       ${(pl.take.key_points || []).length ? `<ul class="intake-list">${pl.take.key_points.map(k => `<li>${pibEsc(k)}</li>`).join('')}</ul>` : ''}
+      ${pl.take.analysis ? `<details><summary class="intake-meta" style="cursor:pointer">His full analysis (saved as written)</summary><div style="font-size:12px;line-height:1.5;white-space:pre-wrap;margin-top:4px">${pibEsc(pl.take.analysis)}</div></details>` : ''}
     </div>` : '';
   return `
     <details class="pib-player" id="pib-pl-${id}-${i}">

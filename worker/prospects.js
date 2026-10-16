@@ -71,6 +71,7 @@ const EXTRACT_TOOL = {
               properties: {
                 stance: { type: 'string', enum: STANCES },
                 summary: { type: 'string', description: '1-3 sentences in your own words: what he thinks and why' },
+                analysis: { type: 'string', description: "His full written analysis of this player copied WORD FOR WORD from the post: every paragraph about the player, in order, separated by blank lines. Do not paraphrase, shorten or fix it. Leave out the data header (throws, hobby rank, signing bonus, scouting grades, stat line) and anything about other players." },
                 key_points: { type: 'array', items: { type: 'string' }, description: 'Short, specific points he cites (stats, context, risks)' }
               }
             }
@@ -130,6 +131,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
     const take = p.take && String(p.take.summary || '').trim() ? {
       stance: STANCES.includes(p.take.stance) ? p.take.stance : 'none',
       summary: String(p.take.summary).trim(),
+      analysis: p.take.analysis && String(p.take.analysis).trim() ? String(p.take.analysis).trim() : null,
       key_points: (Array.isArray(p.take.key_points) ? p.take.key_points : []).map(x => String(x).trim()).filter(Boolean).slice(0, 12)
     } : null;
     return {
@@ -185,7 +187,7 @@ function foldPlayer(m, p) {
     const same = m.prices.find(x => x.date === pr.date);
     if (!same) m.prices.push({ ...pr }); else { same.base_auto_cents ??= pr.base_auto_cents; same.expected_cents ??= pr.expected_cents; }
   }
-  if (!m.take || (p.take && p.take.summary.length > m.take.summary.length)) m.take = p.take || m.take;
+  if (!m.take || (p.take && (p.take.analysis || p.take.summary).length > (m.take.analysis || m.take.summary).length)) m.take = p.take || m.take;
 }
 function dedupePlayers(players) {
   const out = [];
@@ -422,8 +424,8 @@ export async function confirmPost(env, postId, edited = null) {
   for (const p of ex.players) {
     const pid = await resolveProspect(env, p);
     counts.prospects++;
-    if (p.take) { stmts.push(prep(`INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, key_points, post_rank, dated) VALUES (?,?,?,?,?,?,?)`,
-      postId, pid, p.take.stance, p.take.summary, JSON.stringify(p.take.key_points), p.post_rank, dated)); counts.takes++; }
+    if (p.take) { stmts.push(prep(`INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, analysis, key_points, post_rank, dated) VALUES (?,?,?,?,?,?,?,?)`,
+      postId, pid, p.take.stance, p.take.summary, p.take.analysis, JSON.stringify(p.take.key_points), p.post_rank, dated)); counts.takes++; }
     for (const r of p.rankings) { stmts.push(prep(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES (?,?,?,?,?)`,
       postId, pid, r.list, r.rank, dated)); counts.rankings++; }
     for (const x of p.prices) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
@@ -455,7 +457,7 @@ export async function prospectDetail(env, name) {
     const q = sql => env.DB.prepare(sql).bind(id).all().then(r => r.results);
     out.push({
       prospect: pr,
-      takes: (await q(`SELECT t.dated, t.stance, t.summary, t.key_points, t.post_rank, p.title, p.post_id FROM prospect_takes t JOIN prospect_posts p USING (post_id) WHERE t.prospect_id = ? ORDER BY t.dated DESC, t.id DESC`))
+      takes: (await q(`SELECT t.dated, t.stance, t.summary, t.analysis, t.key_points, t.post_rank, p.title, p.post_id FROM prospect_takes t JOIN prospect_posts p USING (post_id) WHERE t.prospect_id = ? ORDER BY t.dated DESC, t.id DESC`))
         .map(t => ({ ...t, key_points: JSON.parse(t.key_points || '[]') })),
       rankings: await q(`SELECT dated, list_name, rank FROM prospect_rankings WHERE prospect_id = ? ORDER BY dated DESC`),
       prices: await q(`SELECT dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ? ORDER BY dated DESC`),
@@ -481,7 +483,7 @@ async function loadRows(env, postId = null) {
     all(`SELECT post_id, prospect_id, dated, base_auto_cents, expected_cents FROM prospect_prices WHERE ${inPosts}`, ...args),
     all(`SELECT post_id, prospect_id, list_name, rank, dated FROM prospect_rankings WHERE ${inPosts}`, ...args),
     all(`SELECT post_id, prospect_id, dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE ${inPosts}`, ...args),
-    all(`SELECT post_id, prospect_id, stance, summary, key_points, dated FROM prospect_takes WHERE ${inPosts}`, ...args)
+    all(`SELECT post_id, prospect_id, stance, summary, analysis, key_points, dated FROM prospect_takes WHERE ${inPosts}`, ...args)
   ]);
   const P = new Map(pros.map(p => [p.prospect_id, p])), PO = new Map(posts.map(p => [p.post_id, p]));
   const groups = new Map();
@@ -509,7 +511,7 @@ async function loadRows(env, postId = null) {
         price_c: e.base_auto_cents ?? null, expected_c: e.expected_cents ?? null,
         team: full && x.snap ? x.snap.team : null, age: full && x.snap ? x.snap.age : null, level: full && x.snap ? x.snap.level : null,
         buy: full && x.snap ? x.snap.buy_rating : null, action: full && x.snap ? x.snap.action : null,
-        ranks: full ? x.ranks : {}, take: full && x.take ? { stance: x.take.stance, summary: x.take.summary, key_points: JSON.parse(x.take.key_points || '[]') } : null
+        ranks: full ? x.ranks : {}, take: full && x.take ? { stance: x.take.stance, summary: x.take.summary, analysis: x.take.analysis, key_points: JSON.parse(x.take.key_points || '[]') } : null
       });
     }
   }
@@ -531,25 +533,29 @@ export async function exportForApp(env) {
   const baseline = new Map();   // first "Players All" row per prospect = the baseline entry the old sheet had
   for (const r of rows.slice().sort((a, b) => String(a.dated).localeCompare(String(b.dated)))) {
     const date = usDate(r.dated), pos = posLabel(r.side, r.ranks), note = r.take ? r.take.summary : null;
+    // Imported sheet notes ARE his original words, so they count as the analysis; newer takes keep his analysis and the model's summary apart.
+    const imported = r.source === 'prospect-master-sheet';
+    const analysis = r.take ? (r.take.analysis || (imported ? r.take.summary : null)) : null;
+    const summary = r.take && !imported ? r.take.summary : null;
     const isBaseline = r.source === 'prospect-master-sheet' && /^Players All/.test(r.title || '');
     if (isBaseline && !baseline.has(r.prospect_id)) {
       baseline.set(r.prospect_id, true);
       out.players.push({ date, team: r.team || '', pos, name: r.name, age: r.age ?? null, price: dollars(r.price_c), mlb: r.ranks['MLB'] ?? null, dd: r.ranks['DD'] ?? null,
-        roto: r.ranks['Roto'] ?? null, sts: r.ranks['StS'] ?? null, ba: r.ranks['BA'] ?? null, hobby: r.ranks['hobby rank'] ?? null, buy: r.buy ?? null, lastYr: null, chg: null, notes: note });
+        roto: r.ranks['Roto'] ?? null, sts: r.ranks['StS'] ?? null, ba: r.ranks['BA'] ?? null, hobby: r.ranks['hobby rank'] ?? null, buy: r.buy ?? null, lastYr: null, chg: null, notes: note, analysis, summary });
     }
     const hasBuyData = r.buy != null || r.action || r.expected_c != null;
     // Hot-sheet posts, plus any other post's prices/takes (rankings, analysis, price updates) that no other list carries, so the player modal sees them.
     if (r.post_type === 'hot_sheet' || (!isBaseline && !hasBuyData && (r.price_c != null || note))) {
       out.hotsheet.push({ date, week: r.post_type === 'hot_sheet' ? weekOf(r.dated) : null, pos, level: r.level || '', name: r.name, age: r.age ?? null, aff: r.team || '', auto: dollars(r.price_c),
-        hobby: r.ranks['hobby rank'] ?? null, buyScore: r.buy ?? null, notes: note });
+        hobby: r.ranks['hobby rank'] ?? null, buyScore: r.buy ?? null, notes: note, analysis, summary });
     }
     for (const [list, key] of Object.entries(TOP_LISTS)) if (r.ranks[list] != null) {
-      out[key].push({ date, rank: r.ranks[list], name: r.name, team: r.team || '', age: r.age ?? null, prev: null, diff: null, price: dollars(r.price_c), notes: note });
+      out[key].push({ date, rank: r.ranks[list], name: r.name, team: r.team || '', age: r.age ?? null, prev: null, diff: null, price: dollars(r.price_c), notes: note, analysis, summary });
     }
     if (r.post_type !== 'hot_sheet' && !isBaseline && hasBuyData) {
       const list = Object.keys(TOP_LISTS).find(l => r.ranks[l] != null);
       out.buyScores.push({ date, pos, rank: list ? r.ranks[list] : null, name: r.name, team: r.team || '', age: r.age ?? null, price: dollars(r.price_c),
-        score: r.buy ?? null, notes: r.action || null, expectedValue: dollars(r.expected_c) });
+        score: r.buy ?? null, notes: r.action || null, expectedValue: dollars(r.expected_c), analysis, summary });
     }
   }
   return out;
