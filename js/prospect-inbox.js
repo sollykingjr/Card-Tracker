@@ -165,7 +165,11 @@ function pibPostHTML(p) {
       </div>
       ${ex.summary ? `<div class="pib-sum">${pibEsc(ex.summary)}</div>` : ''}
       ${pibFlagsHTML(p)}
-      ${players.map((pl, i) => pibPlayerHTML(p, pl, i)).join('')}
+      ${(() => {   // spelling matches that need a decision go first, already open; the original index is kept so edits still hit the right player
+        const need = i => ((p.matches || [])[i] || {}).status === 'suggest';
+        const order = players.map((_, i) => i).sort((a, b) => need(b) - need(a) || a - b);
+        return order.map(i => pibPlayerHTML(p, players[i], i)).join('');
+      })()}
       <div class="intake-err" id="pib-e-${p.post_id}"></div>
       <div class="intake-row">
         <button class="intake-btn" onclick="pibReject('${p.post_id}')">Reject</button>
@@ -226,7 +230,7 @@ function pibPlayerHTML(p, pl, i) {
       ${pl.take.analysis ? `<details><summary class="intake-meta" style="cursor:pointer">His full analysis (saved as written)</summary><div style="font-size:12px;line-height:1.5;white-space:pre-wrap;margin-top:4px">${pibEsc(pl.take.analysis)}</div></details>` : ''}
     </div>` : '';
   return `
-    <details class="pib-player" id="pib-pl-${id}-${i}">
+    <details class="pib-player" id="pib-pl-${id}-${i}"${m.status === 'suggest' ? ' open' : ''}>
       <summary>
         <input type="checkbox" checked onclick="event.stopPropagation()" onchange="pibSetInclude('${id}',${i},this.checked)">
         <b>${pibEsc(pl.name)}</b> <span class="intake-meta" style="margin:0">${pibEsc(pl.team || '')}${pl.age ? ' · ' + pl.age : ''}</span> ${badge}${pibFlaggedNames(p).has(pl.name) ? '<span class="pib-badge warn">check</span>' : ''}
