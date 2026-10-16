@@ -187,10 +187,22 @@ async function callClaude(env, model, content, publishedAt) {
 }
 
 // Folds the players found in a table-image pass into the main extraction: fills blanks, adds new rankings/prices, appends new players.
+const editDistance = (a, b) => {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+};
 export function mergeExtractions(base, extras) {
   const byName = new Map(base.players.map(p => [normName(p.name), p]));
   for (const ex of extras) for (const p of ex.players) {
-    const k = normName(p.name), m = byName.get(k);
+    const k = normName(p.name);
+    let m = byName.get(k);
+    if (!m && k.length >= 8) {   // the post text has typos the tables don't ("Velasquez" vs "Velazquez"): same player if the names are 1-2 letters apart and only one candidate fits
+      const near = [...byName].filter(([n]) => Math.abs(n.length - k.length) <= 2 && editDistance(n, k) <= 2);
+      if (near.length === 1) { m = near[0][1]; m.name = p.name; byName.set(k, m); }   // the table's spelling wins
+    }
     if (!m) { const c = { ...p }; base.players.push(c); byName.set(k, c); continue; }
     for (const f of ['team', 'side', 'age', 'level', 'buy_rating', 'action', 'post_rank']) m[f] ??= p[f];
     for (const r of p.rankings) if (!m.rankings.some(x => x.list === r.list)) m.rankings.push(r);

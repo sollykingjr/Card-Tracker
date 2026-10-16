@@ -316,9 +316,9 @@ await t('table posts with several images are read one image at a time and merged
     const content = JSON.parse(init.body).messages[0].content;
     const img = content.find(b => b.type === 'image'); const n = img ? img.source.data : null;
     calls.push(n);
-    const input = !n ? { post_type: 'rankings', summary: 'Top 200', published_date: '2026-08-28', players: [{ name: 'Eli Willits', take: { stance: 'none', summary: 'Cheap vs expected' } }] }
+    const input = !n ? { post_type: 'rankings', summary: 'Top 200', published_date: '2026-08-28', players: [{ name: 'Eli Willits', take: { stance: 'none', summary: 'Cheap vs expected' } }, { name: 'Ralphy Velasquez', team: 'CLE', buy_rating: null }] }
       : n === 'B' ? { summary: 'x', players: [{ name: 'Eli Willits', team: 'WSN', age: 18.7, buy_rating: 3.7, action: 'Lean Buy', rankings: [{ list: 'Top 200 Hitters', rank: 2 }], prices: [{ date: '2026-08-28', base_auto: 176.5 }] }] }
-      : n === 'C' ? { summary: 'x', players: [{ name: 'Eli Willits', prices: [{ date: '2026-08-28', expected: 237.5 }] }, { name: 'Jesus Made', team: 'MIL', rankings: [{ list: 'Top 200 Hitters', rank: 1 }] }] }
+      : n === 'C' ? { summary: 'x', players: [{ name: 'Eli Willits', prices: [{ date: '2026-08-28', expected: 237.5 }] }, { name: 'Jesus Made', team: 'MIL', rankings: [{ list: 'Top 200 Hitters', rank: 1 }] }, { name: 'Ralphy Velazquez', team: 'CLE', rankings: [{ list: 'Top 200 Hitters', rank: 20 }] }] }
       : n === 'D' ? null : { summary: 'x', players: [] };
     if (!input) return new Response(JSON.stringify({ error: { message: 'boom' } }), { status: 500 });
     return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'record_post', input }], stop_reason: 'tool_use', usage: { input_tokens: 1000, output_tokens: 100 } }), { status: 200 });
@@ -327,7 +327,8 @@ await t('table posts with several images are read one image at a time and merged
     const img = d => ({ media_type: 'image/png', base64: d });
     const r = await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'x'.repeat(100), images: [img('B'), img('C'), img('D')], publishedAt: '2026-08-28' });
     assert.equal(calls.length, 4);
-    const e = r.extraction; assert.equal(e.post_type, 'rankings'); assert.equal(e.players.length, 2);
+    const e = r.extraction; assert.equal(e.post_type, 'rankings'); assert.equal(e.players.length, 3);   // Velasquez (text typo) and Velazquez (table) are one player
+    assert.ok(e.players.some(p => p.name === 'Ralphy Velazquez') && !e.players.some(p => p.name === 'Ralphy Velasquez'));
     const w = e.players.find(p => p.name === 'Eli Willits');
     assert.equal(w.buy_rating, 3.7); assert.equal(w.take.summary, 'Cheap vs expected'); assert.equal(w.rankings.length, 1);
     assert.deepEqual({ ...w.prices[0] }, { date: '2026-08-28', base_auto_cents: 17650, expected_cents: 23750 });
