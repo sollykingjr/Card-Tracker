@@ -352,13 +352,6 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
     }
   }
 
-  // a table with a Buy Score column should give every player one; flag the ones that came back blank
-  const withBuy = players.filter(p => p.buy_rating != null).length;
-  if (withBuy >= 3) {
-    const blank = players.filter(p => p.buy_rating == null && (p.prices || []).length).map(p => p.name);
-    if (blank.length) add('warn', `${blank.length} player${blank.length === 1 ? ' has' : 's have'} a price but no buy score (${withBuy} others do): ${list(blank)}. Check whether his table left it blank.`, blank);
-  }
-
   // possible duplicate players: same name twice, or names a letter or two apart
   const norms = players.map(p => normName(p.name)), dup = [];
   for (let i = 0; i < norms.length; i++) for (let j = i + 1; j < norms.length; j++) {
