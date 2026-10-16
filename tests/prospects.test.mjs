@@ -298,4 +298,15 @@ await t('email: html becomes readable text, table screenshots are picked and dow
   const pend = await listPendingPosts(env); assert.equal(pend.pending, 1);
 });
 
+await t('prices with the same date merge into one row (base auto + separately listed Expected)', async () => {
+  const c = sanitizeExtraction({ post_type: 'hot_sheet', summary: 's', published_date: '2026-10-12', players: [{ name: 'Caleb Bonemer', prices: [
+    { date: '2026-10-12', base_auto: 66.2 }, { date: '2026-10-03', base_auto: 70.17 }, { date: '2026-10-12', expected: 107.8 }] }] });
+  assert.deepEqual(c.players[0].prices.map(x => ({ ...x })), [{ date: '2026-10-12', base_auto_cents: 6620, expected_cents: 10780 }, { date: '2026-10-03', base_auto_cents: 7017, expected_cents: null }]);
+  assert.deepEqual(sanitizeExtraction(c, null).players[0].prices, c.players[0].prices);   // cleaning twice changes nothing
+  const env = { DB: makeDb() };
+  const { postId } = await submitPost(env, { text: POST_TEXT + ' merge', extractor: async () => ({ extraction: { ...c, players: c.players.map(p => ({ ...p, prices: [{ date: '2026-10-12', base_auto_cents: 6620, expected_cents: null }, { date: '2026-10-12', base_auto_cents: null, expected_cents: 10780 }] })) }, model: 'fake' }) });
+  const pend = await listPendingPosts(env);   // stored extraction still has the split rows; the list re-cleans them
+  assert.equal(pend.posts[0].extraction.players[0].prices.length, 1); assert.equal(pend.posts[0].extraction.players[0].prices[0].expected_cents, 10780);
+});
+
 console.log(`\n${passed} tests passed`);

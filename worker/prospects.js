@@ -88,6 +88,7 @@ Rules:
 - In tables, only columns whose header is a date (e.g. "10/12 Price", "10/3 Price") or says Base Auto/Price are prices. Columns named "$ Diff", "% Diff", "Change", "Gain" or similar are the difference between two prices: NEVER record them as a price. For each row, the two price entries are the dollar values under the two dated price headers, read across the same row.
 - Dates: write each price date as YYYY-MM-DD, using the month and day exactly as printed in the column header (10/3 -> the 3rd, not the 2nd) and the year from the post date.
 - Prices written in the text count too ("his base auto is $12", "currently around $4.21", "sitting at $30"): record each one as a price for that player. If the text gives no date for it, use the post date. If the author states a different date for a price ("was $20 in September"), use that date. Record "expected" only when the author gives an expected or fair value.
+- One price entry per date per player: if a table gives a base auto and an Expected value for the same date, put both on that one entry (never a second entry with the same date).
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
 - Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating (a number around 1-5, put in buy_rating) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
 - Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too: one ranking entry per column, list named as the header.
@@ -139,7 +140,12 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
         date: x.date,
         base_auto_cents: x.base_auto_cents != null ? intOrNull(x.base_auto_cents) : cents(x.base_auto),
         expected_cents: x.expected_cents != null ? intOrNull(x.expected_cents) : cents(x.expected)
-      })).filter(x => x && isoDate(x.date) && (x.base_auto_cents != null || x.expected_cents != null)),
+      })).filter(x => x && isoDate(x.date) && (x.base_auto_cents != null || x.expected_cents != null))
+        .reduce((acc, x) => {   // one row per date: an Expected value listed separately joins that day's base auto
+          const m = acc.find(y => y.date === x.date);
+          if (!m) acc.push({ ...x }); else { m.base_auto_cents ??= x.base_auto_cents; m.expected_cents ??= x.expected_cents; }
+          return acc;
+        }, []),
       stat_lines: [],   // stat lines are deliberately not extracted or stored (saves tokens; prospect_stats table stays unused)
       take
     };
@@ -209,7 +215,7 @@ export async function listPendingPosts(env) {
   const { results } = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, extraction_json, created_at, model, input_tokens, output_tokens, cost_micros
     FROM prospect_posts WHERE status = 'pending' ORDER BY created_at`).all();
   return { pending: results.length, posts: await Promise.all(results.map(async r => {
-    const extraction = JSON.parse(r.extraction_json || '{}');
+    const extraction = sanitizeExtraction(JSON.parse(r.extraction_json || '{}'), r.published_at);   // re-clean on read so fixes also apply to cards already waiting
     const { input_tokens, output_tokens, cost_micros, ...rest } = r;
     return { ...rest, extraction_json: undefined, extraction, usage: input_tokens == null ? null : { input_tokens, output_tokens, cost_micros },
       matches: await previewMatches(env, extraction.players || []) };
