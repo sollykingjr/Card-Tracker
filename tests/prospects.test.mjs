@@ -346,7 +346,16 @@ await t('a Top 200 post\'s Rank column lands on "top 200 hitters" however the mo
   assert.deepEqual(c.players[1].rankings, [{ list: 'top 200 hitters', rank: 81 }]);
   assert.deepEqual(c.players[2].rankings, []); assert.deepEqual(c.players[3].rankings, [{ list: 'top 200 hitters', rank: 77 }]);
   const o = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'E Five', rankings: [{ list: 'Rank', rank: 9 }] }] });
-  assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 9 }]);   // other posts keep the list as named
+  assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 9 }]);   // a plain Rank/Hobby column is his hobby rank
+  const h = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'F Six', rankings: [{ list: 'Hobby', rank: 14 }, { list: 'Hobby Rank', rank: 14 }, { list: 'mlb', rank: 3 }] }] });
+  assert.deepEqual(h.players[0].rankings, [{ list: 'hobby rank', rank: 14 }, { list: 'MLB', rank: 3 }]);   // same list twice is one ranking
+});
+
+await t('review flags players with a price but no buy score when most of the post has one', () => {
+  const mk = (n, buy) => ({ name: 'P ' + n, buy_rating: buy, prices: [{ date: '2026-08-31', base_auto_cents: 500 }] });
+  const f = reviewFlags({ title: 'Hot Sheet', players: [mk('Aaaa', 3.1), mk('Bbbb', 2.2), mk('Cccc', 4), mk('Dddd', null)] }).find(x => /no buy score/i.test(x.text));
+  assert.ok(f && f.players.includes('P Dddd') && f.level === 'warn');
+  assert.ok(!reviewFlags({ title: 'Hot Sheet', players: [mk('Aaaa', null), mk('Bbbb', null)] }).some(x => /no buy score/i.test(x.text)));
 });
 
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {

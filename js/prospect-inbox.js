@@ -193,7 +193,7 @@ function pibPlayerHTML(p, pl, i) {
     : '<span class="pib-badge new">new</span>';
   const id = p.post_id;
   const ranks = (pl.rankings || []).map(r => `${pibEsc(r.list)} #${r.rank}`).join(' · ');
-  const facts = [pl.buy_rating != null ? 'Buy rating ' + pl.buy_rating.toFixed(1) : '', pl.action || '', pl.level ? 'Level ' + pl.level : '', pl.age != null ? 'Age ' + pl.age : '']
+  const facts = [pl.buy_rating != null ? 'Buy Score ' + pl.buy_rating.toFixed(1) : '', pl.action || '', pl.level ? 'Level ' + pl.level : '', pl.age != null ? 'Age ' + pl.age : '']
     .filter(Boolean).map(pibEsc).join(' · ');
   const stats = facts ? `<div class="intake-meta">${facts}</div>` : '';
   const prices = (pl.prices || []).map((x, j) => `

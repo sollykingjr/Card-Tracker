@@ -91,7 +91,7 @@ Rules:
 - Prices written in the text count too ("his base auto is $12", "currently around $4.21", "sitting at $30"): record each one as a price for that player. If the text gives no date for it, use the post date. If the author states a different date for a price ("was $20 in September"), use that date. Record "expected" only when the author gives an expected or fair value.
 - One price entry per date per player: if a table gives a base auto and an Expected value for the same date, put both on that one entry (never a second entry with the same date).
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
-- Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating (a number around 1-5, put in buy_rating) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
+- Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating, also called Buy Score or BS (a number around 1-5, put in buy_rating; this is the most important number he publishes, so read it off every row of every table that has the column, never skip a row) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
 - Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too: one ranking entry per column, list named as the header.
 - Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
@@ -121,6 +121,9 @@ async function sha256(text) {
 
 // The post's own ranking list, named from its title ("Top 200 Hitters" -> 'top 200 hitters'), so a plain "Rank" column always lands on the right list.
 const OWN_LIST_ALIASES = /^(rank|own rank|post rank|ranking|hobby|hobby rank|hitters? rank|pitchers? rank|top \d+ (hitters|pitchers))$/i;
+const LIST_CANON = { rank: 'hobby rank', 'own rank': 'hobby rank', ranking: 'hobby rank', hobby: 'hobby rank', 'hobby rank': 'hobby rank', 'hobby ranking': 'hobby rank', 'overall rank': 'hobby rank',
+  mlb: 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA', 'top 200 hitters': 'top 200 hitters', 'top 100 pitchers': 'top 100 pitchers' };
+const canonicalListName = n => { const k = String(n).trim().toLowerCase(); return LIST_CANON[k] || String(n).trim(); };
 export function ownListFromTitle(title) {
   const m = /top\s*(\d+)\s*(hitters|pitchers)/i.exec(String(title || ''));
   return m ? { list: `top ${m[1]} ${m[2].toLowerCase()}`, cap: +m[1] } : null;
@@ -147,12 +150,12 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
       buy_rating: isFinite(Number(p.buy_rating)) && p.buy_rating != null && p.buy_rating !== '' && Number(p.buy_rating) > 0 ? Number(p.buy_rating) : null,
       action: p.action && String(p.action).trim() && String(p.action).trim() !== '-' ? String(p.action).trim() : null,
       post_rank: intOrNull(p.post_rank),
-      rankings: ((list) => {   // the post's own list: a plain Rank column (or the numbered position) goes under the list named in the title; ranks past the list's size are dropped
+      rankings: ((list) => {   // one canonical list name per ranking: the post's own list (from its title) or 'hobby rank' for a plain Rank/Hobby column; third-party names keep the case already on file
         const out = [];
         for (const x of list) {
-          let name = String(x.list).trim(); const rank = intOrNull(x.rank);
+          const rank = intOrNull(x.rank); let name = canonicalListName(x.list);
           if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; if (rank > own.cap) continue; }
-          if (!out.some(y => y.list.toLowerCase() === name.toLowerCase() && y.rank === rank)) out.push({ list: name, rank });
+          if (!out.some(y => y.list.toLowerCase() === name.toLowerCase())) out.push({ list: name, rank });   // the same list twice ("Hobby" and "Hobby Rank") is one ranking
         }
         const pr = intOrNull(p.post_rank);
         if (own && pr != null && pr <= own.cap && !out.some(y => y.list === own.list)) out.push({ list: own.list, rank: pr });
@@ -347,6 +350,13 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
       const missing = []; for (let i = 1; i <= own.cap; i++) if (!seen.has(i)) missing.push(i);
       if (missing.length) add('warn', `${missing.length} rank${missing.length === 1 ? '' : 's'} missing from 1-${own.cap}: ${list(missing.map(String), 12)}.`);
     }
+  }
+
+  // a table with a Buy Score column should give every player one; flag the ones that came back blank
+  const withBuy = players.filter(p => p.buy_rating != null).length;
+  if (withBuy >= 3) {
+    const blank = players.filter(p => p.buy_rating == null && (p.prices || []).length).map(p => p.name);
+    if (blank.length) add('warn', `${blank.length} player${blank.length === 1 ? ' has' : 's have'} a price but no buy score (${withBuy} others do): ${list(blank)}. Check whether his table left it blank.`, blank);
   }
 
   // possible duplicate players: same name twice, or names a letter or two apart
