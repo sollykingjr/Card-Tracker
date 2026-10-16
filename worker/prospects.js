@@ -95,7 +95,7 @@ Rules:
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
 - Put each player in the list once, merging data from the text and from tables.
-- stance: buy / hold / sell / watch / avoid, only if he clearly signals it; otherwise "none".`;
+- stance: use "buy", "hold", "sell", "watch" or "avoid" ONLY when the author explicitly says it in his own words about that player (e.g. "I'd buy", "this is a sell", "hold", "stay away"), or when his own rating/action label for that player says it (e.g. Action "Strong Buy" -> buy, "Consider Selling" -> sell). Never infer a stance from stats, price moves, tone or a player being on a hot or cold list. If he does not say it, the stance is "none". A player who only appears in a table gets stance "none" and no take.`;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 export function normName(name) {
