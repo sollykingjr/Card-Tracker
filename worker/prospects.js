@@ -178,7 +178,8 @@ export async function submitPost(env, { text, images = [], title = null, publish
   if (text.length > MAX_TEXT) throw new Error('post text is too long');
   const postId = await sha256(text);
   const existing = await env.DB.prepare(`SELECT post_id, status FROM prospect_posts WHERE post_id = ?`).bind(postId).first();
-  if (existing) return { postId, duplicate: true, status: existing.status };
+  if (existing && existing.status !== 'rejected') return { postId, duplicate: true, status: existing.status };
+  if (existing) await env.DB.prepare(`DELETE FROM prospect_posts WHERE post_id = ?`).bind(postId).run();   // a rejected post can be sent again
   const { extraction, model } = await extractor(env, { text, images, title, publishedAt });
   await env.DB.prepare(`INSERT INTO prospect_posts (post_id, source, title, post_type, published_at, raw_text, image_urls, summary, thesis, extraction_json, model)
     VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(postId, source, extraction.title || title, extraction.post_type, extraction.published_date,
@@ -278,7 +279,7 @@ export async function prospectDetail(env, name) {
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -289,6 +290,7 @@ export async function handleProspects(request, env, cors) {
     switch (url.pathname) {
       case '/prospect-extract': { const b = await request.json(); return out(await submitPost(env, b)); }
       case '/prospect-pending': return out(await listPendingPosts(env));
+      case '/prospect-counts': return out({ pending: (await env.DB.prepare(`SELECT COUNT(*) n FROM prospect_posts WHERE status = 'pending'`).first()).n });
       case '/prospect-confirm': { const b = await request.json(); return out(await confirmPost(env, b.post_id, b.extraction || null)); }
       case '/prospect-reject': { const b = await request.json(); return out(await rejectPost(env, b.post_id)); }
       case '/prospect': return out(await prospectDetail(env, url.searchParams.get('name') || ''));

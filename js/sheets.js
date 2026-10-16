@@ -363,8 +363,11 @@ async function loadProspectData() {
 
     if (section === 'prospects') { render(); }
   } catch(e) {
-    document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
-    document.getElementById('cntlbl').textContent='Error';
+    if (tab === 'inbox') { if (section === 'prospects') render(); }   // Sheet failed, but the Inbox doesn't need it
+    else {
+      document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
+      document.getElementById('cntlbl').textContent='Error';
+    }
   }
   document.getElementById('rfab').classList.remove('spin');
 }

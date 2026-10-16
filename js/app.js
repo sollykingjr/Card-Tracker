@@ -98,6 +98,7 @@ function setSection(s) {
     document.getElementById('cntlbl').textContent = '';
     if (!prospectDataLoaded) {
       loadProspectData();
+      if (tab === 'inbox') render();   // the Inbox doesn't need the Sheet, so don't wait for it
     } else {
       render();
     }

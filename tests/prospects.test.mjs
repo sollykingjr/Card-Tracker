@@ -113,6 +113,17 @@ await t('same post sent twice is a duplicate and does not call the model again',
   assert.equal(calls.length, 1);
 });
 
+await t('a rejected post can be submitted again; a confirmed one cannot', async () => {
+  const env = { DB: makeDb() };
+  const a = await submitPost(env, { text: POST_TEXT, extractor: fakeExtractor(BOUNCE_BACK) });
+  await rejectPost(env, a.postId);
+  const again = await submitPost(env, { text: POST_TEXT, extractor: fakeExtractor(BOUNCE_BACK) });
+  assert.equal(again.duplicate, false);
+  assert.equal(env.DB._raw.prepare('SELECT COUNT(*) n FROM prospect_posts').get().n, 1);
+  await confirmPost(env, again.postId);
+  assert.equal((await submitPost(env, { text: POST_TEXT, extractor: fakeExtractor(BOUNCE_BACK) })).duplicate, true);
+});
+
 await t('pending list flags new players; confirm writes every table', async () => {
   const env = { DB: makeDb() };
   const { postId } = await submitPost(env, { text: POST_TEXT, publishedAt: '2026-10-14', extractor: fakeExtractor(BOUNCE_BACK) });
@@ -189,6 +200,9 @@ await t('routes require the app key and pass other paths through', async () => {
   const ok = await handleProspects(new Request('https://x/prospect-pending', { headers: { 'X-App-Key': 'k' } }), env, {});
   assert.equal((await ok.json()).pending, 0);
   assert.equal(await handleProspects(new Request('https://x/cards', { headers: { 'X-App-Key': 'k' } }), env, {}), null);
+  await submitPost(env, { text: 'z'.repeat(60), extractor: fakeExtractor(AFL) });
+  const counts = await handleProspects(new Request('https://x/prospect-counts', { headers: { 'X-App-Key': 'k' } }), env, {});
+  assert.deepEqual(await counts.json(), { pending: 1 });
 });
 
 console.log(`\n${passed} tests passed`);

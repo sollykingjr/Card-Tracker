@@ -20,6 +20,7 @@ function renderHome() {
       <div style="padding:16px 16px 0">
         ${searchBarHTML('home', 'Search your collection...')}
         <div id="intake-banner"></div>
+        <div id="prospect-banner"></div>
       </div>
       <div id="home-body"></div>
     </div>
@@ -35,6 +36,7 @@ function renderHome() {
 
   homeRenderBody();
   if (typeof intakeRenderBanner === 'function') { intakeRenderBanner(); intakeRefreshCounts(); }
+  if (typeof pibRenderBanner === 'function') { pibRenderBanner(); pibRefreshCounts(); }
 }
 
 function homeRenderBody() {
