@@ -152,13 +152,30 @@ await t('pending list flags new players; confirm writes every table', async () =
   assert.equal(pend.pending, 1);
   assert.ok(pend.posts[0].matches.every(m => m.status === 'new'));
   const c = await confirmPost(env, postId);
-  assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, stats: 0 });
+  assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, stats: 0, snapshots: 3 });
   assert.equal((await listPendingPosts(env)).pending, 0);
   const d = await prospectDetail(env, 'ramiro dominguez');
   assert.equal(d.matches[0].prospect.org, 'MIN');
   assert.equal(d.matches[0].prices[0].base_auto_cents, 421);
   assert.equal(d.matches[0].takes[0].key_points[0], 'PullAir% 93rd percentile');
   assert.equal(d.matches[0].stats.length, 0);   // stats are no longer stored
+});
+
+await t('buy rating, action, level, age and expected-only rows are kept (Top 100 style table)', async () => {
+  const env = { DB: makeDb() };
+  const top100 = { post_type: 'rankings', published_date: '2026-10-04', summary: 'Top 100 pitchers.', players: [
+    { name: 'Braylon Doughty', team: 'CLE', side: 'pitcher', age: 20.8, level: 'AA', buy_rating: 5.0, action: 'Strongest Buy',
+      rankings: [{ list: 'top 100 pitchers', rank: 9 }, { list: 'MLB', rank: 12 }], prices: [{ date: '2026-10-04', base_auto: 14.41, expected: 29.25 }] },
+    { name: 'Ramon Marquez', team: 'SF', side: 'pitcher', age: 21.0, buy_rating: '-', action: '-', rankings: [{ list: 'top 100 pitchers', rank: 7 }], prices: [{ date: '2026-10-04', expected: 35.75 }] }
+  ] };
+  const { postId } = await submitPost(env, { text: POST_TEXT + ' top100', extractor: fakeExtractor(top100) });
+  const c = await confirmPost(env, postId);
+  assert.equal(c.counts.snapshots, 2); assert.equal(c.counts.prices, 2); assert.equal(c.counts.rankings, 3);
+  const d = await prospectDetail(env, 'Braylon Doughty');
+  assert.deepEqual({ ...d.matches[0].snapshots[0] }, { dated: '2026-10-04', team: 'CLE', age: 20.8, level: 'AA', buy_rating: 5, action: 'Strongest Buy' });
+  const m = await prospectDetail(env, 'Ramon Marquez');
+  assert.equal(m.matches[0].snapshots[0].buy_rating, null); assert.equal(m.matches[0].snapshots[0].action, null);
+  assert.equal(m.matches[0].prices[0].base_auto_cents, null); assert.equal(m.matches[0].prices[0].expected_cents, 3575);
 });
 
 await t('second post matches existing players (no duplicates) and builds a price/take timeline', async () => {

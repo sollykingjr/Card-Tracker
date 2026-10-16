@@ -43,17 +43,20 @@ const EXTRACT_TOOL = {
             team: { type: 'string', description: 'Team abbreviation as written, e.g. WAS' },
             side: { type: 'string', enum: ['hitter', 'pitcher'] },
             age: { type: 'number' },
-            post_rank: { type: 'integer', description: "Position in this post's numbered list, if the post numbers its list" },
+            level: { type: 'string', description: "Minor-league level if given, e.g. 'A', 'A+', 'AA', 'AAA', 'AFL', 'Complex'" },
+            buy_rating: { type: 'number', description: "His Buy Rating / Buy Score for this player (about 1.0-5.0), if the post gives one" },
+            action: { type: 'string', description: "His action label next to the rating, exactly as written, e.g. 'Strongest Buy', 'Lean Buy', 'Spot On', 'Slightly Overvalued'" },
+            post_rank:{ type: 'integer', description: "Position in this post's numbered list, if the post numbers its list" },
             rankings: {
               type: 'array',
-              description: "His own ranking lists this player appears in (e.g. 'hobby hitters' rank 53). Use the Rank column of tables.",
+              description: "Every ranking this player has in the post: his own list (the Rank column, e.g. 'top 100 pitchers' rank 7, 'hobby rank' 53) and any third-party rank columns, each as its own list named as the column is (e.g. 'MLB', 'DD', 'Roto', 'StS', 'BA').",
               items: { type: 'object', required: ['list', 'rank'], properties: { list: { type: 'string' }, rank: { type: 'integer' } } }
             },
             prices: {
               type: 'array',
-              description: 'Base autograph prices in dollars, each with the date it applies to. A table with two price columns (e.g. 10/12 and 10/3) is two entries.',
+              description: 'Base autograph prices in dollars, each with the date it applies to. A table with two price columns (e.g. 10/12 and 10/3) is two entries. A row with only an Expected value (no auto price yet) is one entry with just expected.',
               items: {
-                type: 'object', required: ['date', 'base_auto'],
+                type: 'object', required: ['date'],
                 properties: {
                   date: { type: 'string', description: 'YYYY-MM-DD. Infer the year from the post date.' },
                   base_auto: { type: 'number' },
@@ -85,6 +88,8 @@ Rules:
 - Only columns whose header is a date (e.g. "10/12 Price", "10/3 Price") or says Base Auto/Price are prices. Columns named "$ Diff", "% Diff", "Change", "Gain" or similar are the difference between two prices: NEVER record them as a price. For each row, the two price entries are the dollar values under the two dated price headers, read across the same row.
 - Dates: write each price date as YYYY-MM-DD, using the month and day exactly as printed in the column header (10/3 -> the 3rd, not the 2nd) and the year from the post date.
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
+- Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating (a number around 1-5, put in buy_rating) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
+- Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too: one ranking entry per column, list named as the header.
 - Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
@@ -122,6 +127,9 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
       team: p.team ? String(p.team).trim().toUpperCase() : null,
       side: ['hitter', 'pitcher'].includes(p.side) ? p.side : null,
       age: isFinite(Number(p.age)) && p.age != null ? Number(p.age) : null,
+      level: p.level ? String(p.level).trim() : null,
+      buy_rating: isFinite(Number(p.buy_rating)) && p.buy_rating != null && p.buy_rating !== '' && Number(p.buy_rating) > 0 ? Number(p.buy_rating) : null,
+      action: p.action && String(p.action).trim() && String(p.action).trim() !== '-' ? String(p.action).trim() : null,
       post_rank: intOrNull(p.post_rank),
       rankings: (Array.isArray(p.rankings) ? p.rankings : []).filter(x => x && x.list && intOrNull(x.rank) != null)
         .map(x => ({ list: String(x.list).trim(), rank: intOrNull(x.rank) })),
@@ -130,7 +138,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
         date: x.date,
         base_auto_cents: x.base_auto_cents != null ? intOrNull(x.base_auto_cents) : cents(x.base_auto),
         expected_cents: x.expected_cents != null ? intOrNull(x.expected_cents) : cents(x.expected)
-      })).filter(x => x && isoDate(x.date) && x.base_auto_cents != null),
+      })).filter(x => x && isoDate(x.date) && (x.base_auto_cents != null || x.expected_cents != null)),
       stat_lines: [],   // stat lines are deliberately not extracted or stored (saves tokens; prospect_stats table stays unused)
       take
     };
@@ -248,7 +256,7 @@ export async function confirmPost(env, postId, edited = null) {
   if (post.status !== 'pending') throw new Error(`post is already ${post.status}`);
   const ex = sanitizeExtraction(edited || JSON.parse(post.extraction_json || '{}'), post.published_at);
   const dated = ex.published_date || post.published_at || null;
-  const counts = { prospects: 0, takes: 0, rankings: 0, prices: 0, stats: 0 };
+  const counts = { prospects: 0, takes: 0, rankings: 0, prices: 0, stats: 0, snapshots: 0 };
   const stmts = [];
   const prep = (sql, ...binds) => env.DB.prepare(sql).bind(...binds);
   for (const p of ex.players) {
@@ -260,6 +268,9 @@ export async function confirmPost(env, postId, edited = null) {
       postId, pid, r.list, r.rank, dated)); counts.rankings++; }
     for (const x of p.prices) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
       postId, pid, x.date, x.base_auto_cents, x.expected_cents)); counts.prices++; }
+    if (p.age != null || p.level || p.buy_rating != null || p.action) {
+      stmts.push(prep(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES (?,?,?,?,?,?,?,?)`,
+        postId, pid, dated, p.team, p.age, p.level, p.buy_rating, p.action)); counts.snapshots++; }
     for (const s of p.stat_lines) { stmts.push(prep(`INSERT INTO prospect_stats (post_id, prospect_id, dated, context, level, age, stats_json) VALUES (?,?,?,?,?,?,?)`,
       postId, pid, dated, s.context, s.level, p.age, JSON.stringify(s.stats))); counts.stats++; }
   }
@@ -288,6 +299,7 @@ export async function prospectDetail(env, name) {
         .map(t => ({ ...t, key_points: JSON.parse(t.key_points || '[]') })),
       rankings: await q(`SELECT dated, list_name, rank FROM prospect_rankings WHERE prospect_id = ? ORDER BY dated DESC`),
       prices: await q(`SELECT dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ? ORDER BY dated DESC`),
+      snapshots: await q(`SELECT dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE prospect_id = ? ORDER BY dated DESC`),
       stats: (await q(`SELECT dated, context, level, age, stats_json FROM prospect_stats WHERE prospect_id = ? ORDER BY dated DESC`))
         .map(s => ({ ...s, stats: JSON.parse(s.stats_json), stats_json: undefined }))
     });

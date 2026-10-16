@@ -77,3 +77,17 @@ CREATE TABLE IF NOT EXISTS prospect_stats (
   stats_json TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_stats_prospect ON prospect_stats(prospect_id, dated);
+
+-- Per-player facts as of a post/date: age, level, his Buy Rating and the Action label beside it (added 2026-10-15).
+CREATE TABLE IF NOT EXISTS prospect_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id TEXT NOT NULL,
+  prospect_id TEXT NOT NULL,
+  dated TEXT,
+  team TEXT,
+  age REAL,
+  level TEXT,
+  buy_rating REAL,                       -- his 1-5 Buy Rating / Buy Score
+  action TEXT                            -- e.g. 'Strongest Buy', 'Slightly Overvalued'
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_prospect ON prospect_snapshots(prospect_id, dated);

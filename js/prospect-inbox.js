@@ -180,7 +180,9 @@ function pibPlayerHTML(p, pl, i) {
     : '<span class="pib-badge new">new</span>';
   const id = p.post_id;
   const ranks = (pl.rankings || []).map(r => `${pibEsc(r.list)} #${r.rank}`).join(' · ');
-  const stats = (pl.stat_lines || []).map(s => `<div class="intake-meta">${pibEsc(s.context)}${s.level ? ' (' + pibEsc(s.level) + ')' : ''}: ${Object.entries(s.stats).map(([k, v]) => `${pibEsc(k)} ${pibEsc(v)}`).join(', ')}</div>`).join('');
+  const facts = [pl.buy_rating != null ? 'Buy rating ' + pl.buy_rating.toFixed(1) : '', pl.action || '', pl.level ? 'Level ' + pl.level : '', pl.age != null ? 'Age ' + pl.age : '']
+    .filter(Boolean).map(pibEsc).join(' · ');
+  const stats = facts ? `<div class="intake-meta">${facts}</div>` : '';
   const prices = (pl.prices || []).map((x, j) => `
     <div class="pib-price"><span>${pibEsc(x.date)}</span>
       <label>Base auto $<input inputmode="decimal" value="${pibDollars(x.base_auto_cents)}" onchange="pibSetPrice('${id}',${i},${j},'base_auto_cents',this.value)"></label>
@@ -199,7 +201,7 @@ function pibPlayerHTML(p, pl, i) {
       <summary>
         <input type="checkbox" checked onclick="event.stopPropagation()" onchange="pibSetInclude('${id}',${i},this.checked)">
         <b>${pibEsc(pl.name)}</b> <span class="intake-meta" style="margin:0">${pibEsc(pl.team || '')}${pl.age ? ' · ' + pl.age : ''}</span> ${badge}
-        ${pl.take && pl.take.stance !== 'none' ? `<span class="pib-badge stance">${pibEsc(pl.take.stance)}</span>` : ''}
+        ${pl.take && pl.take.stance !== 'none' ? `<span class="pib-badge stance">${pibEsc(pl.take.stance)}</span>` : ''}${pl.action ? `<span class="pib-badge stance">${pibEsc(pl.action)}</span>` : ''}
       </summary>
       ${ranks ? `<div class="intake-meta">${ranks}</div>` : ''}
       ${prices}${stats}${take}
