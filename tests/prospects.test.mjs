@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -402,6 +402,21 @@ await t('his full analysis is saved apart from the summary and reaches the expor
   assert.equal((await playerTakes(env, 'Nobody Here')).found, false);
   const d = await postDetail(env, postId); assert.equal(d.players[0].take.analysis, 'Para one.\n\nPara two, word for word.');
   assert.equal(sanitizeExtraction({ players: [{ name: 'A B', take: { summary: 'x' } }] }).players[0].take.analysis, null);
+});
+
+await t('Pushover alert goes out for a new post, never for a duplicate, and a failure never breaks the post', async () => {
+  const sent = []; const notifyFetch = async (url, init) => { sent.push({ url, body: JSON.parse(init.body) }); return { ok: true }; };
+  const extractor = async () => ({ extraction: sanitizeExtraction({ title: 'Cayama post', post_type: 'analysis', summary: 's', published_date: '2026-10-16', players: [{ name: 'Argenis Cayama', take: { stance: 'none', summary: 'x' } }] }), model: 'fake' });
+  const off = { DB: makeDb() };   // no Pushover secrets: silent
+  await submitPost(off, { text: POST_TEXT + ' push-off', extractor, deps: { notifyFetch } }); assert.equal(sent.length, 0);
+  const env = { DB: makeDb(), PUSHOVER_APP_TOKEN: 'tok', PUSHOVER_USER_KEY: 'usr' };
+  await submitPost(env, { text: POST_TEXT + ' push-on', extractor, deps: { notifyFetch } });
+  assert.equal(sent.length, 1); assert.equal(sent[0].url, 'https://api.pushover.net/1/messages.json');
+  assert.equal(sent[0].body.token, 'tok'); assert.equal(sent[0].body.user, 'usr'); assert.match(sent[0].body.title, /Cayama post/); assert.match(sent[0].body.message, /1 player · 1 with analysis/);
+  await submitPost(env, { text: POST_TEXT + ' push-on', extractor, deps: { notifyFetch } }); assert.equal(sent.length, 1);   // duplicate: no second alert
+  const boom = async () => { throw new Error('network down'); };
+  const r = await submitPost(env, { text: POST_TEXT + ' push-boom', extractor, deps: { notifyFetch: boom } }); assert.equal(r.status, 'pending');
+  assert.equal(await notifyNewPost(env, { players: [] }, [], async () => ({ ok: false })), false);
 });
 
 console.log(`\n${passed} tests passed`);

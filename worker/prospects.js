@@ -292,7 +292,7 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
 
 // ── Pending / review ──────────────────────────────────────────────────────────
 // Stores the post as 'pending'. Same text again returns the existing row instead of calling the model twice.
-export async function submitPost(env, { text, images = [], title = null, publishedAt = null, source = 'prospect-analytics', extractor = extractWithClaude }) {
+export async function submitPost(env, { text, images = [], title = null, publishedAt = null, source = 'prospect-analytics', extractor = extractWithClaude, deps = {} }) {
   text = String(text || '').trim();
   if (text.length < 40) throw new Error('post text is empty or too short');
   if (text.length > MAX_TEXT) throw new Error('post text is too long');
@@ -306,6 +306,7 @@ export async function submitPost(env, { text, images = [], title = null, publish
       text, images.length ? JSON.stringify(images.map(i => i.url).filter(Boolean)) : null,
       extraction.summary, extraction.thesis, JSON.stringify(extraction), model,
       usage?.input_tokens ?? null, usage?.output_tokens ?? null, usage?.cost_micros ?? null).run();
+  await notifyNewPost(env, extraction, await previewMatches(env, extraction.players || []), deps.notifyFetch);
   return { postId, duplicate: false, status: 'pending', extraction, usage };
 }
 
@@ -364,10 +365,28 @@ export function reviewFlags(ex, { knownLists = [], matches = [] } = {}) {
   return flags;
 }
 
+const knownListNames = async env => ((await env.DB.prepare(`SELECT DISTINCT lower(list_name) l FROM prospect_rankings`).all()).results || []).map(x => x.l);
+
+// Pushover alert when a post lands in the Inbox. Silent no-op unless PUSHOVER_APP_TOKEN and PUSHOVER_USER_KEY are set; never blocks or fails the post.
+export async function notifyNewPost(env, extraction, matches = [], doFetch = fetch) {
+  if (!env.PUSHOVER_APP_TOKEN || !env.PUSHOVER_USER_KEY) return false;
+  try {
+    const players = extraction.players || [], withNotes = players.filter(p => p.take).length;
+    const warns = reviewFlags(extraction, { knownLists: await knownListNames(env), matches }).filter(f => f.level === 'warn').length;
+    const message = `${players.length} player${players.length === 1 ? '' : 's'} · ${withNotes} with analysis${warns ? ` · ${warns} thing${warns === 1 ? '' : 's'} to check` : ' · checks passed'}`;
+    const res = await doFetch('https://api.pushover.net/1/messages.json', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(5000),
+      body: JSON.stringify({ token: env.PUSHOVER_APP_TOKEN, user: env.PUSHOVER_USER_KEY, title: `New prospect post: ${extraction.title || 'Untitled'}`.slice(0, 250), message,
+        url: env.APP_URL || 'https://sollykingjr.github.io/Card-Tracker/', url_title: 'Review in Card Tracker' })
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
 export async function listPendingPosts(env) {
   const { results } = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, extraction_json, created_at, model, input_tokens, output_tokens, cost_micros
     FROM prospect_posts WHERE status = 'pending' ORDER BY created_at`).all();
-  const knownLists = ((await env.DB.prepare(`SELECT DISTINCT lower(list_name) l FROM prospect_rankings`).all()).results || []).map(x => x.l);
+  const knownLists = await knownListNames(env);
   return { pending: results.length, posts: await Promise.all(results.map(async r => {
     const extraction = sanitizeExtraction(JSON.parse(r.extraction_json || '{}'), r.published_at);   // re-clean on read so fixes also apply to cards already waiting
     const { input_tokens, output_tokens, cost_micros, ...rest } = r;
@@ -656,7 +675,7 @@ export async function submitEmail(env, b, deps = {}) {
   const images = [...inline, ...linked].slice(0, 20);
   const title = String(b.subject || '').trim() || null;
   const publishedAt = isoDate(b.date) || null;
-  return submitPost(env, { text, images, title, publishedAt, extractor: deps.extractor });
+  return submitPost(env, { text, images, title, publishedAt, extractor: deps.extractor, deps: { notifyFetch: deps.notifyFetch } });
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
