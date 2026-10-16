@@ -419,4 +419,17 @@ await t('Pushover alert goes out for a new post, never for a duplicate, and a fa
   assert.equal(await notifyNewPost(env, { players: [] }, [], async () => ({ ok: false })), false);
 });
 
+await t('screenshots in a long prose article are not sent to the model, short table posts still send them', async () => {
+  const realFetch = globalThis.fetch; const seen = [];
+  globalThis.fetch = async (url, init) => { seen.push(JSON.parse(init.body).messages[0].content.filter(b => b.type === 'image').length);
+    return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'record_post', input: { post_type: 'analysis', summary: 'Article.', players: [{ name: 'Edward Florentino' }] } }], stop_reason: 'tool_use', usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 }); };
+  try {
+    const img = { media_type: 'image/png', base64: 'AAAA' };
+    const long = await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'word '.repeat(2000), images: [img, img, img] });
+    assert.deepEqual(seen, [0]); assert.match(long.extraction.summary, /3 screenshots were not read because this is a long article/);
+    seen.length = 0; await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'word '.repeat(300), images: [img] });
+    assert.deepEqual(seen, [1]);
+  } finally { globalThis.fetch = realFetch; }
+});
+
 console.log(`\n${passed} tests passed`);

@@ -97,6 +97,10 @@ Rules:
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
 - Put each player in the list once, merging data from the text and from tables.
+- Articles that use one prospect as the benchmark ("the next Andrew Fischer", "who could repeat Franklin Arias's breakout"): the benchmark player gets a take only about what the author says of him as a prospect and a card, and the players he singles out as the comp or the pick get takes about why. When a player's role is not obvious, say it at the start of his take summary ("Used as the benchmark for...", "Named as the closest comp to...").
+- Only extract minor-league or draft prospects who have a card market. Skip MLB veterans and players who appear only as a comparison, and one-line mentions with no opinion attached.
+- Prices: only an exact current price he states ("base autograph at $67"). Approximate or projected figures ("$200+", "around $20 this winter", "could be $150-200 next year") are NOT prices: leave them in the take, and never use them as Expected values.
+- take.analysis holds only the paragraphs about that player. If one paragraph covers several players, repeat it for each of them.
 - stance: ALWAYS "none" unless the post's data tables give one. It comes only from a player's Buy Rating / Action label in a table or buy list (Strong Buy, Lean Buy, Buy = "buy"; an explicit sell, avoid, hold or watch label = that word). His written analysis NEVER sets the stance, however positive or negative it sounds ("I'm cool with a buy at $5", "absolute steal", "overvalued" are all just analysis: stance "none", and describe it in the take). Never infer a stance from stats, price moves, tone or a hot/cold list.`;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -260,6 +264,7 @@ export function mergeExtractions(base, extras) {
   return base;
 }
 
+const LONG_ARTICLE = 8000;   // characters
 const TABLE_PASS_NOTE = 'TABLE-IMAGE PASS: Extract EVERY player row shown in the attached image and nothing else (skip players that appear only in the text). Include every row, even those with no price. Do not write takes or summaries for this pass; keep the summary to one short line.';
 
 // Posts with several table screenshots (like a Top 200) are too big for one answer, so the text and each image are read separately and merged.
@@ -267,7 +272,9 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set on the Worker');
   const model = env.PROSPECT_MODEL || DEFAULT_MODEL;
   const head = `${title ? `Email/post title: ${title}\n` : ''}${publishedAt ? `Post date: ${publishedAt}\n` : ''}\nPOST TEXT:\n${text}`;
-  const blocks = images.slice(0, 20).map(imgBlock).filter(Boolean);
+  let blocks = images.slice(0, 20).map(imgBlock).filter(Boolean);
+  const skippedImages = text.length >= LONG_ARTICLE && blocks.length ? blocks.length : 0;   // charts in a long prose article hold no table data worth the tokens
+  if (skippedImages) blocks = [];
   let results;
   if (blocks.length < 3) {
     results = [await callClaude(env, model, [...blocks, { type: 'text', text: head }], publishedAt)];
@@ -285,6 +292,7 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
     if (failed) merged.summary += ` (Warning: ${failed} of ${blocks.length} table images could not be read, so some players may be missing.)`;
   }
   applyStanceRule(results[0].extraction);
+  if (skippedImages) results[0].extraction.summary += ` (${skippedImages} screenshot${skippedImages === 1 ? ' was' : 's were'} not read because this is a long article.)`;
   const usage = { input_tokens: results.reduce((t, r) => t + r.usage.input_tokens, 0), output_tokens: results.reduce((t, r) => t + r.usage.output_tokens, 0) };
   usage.cost_micros = costMicros(model, usage);
   return { extraction: results[0].extraction, model, usage };
