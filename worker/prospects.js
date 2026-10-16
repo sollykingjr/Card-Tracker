@@ -134,8 +134,10 @@ export function ownListFromTitle(title) {
 }
 
 // Clean whatever the model returned into the exact shape the confirm step writes. Drops junk, never throws on odd values.
+const jsonIfString = v => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
 export function sanitizeExtraction(raw, fallbackDate = null) {
   const r = raw || {};
+  r.players = jsonIfString(r.players);   // on very long answers the model sometimes hands back the players list as a JSON string instead of a list
   const date = isoDate(r.published_date) || isoDate(fallbackDate);
   const own = ownListFromTitle(r.title);
   const prose = r.post_type === 'analysis' || r.post_type === 'other';   // an article: only hobby rank / his own list count, never other lists he mentions in passing
@@ -287,6 +289,11 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
   let results;
   if (blocks.length < 3) {
     results = [await callClaude(env, model, [...blocks, { type: 'text', text: head }], publishedAt)];
+    if (!results[0].extraction.players.length && results[0].usage.output_tokens > 2000) {   // a long answer that came back with no players is a bad response, not an empty post: ask once more
+      const again = await callClaude(env, model, [...blocks, { type: 'text', text: head }], publishedAt);
+      again.usage = { input_tokens: again.usage.input_tokens + results[0].usage.input_tokens, output_tokens: again.usage.output_tokens + results[0].usage.output_tokens };
+      results = [again];
+    }
   } else {
     const settled = await Promise.allSettled([
       callClaude(env, model, [{ type: 'text', text: head }], publishedAt),
