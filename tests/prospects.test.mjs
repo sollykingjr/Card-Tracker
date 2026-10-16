@@ -346,23 +346,18 @@ await t('a Top 200 post\'s Rank column lands on "top 200 hitters" however the mo
   assert.deepEqual(c.players[1].rankings, [{ list: 'top 200 hitters', rank: 81 }]);
   assert.deepEqual(c.players[2].rankings, []); assert.deepEqual(c.players[3].rankings, [{ list: 'top 200 hitters', rank: 77 }]);
   const o = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'E Five', rankings: [{ list: 'Rank', rank: 9 }] }] });
-  assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 9 }]);   // a plain Rank/Hobby column is his hobby rank
+  assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 9 }]);   // a bare Rank is not assumed to be hobby rank
   const h = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'F Six', rankings: [{ list: 'Hobby', rank: 14 }, { list: 'Hobby Rank', rank: 14 }, { list: 'mlb', rank: 3 }] }] });
   assert.deepEqual(h.players[0].rankings, [{ list: 'hobby rank', rank: 14 }, { list: 'MLB', rank: 3 }]);   // same list twice is one ranking
 });
 
-await t('rank columns named after the post or the site are his hobby rank', () => {
-  const o = sanitizeExtraction({ title: 'Pitcher Hot Sheet - Week 22', summary: 's', players: [{ name: 'G Seven', rankings: [{ list: 'Hot Sheet', rank: 18 }, { list: 'Prospect Analytics', rank: 18 }] }] });
-  assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 18 }]);
-});
-
-await t('a plain Rank column is hobby rank only on a hot sheet; rankings mentioned in an article\'s prose are not saved', () => {
+await t('only a column named hobby is hobby rank; rankings mentioned in an article\'s prose are not saved', () => {
   const art = sanitizeExtraction({ title: 'Bowman Chrome Sleepers', post_type: 'analysis', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'MLB Pipeline org', rank: 22 }, { list: 'Baseball America', rank: 90 }, { list: 'Hobby Ranking', rank: 259 }] }] });
   assert.deepEqual(art.players[0].rankings, [{ list: 'hobby rank', rank: 259 }]);
   const bare = sanitizeExtraction({ title: 'Bowman Chrome Rankings', post_type: 'rankings', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'Rank', rank: 5 }] }] });
   assert.deepEqual(bare.players[0].rankings, [{ list: 'Rank', rank: 5 }]);   // his own list, not hobby: left as named for review
   const col = sanitizeExtraction({ title: 'Hitter Hot Sheet - Week 23', post_type: 'hot_sheet', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'MLB', rank: 4 }, { list: 'Rank', rank: 5 }] }] });
-  assert.deepEqual(col.players[0].rankings, [{ list: 'MLB', rank: 4 }, { list: 'hobby rank', rank: 5 }]);   // table columns still count
+  assert.deepEqual(col.players[0].rankings, [{ list: 'MLB', rank: 4 }, { list: 'Rank', rank: 5 }]);   // table columns still count; bare Rank is left for review
 });
 
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {

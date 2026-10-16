@@ -123,12 +123,11 @@ async function sha256(text) {
 // The post's own ranking list, named from its title ("Top 200 Hitters" -> 'top 200 hitters'), so a plain "Rank" column always lands on the right list.
 const OWN_LIST_ALIASES = /^(rank|own rank|post rank|ranking|hobby|hobby rank|hitters? rank|pitchers? rank|top \d+ (hitters|pitchers))$/i;
 // "Hobby rank" (the market/chase list, one number across hitters and pitchers) and his own Top N list are different things and are never merged.
-// A column literally named hobby is always hobby rank. A bare "Rank"/"Hot Sheet"/"Prospect Analytics" column is the hobby rank only on a hot sheet; anywhere else it is left as named so the review flags it.
+// Only a column literally named hobby / hobby rank / hobby ranking is hobby rank. A bare "Rank" (or anything else) is left as named, so the review flags it instead of guessing.
 const HOBBY_NAMES = new Set(['hobby', 'hobby rank', 'hobby ranking', 'hobby rankings']);
-const HOT_SHEET_NAMES = new Set(['rank', 'own rank', 'ranking', 'overall rank', 'hot sheet', 'hot sheet rank', 'prospect analytics', 'prospect analytics rank', 'pa']);
 const THIRD_PARTY = { mlb: 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA' };
-const canonicalListName = (n, hot) => { const k = String(n).trim().toLowerCase();
-  return HOBBY_NAMES.has(k) || (hot && HOT_SHEET_NAMES.has(k)) ? 'hobby rank' : THIRD_PARTY[k] || (k === 'top 200 hitters' || k === 'top 100 pitchers' ? k : String(n).trim()); };
+const canonicalListName = n => { const k = String(n).trim().toLowerCase();
+  return HOBBY_NAMES.has(k) ? 'hobby rank' : THIRD_PARTY[k] || (k === 'top 200 hitters' || k === 'top 100 pitchers' ? k : String(n).trim()); };
 export function ownListFromTitle(title) {
   const m = /top\s*(\d+)\s*(hitters|pitchers)/i.exec(String(title || ''));
   return m ? { list: `top ${m[1]} ${m[2].toLowerCase()}`, cap: +m[1] } : null;
@@ -139,7 +138,6 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
   const r = raw || {};
   const date = isoDate(r.published_date) || isoDate(fallbackDate);
   const own = ownListFromTitle(r.title);
-  const hot = r.post_type === 'hot_sheet' || /hot\s*sheet/i.test(r.title || '');
   const prose = r.post_type === 'analysis' || r.post_type === 'other';   // an article: only hobby rank / his own list count, never other lists he mentions in passing
   const players = (Array.isArray(r.players) ? r.players : []).filter(p => p && String(p.name || '').trim()).map(p => {
     const take = p.take && String(p.take.summary || '').trim() ? {
@@ -160,7 +158,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
       rankings: ((list) => {   // one canonical list name per ranking: the post's own list (from its title) or 'hobby rank' for a plain Rank/Hobby column; third-party names keep the case already on file
         const out = [];
         for (const x of list) {
-          const rank = intOrNull(x.rank); let name = canonicalListName(x.list, hot);
+          const rank = intOrNull(x.rank); let name = canonicalListName(x.list);
           if (prose && !/^hobby/i.test(name) && !(own && name.toLowerCase() === own.list) && !(own && OWN_LIST_ALIASES.test(name))) continue;
           if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; if (rank > own.cap) continue; }
           if (!out.some(y => y.list.toLowerCase() === name.toLowerCase())) out.push({ list: name, rank });   // the same list twice ("Hobby" and "Hobby Rank") is one ranking
