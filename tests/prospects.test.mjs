@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -307,6 +307,33 @@ await t('prices with the same date merge into one row (base auto + separately li
   const { postId } = await submitPost(env, { text: POST_TEXT + ' merge', extractor: async () => ({ extraction: { ...c, players: c.players.map(p => ({ ...p, prices: [{ date: '2026-10-12', base_auto_cents: 6620, expected_cents: null }, { date: '2026-10-12', base_auto_cents: null, expected_cents: 10780 }] })) }, model: 'fake' }) });
   const pend = await listPendingPosts(env);   // stored extraction still has the split rows; the list re-cleans them
   assert.equal(pend.posts[0].extraction.players[0].prices.length, 1); assert.equal(pend.posts[0].extraction.players[0].prices[0].expected_cents, 10780);
+});
+
+await t('table posts with several images are read one image at a time and merged', async () => {
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const content = JSON.parse(init.body).messages[0].content;
+    const img = content.find(b => b.type === 'image'); const n = img ? img.source.data : null;
+    calls.push(n);
+    const input = !n ? { post_type: 'rankings', summary: 'Top 200', published_date: '2026-08-28', players: [{ name: 'Eli Willits', take: { stance: 'none', summary: 'Cheap vs expected' } }] }
+      : n === 'B' ? { summary: 'x', players: [{ name: 'Eli Willits', team: 'WSN', age: 18.7, buy_rating: 3.7, action: 'Lean Buy', rankings: [{ list: 'Top 200 Hitters', rank: 2 }], prices: [{ date: '2026-08-28', base_auto: 176.5 }] }] }
+      : n === 'C' ? { summary: 'x', players: [{ name: 'Eli Willits', prices: [{ date: '2026-08-28', expected: 237.5 }] }, { name: 'Jesus Made', team: 'MIL', rankings: [{ list: 'Top 200 Hitters', rank: 1 }] }] }
+      : n === 'D' ? null : { summary: 'x', players: [] };
+    if (!input) return new Response(JSON.stringify({ error: { message: 'boom' } }), { status: 500 });
+    return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'record_post', input }], stop_reason: 'tool_use', usage: { input_tokens: 1000, output_tokens: 100 } }), { status: 200 });
+  };
+  try {
+    const img = d => ({ media_type: 'image/png', base64: d });
+    const r = await extractWithClaude({ ANTHROPIC_API_KEY: 'k' }, { text: 'x'.repeat(100), images: [img('B'), img('C'), img('D')], publishedAt: '2026-08-28' });
+    assert.equal(calls.length, 4);
+    const e = r.extraction; assert.equal(e.post_type, 'rankings'); assert.equal(e.players.length, 2);
+    const w = e.players.find(p => p.name === 'Eli Willits');
+    assert.equal(w.buy_rating, 3.7); assert.equal(w.take.summary, 'Cheap vs expected'); assert.equal(w.rankings.length, 1);
+    assert.deepEqual({ ...w.prices[0] }, { date: '2026-08-28', base_auto_cents: 17650, expected_cents: 23750 });
+    assert.match(e.summary, /1 of 3 table images could not be read/);
+    assert.equal(r.usage.input_tokens, 3000);   // three successful calls summed (text + 2 images)
+  } finally { globalThis.fetch = realFetch; }
 });
 
 console.log(`\n${passed} tests passed`);

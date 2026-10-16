@@ -162,15 +162,10 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
 
 // ── Claude call ───────────────────────────────────────────────────────────────
 // images: [{ url } | { base64, media_type }]. Returns the sanitized extraction.
-export async function extractWithClaude(env, { text, images = [], title = null, publishedAt = null }) {
-  if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set on the Worker');
-  const model = env.PROSPECT_MODEL || DEFAULT_MODEL;
-  const content = [];
-  for (const img of images.slice(0, 20)) {
-    if (img.base64) content.push({ type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/png', data: img.base64 } });
-    else if (img.url) content.push({ type: 'image', source: { type: 'url', url: img.url } });
-  }
-  content.push({ type: 'text', text: `${title ? `Email/post title: ${title}\n` : ''}${publishedAt ? `Post date: ${publishedAt}\n` : ''}\nPOST TEXT:\n${text}` });
+const imgBlock = img => img.base64 ? { type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/png', data: img.base64 } }
+  : img.url ? { type: 'image', source: { type: 'url', url: img.url } } : null;
+
+async function callClaude(env, model, content, publishedAt) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
@@ -187,9 +182,54 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
   if (d.stop_reason === 'max_tokens') throw new Error('Extraction was cut off (post too long)');
   // Total prompt tokens include cached ones; images are billed as ordinary input tokens.
   const u = d.usage || {};
-  const usage = { input_tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), output_tokens: u.output_tokens || 0 };
+  return { extraction: sanitizeExtraction(block.input, publishedAt),
+    usage: { input_tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), output_tokens: u.output_tokens || 0 } };
+}
+
+// Folds the players found in a table-image pass into the main extraction: fills blanks, adds new rankings/prices, appends new players.
+export function mergeExtractions(base, extras) {
+  const byName = new Map(base.players.map(p => [normName(p.name), p]));
+  for (const ex of extras) for (const p of ex.players) {
+    const k = normName(p.name), m = byName.get(k);
+    if (!m) { const c = { ...p }; base.players.push(c); byName.set(k, c); continue; }
+    for (const f of ['team', 'side', 'age', 'level', 'buy_rating', 'action', 'post_rank']) m[f] ??= p[f];
+    for (const r of p.rankings) if (!m.rankings.some(x => x.list === r.list)) m.rankings.push(r);
+    for (const pr of p.prices) {
+      const same = m.prices.find(x => x.date === pr.date);
+      if (!same) m.prices.push({ ...pr }); else { same.base_auto_cents ??= pr.base_auto_cents; same.expected_cents ??= pr.expected_cents; }
+    }
+    m.take ??= p.take;
+  }
+  return base;
+}
+
+const TABLE_PASS_NOTE = 'TABLE-IMAGE PASS: Extract EVERY player row shown in the attached image and nothing else (skip players that appear only in the text). Include every row, even those with no price. Do not write takes or summaries for this pass; keep the summary to one short line.';
+
+// Posts with several table screenshots (like a Top 200) are too big for one answer, so the text and each image are read separately and merged.
+export async function extractWithClaude(env, { text, images = [], title = null, publishedAt = null }) {
+  if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set on the Worker');
+  const model = env.PROSPECT_MODEL || DEFAULT_MODEL;
+  const head = `${title ? `Email/post title: ${title}\n` : ''}${publishedAt ? `Post date: ${publishedAt}\n` : ''}\nPOST TEXT:\n${text}`;
+  const blocks = images.slice(0, 20).map(imgBlock).filter(Boolean);
+  let results;
+  if (blocks.length < 3) {
+    results = [await callClaude(env, model, [...blocks, { type: 'text', text: head }], publishedAt)];
+  } else {
+    const settled = await Promise.allSettled([
+      callClaude(env, model, [{ type: 'text', text: head }], publishedAt),
+      ...blocks.map(b => callClaude(env, model, [b, { type: 'text', text: `${TABLE_PASS_NOTE}\n\n${head}` }], publishedAt))
+    ]);
+    if (settled[0].status === 'rejected') throw settled[0].reason;
+    const imgRes = settled.slice(1);
+    if (imgRes.every(r => r.status === 'rejected')) throw imgRes[0].reason;
+    results = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+    const failed = imgRes.filter(r => r.status === 'rejected').length;
+    const merged = mergeExtractions(results[0].extraction, results.slice(1).map(r => r.extraction));
+    if (failed) merged.summary += ` (Warning: ${failed} of ${blocks.length} table images could not be read, so some players may be missing.)`;
+  }
+  const usage = { input_tokens: results.reduce((t, r) => t + r.usage.input_tokens, 0), output_tokens: results.reduce((t, r) => t + r.usage.output_tokens, 0) };
   usage.cost_micros = costMicros(model, usage);
-  return { extraction: sanitizeExtraction(block.input, publishedAt), model, usage };
+  return { extraction: results[0].extraction, model, usage };
 }
 
 // ── Pending / review ──────────────────────────────────────────────────────────
