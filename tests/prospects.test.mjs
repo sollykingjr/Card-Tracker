@@ -412,6 +412,16 @@ await t('players with no rank are only a note when the list itself is complete',
   assert.equal(gap.level, 'warn');
 });
 
+await t('dated price-rank columns are not saved, and a price dated last year on a 2026 post is moved to 2026', () => {
+  const o = sanitizeExtraction({ title: 'Two Week Review', post_type: 'hot_sheet', published_date: '2026-09-24', summary: 's', players: [
+    { name: 'Angelbel Gomez', rankings: [{ list: 'Rank', rank: 19 }, { list: '9/17 rank', rank: 3 }, { list: '9/24 Rank', rank: 2 }, { list: 'hobby rank', rank: 19 }],
+      prices: [{ date: '2025-09-17', base_auto: 132.35 }, { date: '2025-09-24', base_auto: 108.44 }, { date: '2026-09-24', base_auto: 108.44, expected: 73.8 }] },
+    { name: 'Old Price', prices: [{ date: '2026-03-02', base_auto: 5 }] }] });
+  assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 19 }, { list: 'hobby rank', rank: 19 }]);
+  assert.deepEqual(o.players[0].prices, [{ date: '2026-09-17', base_auto_cents: 13235, expected_cents: null }, { date: '2026-09-24', base_auto_cents: 10844, expected_cents: 7380 }]);
+  assert.equal(o.players[1].prices[0].date, '2026-03-02');   // a genuinely older price keeps its date
+});
+
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {
   const mk = (n, rank, extra = {}) => ({ name: n, rankings: rank ? [{ list: 'top 200 hitters', rank }] : [], prices: [], ...extra });
   const clean = { title: 'Top 200 Hitters', players: Array.from({ length: 200 }, (_, i) => mk(`Name${i} Surname${'x'.repeat(i % 7)}${i}`, i + 1)) };

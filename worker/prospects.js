@@ -93,6 +93,7 @@ Rules:
 - A column labelled "Last Week", "Prior Week" or "Previous Week" (no date printed) is dated exactly 7 days before the post date, and "This Week"/"Current" is the post date. Never guess another date.
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
 - Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating, also called Buy Score or BS (a number around 1-5, put in buy_rating; this is the most important number he publishes, so read it off every row of every table that has the column, never skip a row) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
+- A rank column that sits beside a dated price column ("9/17 Rank", "9/24 Rank") is the player's rank by price that week, not a ranking list: do not record it as a ranking.
 - Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too, but ONLY when they are a column in a table or the post is itself a ranking update from that source: one ranking entry per column, list named as the header. NEVER record a ranking that is only mentioned inside the writing ("ranked 22nd in the org by MLB Pipeline", "top 100 on Baseball America"): that stays in the analysis text and is not a ranking entry. "Hobby Ranking: 273" printed for a player IS his hobby rank (list "hobby rank").
 - Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
@@ -135,6 +136,17 @@ export function ownListFromTitle(title) {
 
 // Clean whatever the model returned into the exact shape the confirm step writes. Drops junk, never throws on odd values.
 const jsonIfString = v => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
+// The model sometimes writes last year on a column header like "9/17" (2025-09-17 on a 2026 post). A price date is moved to the year that puts it in the 200 days before the post, or just after it.
+function fixPriceYear(d, post) {
+  if (!isoDate(d) || !isoDate(post)) return d;
+  const DAY = 864e5, pd = Date.parse(post), ok = c => { const t = Date.parse(c); return t <= pd + DAY && pd - t < 200 * DAY; };
+  if (ok(d)) return d;
+  const [, m, dd] = d.split('-'), y = +post.slice(0, 4);
+  for (const yr of [y, y - 1]) { const c = `${yr}-${m}-${dd}`; if (ok(c)) return c; }
+  return d;
+}
+// "9/17 rank" / "9/24 Rank": his table's rank of the player by price that week, not a ranking list of his. Not saved.
+const DATED_RANK = /^\d{1,2}\/\d{1,2}(\/\d{2,4})?\s*(price\s*)?rank$/i;
 export function sanitizeExtraction(raw, fallbackDate = null) {
   const r = raw || {};
   r.players = jsonIfString(r.players);   // on very long answers the model sometimes hands back the players list as a JSON string instead of a list
@@ -169,10 +181,10 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
         const pr = intOrNull(p.post_rank);
         if (own && pr != null && pr >= 1 && !out.some(y => y.list === own.list)) out.push({ list: own.list, rank: pr });
         return out;
-      })((Array.isArray(p.rankings) ? p.rankings : []).filter(x => x && x.list && intOrNull(x.rank) != null)),
+      })((Array.isArray(p.rankings) ? p.rankings : []).filter(x => x && x.list && !DATED_RANK.test(String(x.list).trim()) && intOrNull(x.rank) != null)),
       // Accepts dollars (model output) or cents (already-cleaned output), so cleaning twice is safe.
       prices: (Array.isArray(p.prices) ? p.prices : []).map(x => x && ({
-        date: x.date,
+        date: fixPriceYear(x.date, date),
         base_auto_cents: x.base_auto_cents != null ? intOrNull(x.base_auto_cents) : cents(x.base_auto),
         expected_cents: x.expected_cents != null ? intOrNull(x.expected_cents) : cents(x.expected)
       })).filter(x => x && isoDate(x.date) && (x.base_auto_cents != null || x.expected_cents != null))
