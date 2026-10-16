@@ -231,7 +231,7 @@ function saveCardsToCache() {
 
 async function loadCardData() {
   document.getElementById('cntlbl').textContent='Loading...';
-  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>'+(CARD_DB_URL?'Loading cards...':'Fetching from Google Sheets...')+'</div>';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>'+(CARD_DB_URL?'Loading cards...':'Loading prospects…')+'</div>';
   document.getElementById('rfab').classList.add('spin');
   CACHE = null;
   try {
@@ -282,55 +282,20 @@ async function loadProspectData() {
   if (prospectDataLoaded) return;
   prospectDataLoaded = true;
   document.getElementById('cntlbl').textContent='Loading...';
-  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Fetching from Google Sheets...</div>';
+  document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Loading prospects…</div>';
   document.getElementById('rfab').classList.add('spin');
   try {
-    const [pR,h2,p1,oh2,op1,hsR,bsR,pmR] = await fetchBatch([
-      "'Players All'!A2:P2000",
-      "'Top 200 Hitters Updated'!A2:I2000",
-      "'Top 100 Pitchers Updated'!A2:I2000",
-      "'200 Hitters Original'!A2:G2000",
-      "'100 Pitchers Original'!A2:G2000",
-      "'Hot Sheet'!A2:AE10000",
-      "'Buy Score'!A2:J10000",
-      "'Parallel Multiplier'!A2:G500",
+    // Prospect data now comes from the database (the Sheet is only kept for Parallel Multiplier).
+    const [dbRes, pmRes] = await Promise.all([
+      fetch(API_BASE + '/prospect-export', { headers: { 'X-App-Key': APP_KEY } }),
+      fetchBatch(["'Parallel Multiplier'!A2:G500"]).catch(() => [[]])
     ]);
-
-    players = pR.filter(r=>r[3]).map(r=>({
-      date:cl(r[0]),team:cl(r[1])||'',pos:cl(r[2])||'',name:cl(r[3])||'',
-      age:cl(r[4]),price:cl(r[5]),mlb:cl(r[6]),dd:cl(r[7]),roto:cl(r[8]),
-      sts:cl(r[9]),ba:cl(r[10]),hobby:cl(r[11]),buy:cl(r[12]),
-      lastYr:cl(r[13]),chg:cl(r[14]),notes:cl(r[15])
-    }));
-
-    top200 = h2.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
-      age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
-    }));
-    top100 = p1.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',
-      age:cl(r[4]),prev:cl(r[5]),diff:cl(r[6]),price:cl(r[7]),notes:cl(r[8])
-    }));
-
-    origTop200 = oh2.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',price:cl(r[6])
-    }));
-    origTop100 = op1.filter(r=>r[2]).map(r=>({
-      date:cl(r[0]),rank:cl(r[1]),name:cl(r[2])||'',team:cl(r[3])||'',price:cl(r[6])
-    }));
-
-    hotsheet = hsR.filter(r=>r[4]).map(r=>({
-      date:cl(r[0]),week:cl(r[1]),pos:cl(r[2]),level:cl(r[3]),
-      name:cl(r[4])||'',age:cl(r[5]),aff:cl(r[6]),
-      auto:cl(r[7]),hobby:cl(r[8]),buyScore:cl(r[9]),
-      notes:cl(r[10])
-    }));
-
-    buyScores = bsR.filter(r=>r[3]).map(r=>({
-      date:cl(r[0]), pos:cl(r[1]), rank:cl(r[2]), name:cl(r[3])||'',
-      team:cl(r[4])||'', age:cl(r[5]), price:cl(r[6]),
-      score:cl(r[7]), notes:cl(r[8]), expectedValue:cl(r[9])
-    }));
+    if (!dbRes.ok) throw new Error('Prospect data: HTTP ' + dbRes.status);
+    const pmR = (pmRes && pmRes[0]) || [];
+    const db = await dbRes.json();
+    players = db.players; top200 = db.top200; top100 = db.top100;
+    origTop200 = db.origTop200; origTop100 = db.origTop100;
+    hotsheet = db.hotsheet; buyScores = db.buyScores;
 
     parallelMultipliers = pmR.filter(r=>r[0]).map(r=>({
       parallel:cl(r[0])||'', printRun:cl(r[1]), low:cl(r[2]), high:cl(r[3]),
@@ -363,9 +328,9 @@ async function loadProspectData() {
 
     if (section === 'prospects') { render(); }
   } catch(e) {
-    if (tab === 'inbox') { if (section === 'prospects') render(); }   // Sheet failed, but the Inbox doesn't need it
+    if (tab === 'inbox' || tab === 'posts') { if (section === 'prospects') render(); }   // load failed, but these tabs don't need it
     else {
-      document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
+      document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Check your connection and tap refresh.</div>`;
       document.getElementById('cntlbl').textContent='Error';
     }
   }

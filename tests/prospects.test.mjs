@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -241,6 +241,35 @@ await t('routes require the app key and pass other paths through', async () => {
   await submitPost(env, { text: 'z'.repeat(60), extractor: fakeExtractor(AFL) });
   const counts = await handleProspects(new Request('https://x/prospect-counts', { headers: { 'X-App-Key': 'k' } }), env, {});
   assert.deepEqual(await counts.json(), { pending: 1 });
+});
+
+await t('app export, posts list and post detail (sheet-shaped arrays for the existing Prospects screens)', async () => {
+  const env = { DB: makeDb() }, raw = env.DB._raw;
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES ('dax-kilby','Dax Kilby','dax kilby','NYY','hitter'), ('kade-anderson','Kade Anderson','kade anderson','SEA','pitcher');
+    INSERT INTO prospect_posts (post_id, source, title, post_type, published_at, raw_text, status, summary) VALUES
+      ('pa','prospect-master-sheet','Players All · 2026-03-12','analysis','2026-03-12','x','confirmed','Imported 1'),
+      ('hs','prospect-master-sheet','Hot Sheet · 2026-04-14','hot_sheet','2026-04-14','x','confirmed','Imported 1'),
+      ('bs','prospect-master-sheet','Buy Score · 2026-05-31','rankings','2026-05-31','x','confirmed','Imported 1'),
+      ('pend','prospect-analytics','Pending one','analysis','2026-10-01','x','pending','nope');
+    INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, key_points, dated) VALUES ('pa','dax-kilby','none','Long baseline note','[]','2026-03-12');
+    INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('pa','dax-kilby','hobby rank',20,'2026-03-12'),('pa','dax-kilby','MLB',4,'2026-03-12'),('hs','dax-kilby','hobby rank',44,'2026-04-14'),('bs','kade-anderson','top 100 pitchers',1,'2026-05-31');
+    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES ('pa','dax-kilby','2026-03-12',8400,NULL),('hs','dax-kilby','2026-04-14',8453,5320),('bs','kade-anderson','2026-05-31',12800,15000);
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES ('pa','dax-kilby','2026-03-12','NYY',19.3,NULL,4,NULL),('hs','dax-kilby','2026-04-14','NYY',19.4,'A+',2.3,NULL),('bs','kade-anderson','2026-05-31','SEA',21.8,NULL,4.5,'Strong Buy');`);
+  const ex = await exportForApp(env);
+  assert.equal(ex.players.length, 1);   // only the Players All baseline
+  assert.deepEqual({ ...ex.players[0] }, { date: '3/12/2026', team: 'NYY', pos: 'Hitter', name: 'Dax Kilby', age: 19.3, price: '84', mlb: 4, dd: null, roto: null, sts: null, ba: null, hobby: 20, buy: 4, lastYr: null, chg: null, notes: 'Long baseline note' });
+  assert.equal(ex.hotsheet.length, 1);
+  assert.deepEqual({ ...ex.hotsheet[0] }, { date: '4/14/2026', week: 2, pos: 'Hitter', level: 'A+', name: 'Dax Kilby', age: 19.4, aff: 'NYY', auto: '84.53', hobby: 44, buyScore: 2.3, notes: null });
+  assert.deepEqual(ex.top100.map(r => [r.name, r.rank, r.date, r.price]), [['Kade Anderson', 1, '5/31/2026', '128']]);
+  assert.deepEqual(ex.buyScores.map(r => [r.name, r.rank, r.score, r.notes, r.expectedValue]), [['Kade Anderson', 1, 4.5, 'Strong Buy', '150']]);
+  assert.equal(ex.top200.length, 0);
+  const lp = await listPosts(env);
+  assert.deepEqual(lp.posts.map(p => p.title), ['Buy Score · 2026-05-31', 'Hot Sheet · 2026-04-14', 'Players All · 2026-03-12']);   // newest first, pending excluded
+  assert.equal(lp.posts[2].takes, 1); assert.equal(lp.posts[2].players, 1);
+  const pd = await postDetail(env, 'hs');
+  assert.equal(pd.post.imported, true); assert.equal(pd.post.raw_text, null);
+  assert.equal(pd.players[0].price_c, 8453); assert.equal(pd.players[0].expected_c, 5320); assert.equal(pd.players[0].ranks['hobby rank'], 44);
+  assert.equal((await postDetail(env, 'pend')).found, false);
 });
 
 console.log(`\n${passed} tests passed`);

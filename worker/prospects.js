@@ -307,8 +307,114 @@ export async function prospectDetail(env, name) {
   return { found: true, matches: out };
 }
 
+// ── Read side for the app ─────────────────────────────────────────────────────
+// One "row" = one player in one saved post on one date, with everything the post said about him (price, expected, rating, ranks, take).
+async function loadRows(env, postId = null) {
+  const all = async (sql, ...b) => (await env.DB.prepare(sql).bind(...b).all()).results;
+  const where = postId ? `AND post_id = ?` : '';
+  const args = postId ? [postId] : [];
+  const posts = await all(`SELECT post_id, post_type, title, source, published_at FROM prospect_posts WHERE status = 'confirmed' ${where}`, ...args);
+  if (!posts.length) return { rows: [], posts: [] };
+  const inPosts = `post_id IN (SELECT post_id FROM prospect_posts WHERE status = 'confirmed' ${where})`;
+  const [pros, prices, ranks, snaps, takes] = await Promise.all([
+    all(`SELECT prospect_id, name, side FROM prospects`),
+    all(`SELECT post_id, prospect_id, dated, base_auto_cents, expected_cents FROM prospect_prices WHERE ${inPosts}`, ...args),
+    all(`SELECT post_id, prospect_id, list_name, rank, dated FROM prospect_rankings WHERE ${inPosts}`, ...args),
+    all(`SELECT post_id, prospect_id, dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE ${inPosts}`, ...args),
+    all(`SELECT post_id, prospect_id, stance, summary, key_points, dated FROM prospect_takes WHERE ${inPosts}`, ...args)
+  ]);
+  const P = new Map(pros.map(p => [p.prospect_id, p])), PO = new Map(posts.map(p => [p.post_id, p]));
+  const groups = new Map();
+  const g = (post_id, prospect_id) => {
+    const k = post_id + '|' + prospect_id;
+    if (!groups.has(k)) groups.set(k, { post_id, prospect_id, prices: [], ranks: {}, snap: null, take: null });
+    return groups.get(k);
+  };
+  for (const r of prices) g(r.post_id, r.prospect_id).prices.push(r);
+  for (const r of ranks) g(r.post_id, r.prospect_id).ranks[r.list_name] = r.rank;
+  for (const r of snaps) g(r.post_id, r.prospect_id).snap = r;
+  for (const r of takes) g(r.post_id, r.prospect_id).take = r;
+  const rows = [];
+  for (const x of groups.values()) {
+    const post = PO.get(x.post_id), pr = P.get(x.prospect_id);
+    if (!post || !pr) continue;
+    const postDate = post.published_at || (x.snap && x.snap.dated) || (x.take && x.take.dated) || null;
+    const entries = x.prices.length ? x.prices.slice().sort((a, b) => String(a.dated).localeCompare(String(b.dated))) : [{ dated: postDate }];
+    const main = entries.find(e => e.dated === postDate) || entries[entries.length - 1];
+    for (const e of entries) {
+      const full = e === main;
+      rows.push({
+        post_id: x.post_id, post_type: post.post_type, title: post.title, source: post.source,
+        prospect_id: x.prospect_id, name: pr.name, side: pr.side, dated: e.dated,
+        price_c: e.base_auto_cents ?? null, expected_c: e.expected_cents ?? null,
+        team: full && x.snap ? x.snap.team : null, age: full && x.snap ? x.snap.age : null, level: full && x.snap ? x.snap.level : null,
+        buy: full && x.snap ? x.snap.buy_rating : null, action: full && x.snap ? x.snap.action : null,
+        ranks: full ? x.ranks : {}, take: full && x.take ? { stance: x.take.stance, summary: x.take.summary, key_points: JSON.parse(x.take.key_points || '[]') } : null
+      });
+    }
+  }
+  return { rows, posts };
+}
+
+const usDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? `${+m[2]}/${+m[3]}/${m[1]}` : ''; };
+const dollars = c => c == null ? null : String(Math.round(c) / 100);
+// Hitter/Pitcher for a row: the list he is ranked on is the most reliable signal, then the player's saved side.
+const posLabel = (side, ranks = {}) => ranks['top 100 pitchers'] != null ? 'Pitcher' : ranks['top 200 hitters'] != null ? 'Hitter' : side === 'pitcher' ? 'Pitcher' : 'Hitter';
+const WEEK0 = Date.UTC(2026, 3, 6);   // Monday of hot-sheet week 1 (the old sheet's numbering)
+const weekOf = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? Math.floor((Date.UTC(+m[1], +m[2] - 1, +m[3]) - WEEK0) / 604800000) + 1 : null; };
+const TOP_LISTS = { 'top 200 hitters': 'top200', 'top 100 pitchers': 'top100' };
+
+// Everything the Prospects tab needs, shaped like the old Google Sheet tabs so the existing screens keep working.
+export async function exportForApp(env) {
+  const { rows } = await loadRows(env);
+  const out = { players: [], top200: [], top100: [], origTop200: [], origTop100: [], hotsheet: [], buyScores: [] };
+  const baseline = new Map();   // first "Players All" row per prospect = the baseline entry the old sheet had
+  for (const r of rows.slice().sort((a, b) => String(a.dated).localeCompare(String(b.dated)))) {
+    const date = usDate(r.dated), pos = posLabel(r.side, r.ranks), note = r.take ? r.take.summary : null;
+    const isBaseline = r.source === 'prospect-master-sheet' && /^Players All/.test(r.title || '');
+    if (isBaseline && !baseline.has(r.prospect_id)) {
+      baseline.set(r.prospect_id, true);
+      out.players.push({ date, team: r.team || '', pos, name: r.name, age: r.age ?? null, price: dollars(r.price_c), mlb: r.ranks['MLB'] ?? null, dd: r.ranks['DD'] ?? null,
+        roto: r.ranks['Roto'] ?? null, sts: r.ranks['StS'] ?? null, ba: r.ranks['BA'] ?? null, hobby: r.ranks['hobby rank'] ?? null, buy: r.buy ?? null, lastYr: null, chg: null, notes: note });
+    }
+    if (r.post_type === 'hot_sheet') {
+      out.hotsheet.push({ date, week: weekOf(r.dated), pos, level: r.level || '', name: r.name, age: r.age ?? null, aff: r.team || '', auto: dollars(r.price_c),
+        hobby: r.ranks['hobby rank'] ?? null, buyScore: r.buy ?? null, notes: note });
+    }
+    for (const [list, key] of Object.entries(TOP_LISTS)) if (r.ranks[list] != null) {
+      out[key].push({ date, rank: r.ranks[list], name: r.name, team: r.team || '', age: r.age ?? null, prev: null, diff: null, price: dollars(r.price_c), notes: note });
+    }
+    if (r.post_type !== 'hot_sheet' && !isBaseline && (r.buy != null || r.action || r.expected_c != null)) {
+      const list = Object.keys(TOP_LISTS).find(l => r.ranks[l] != null);
+      out.buyScores.push({ date, pos, rank: list ? r.ranks[list] : null, name: r.name, team: r.team || '', age: r.age ?? null, price: dollars(r.price_c),
+        score: r.buy ?? null, notes: r.action || null, expectedValue: dollars(r.expected_c) });
+    }
+  }
+  return out;
+}
+
+// Posts view: list of saved posts, newest first.
+export async function listPosts(env) {
+  const { results } = await env.DB.prepare(`SELECT p.post_id, p.title, p.post_type, p.published_at, p.summary, p.source,
+      (SELECT COUNT(*) FROM prospect_takes t WHERE t.post_id = p.post_id) takes,
+      (SELECT COUNT(DISTINCT prospect_id) FROM (SELECT prospect_id FROM prospect_prices WHERE post_id = p.post_id UNION SELECT prospect_id FROM prospect_rankings WHERE post_id = p.post_id UNION SELECT prospect_id FROM prospect_takes WHERE post_id = p.post_id)) players
+    FROM prospect_posts p WHERE p.status = 'confirmed' ORDER BY p.published_at DESC, p.created_at DESC`).all();
+  return { posts: results };
+}
+
+// One post: summary, the original text (kept for real posts), every player's take and numbers.
+export async function postDetail(env, postId) {
+  const post = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, thesis, source, raw_text FROM prospect_posts WHERE post_id = ? AND status = 'confirmed'`).bind(postId).first();
+  if (!post) return { found: false };
+  const { rows } = await loadRows(env, postId);
+  const imported = post.source === 'prospect-master-sheet';
+  return { found: true, post: { ...post, raw_text: imported ? null : post.raw_text, imported },
+    players: rows.map(r => ({ name: r.name, side: r.side, dated: r.dated, team: r.team, age: r.age, level: r.level, buy: r.buy, action: r.action,
+      price_c: r.price_c, expected_c: r.expected_c, ranks: r.ranks, take: r.take })) };
+}
+
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect-export', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -323,6 +429,9 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-counts': return out({ pending: (await env.DB.prepare(`SELECT COUNT(*) n FROM prospect_posts WHERE status = 'pending'`).first()).n });
       case '/prospect-confirm': { const b = await request.json(); return out(await confirmPost(env, b.post_id, b.extraction || null)); }
       case '/prospect-reject': { const b = await request.json(); return out(await rejectPost(env, b.post_id)); }
+      case '/prospect-export': return out(await exportForApp(env));
+      case '/prospect-posts': return out(await listPosts(env));
+      case '/prospect-post': return out(await postDetail(env, url.searchParams.get('id') || ''));
       case '/prospect': return out(await prospectDetail(env, url.searchParams.get('name') || ''));
     }
     return null;

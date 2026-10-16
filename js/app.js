@@ -98,7 +98,7 @@ function setSection(s) {
     document.getElementById('cntlbl').textContent = '';
     if (!prospectDataLoaded) {
       loadProspectData();
-      if (tab === 'inbox') render();   // the Inbox doesn't need the Sheet, so don't wait for it
+      if (tab === 'inbox' || tab === 'posts') render();   // these don't need the prospect arrays, so don't wait for them
     } else {
       render();
     }

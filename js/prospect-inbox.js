@@ -223,6 +223,7 @@ async function pibConfirm(id) {
   if (!ex.players.length) { err.textContent = 'Every player is unchecked. Reject the post instead.'; return; }
   if (!ex.published_date) { err.textContent = 'Set the post date first (it dates the prices).'; return; }
   err.textContent = '';
+  if (typeof ppLoaded !== 'undefined') ppLoaded = false;   // Posts list refreshes next time it opens
   const d = await pibCall('/prospect-confirm', { post_id: id, extraction: ex });
   if (d.error) { err.textContent = d.error; return; }
   const c = d.counts || {};

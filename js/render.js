@@ -201,9 +201,10 @@ function renderHotSheet() {
 // ── Main render ───────────────────────────────────────────────────────────────
 function render() {
   if(section==='searchbuilder') return;
-  const isInbox=tab==='inbox';
-  document.getElementById('hdr').style.display = isInbox ? 'none' : '';   // no player search on the Inbox
+  const isInbox=tab==='inbox', isPosts=tab==='posts';
+  document.getElementById('hdr').style.display = (isInbox||isPosts) ? 'none' : '';   // no player search on the Inbox / Posts
   if(isInbox){ renderProspectInbox(); return; }
+  if(isPosts){ renderSortChips(); renderPostsView(); return; }
   const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
   const showChips=!isHS&&!isPort&&!isWatch;
   renderSortChips();
