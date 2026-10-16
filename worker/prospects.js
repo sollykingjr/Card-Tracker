@@ -114,10 +114,18 @@ async function sha256(text) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// The post's own ranking list, named from its title ("Top 200 Hitters" -> 'top 200 hitters'), so a plain "Rank" column always lands on the right list.
+const OWN_LIST_ALIASES = /^(rank|own rank|post rank|ranking|hobby|hobby rank|hitters? rank|pitchers? rank|top \d+ (hitters|pitchers))$/i;
+export function ownListFromTitle(title) {
+  const m = /top\s*(\d+)\s*(hitters|pitchers)/i.exec(String(title || ''));
+  return m ? { list: `top ${m[1]} ${m[2].toLowerCase()}`, cap: +m[1] } : null;
+}
+
 // Clean whatever the model returned into the exact shape the confirm step writes. Drops junk, never throws on odd values.
 export function sanitizeExtraction(raw, fallbackDate = null) {
   const r = raw || {};
   const date = isoDate(r.published_date) || isoDate(fallbackDate);
+  const own = ownListFromTitle(r.title);
   const players = (Array.isArray(r.players) ? r.players : []).filter(p => p && String(p.name || '').trim()).map(p => {
     const take = p.take && String(p.take.summary || '').trim() ? {
       stance: STANCES.includes(p.take.stance) ? p.take.stance : 'none',
@@ -133,8 +141,17 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
       buy_rating: isFinite(Number(p.buy_rating)) && p.buy_rating != null && p.buy_rating !== '' && Number(p.buy_rating) > 0 ? Number(p.buy_rating) : null,
       action: p.action && String(p.action).trim() && String(p.action).trim() !== '-' ? String(p.action).trim() : null,
       post_rank: intOrNull(p.post_rank),
-      rankings: (Array.isArray(p.rankings) ? p.rankings : []).filter(x => x && x.list && intOrNull(x.rank) != null)
-        .map(x => ({ list: String(x.list).trim(), rank: intOrNull(x.rank) })),
+      rankings: ((list) => {   // the post's own list: a plain Rank column (or the numbered position) goes under the list named in the title; ranks past the list's size are dropped
+        const out = [];
+        for (const x of list) {
+          let name = String(x.list).trim(); const rank = intOrNull(x.rank);
+          if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; if (rank > own.cap) continue; }
+          if (!out.some(y => y.list.toLowerCase() === name.toLowerCase() && y.rank === rank)) out.push({ list: name, rank });
+        }
+        const pr = intOrNull(p.post_rank);
+        if (own && pr != null && pr <= own.cap && !out.some(y => y.list === own.list)) out.push({ list: own.list, rank: pr });
+        return out;
+      })((Array.isArray(p.rankings) ? p.rankings : []).filter(x => x && x.list && intOrNull(x.rank) != null)),
       // Accepts dollars (model output) or cents (already-cleaned output), so cleaning twice is safe.
       prices: (Array.isArray(p.prices) ? p.prices : []).map(x => x && ({
         date: x.date,

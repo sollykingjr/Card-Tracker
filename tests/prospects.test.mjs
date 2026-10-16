@@ -338,4 +338,15 @@ await t('table posts with several images are read one image at a time and merged
   } finally { globalThis.fetch = realFetch; }
 });
 
+await t('a Top 200 post\'s Rank column lands on "top 200 hitters" however the model named it', async () => {
+  const c = sanitizeExtraction({ title: 'Bowman Prospect Rankings - Top 200 Hitters', post_type: 'rankings', summary: 's', published_date: '2026-08-28', players: [
+    { name: 'A One', rankings: [{ list: 'Rank', rank: 2 }, { list: 'Own rank', rank: 2 }, { list: 'MLB', rank: 5 }] },
+    { name: 'B Two', post_rank: 81 }, { name: 'C Three', rankings: [{ list: 'Rank', rank: 260 }] }, { name: 'D Four', rankings: [{ list: 'Hobby', rank: 77 }] }] });
+  assert.deepEqual(c.players[0].rankings, [{ list: 'top 200 hitters', rank: 2 }, { list: 'MLB', rank: 5 }]);
+  assert.deepEqual(c.players[1].rankings, [{ list: 'top 200 hitters', rank: 81 }]);
+  assert.deepEqual(c.players[2].rankings, []); assert.deepEqual(c.players[3].rankings, [{ list: 'top 200 hitters', rank: 77 }]);
+  const o = sanitizeExtraction({ title: 'Hot Sheet', summary: 's', players: [{ name: 'E Five', rankings: [{ list: 'Rank', rank: 9 }] }] });
+  assert.deepEqual(o.players[0].rankings, [{ list: 'Rank', rank: 9 }]);   // other posts keep the list as named
+});
+
 console.log(`\n${passed} tests passed`);
