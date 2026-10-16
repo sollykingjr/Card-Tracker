@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail } from '../worker/prospects.js';
+import { submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -270,6 +270,32 @@ await t('app export, posts list and post detail (sheet-shaped arrays for the exi
   assert.equal(pd.post.imported, true); assert.equal(pd.post.raw_text, null);
   assert.equal(pd.players[0].price_c, 8453); assert.equal(pd.players[0].expected_c, 5320); assert.equal(pd.players[0].ranks['hobby rank'], 44);
   assert.equal((await postDetail(env, 'pend')).found, false);
+});
+
+await t('email: html becomes readable text, table screenshots are picked and downloaded, duplicates and junk are handled', async () => {
+  const html = `<html><head><style>p{color:red}</style></head><body><p>Hello &amp; welcome &mdash; it&#39;s the <b>AFL</b> post.</p><div>Line two<br>Line three</div>
+    <img src="https://cdn.example.com/open-tracking.gif" width="1" height="1"><img src="https://cdn.example.com/logo.png" width="200">
+    <img src="https://cdn.example.com/hot-bats.png?x=1&amp;y=2" width="700"><img src="http://insecure.example.com/a.png"><img src="https://cdn.example.com/dead.png">
+    <table><tr><td>Dax Kilby</td><td>$78.14</td></tr></table><script>alert(1)</script>
+    <p>${'Plenty more analysis text here. '.repeat(10)}</p></body></html>`;
+  const txt = htmlToText(html);
+  assert.ok(txt.startsWith("Hello & welcome — it's the AFL post.\n\nLine two\nLine three")); assert.ok(!txt.includes('alert') && !txt.includes('color:red') && !txt.includes('<'));
+  assert.ok(txt.includes('Dax Kilby $78.14'));
+  assert.deepEqual(emailImageUrls(html), ['https://cdn.example.com/hot-bats.png?x=1&y=2', 'https://cdn.example.com/dead.png']);
+  const png = new Uint8Array(4000).fill(7);
+  const fetched = [];
+  const doFetch = async url => { fetched.push(url); return url.includes('dead') ? { ok: false } : { ok: true, headers: { get: () => 'image/png' }, arrayBuffer: async () => png.buffer }; };
+  const env = { DB: makeDb() }; const seen = [];
+  const extractor = async (e, args) => { seen.push(args); return { extraction: sanitizeExtraction({ post_type: 'hot_sheet', summary: 's', players: [{ name: 'Dax Kilby', team: 'NYY' }] }, args.publishedAt), model: 'fake' }; };
+  const r = await submitEmail(env, { subject: 'AFL Hot & Cold', date: '2026-10-12', html, images: [{ media_type: 'image/jpeg', base64: 'AAAA' }, { media_type: 'application/pdf', base64: 'BBBB' }] }, { extractor, doFetch });
+  assert.equal(r.duplicate, false);
+  assert.equal(seen[0].title, 'AFL Hot & Cold'); assert.equal(seen[0].publishedAt, '2026-10-12');
+  assert.equal(seen[0].images.length, 2);   // 1 inline jpeg + 1 downloaded table (dead link skipped, pdf rejected)
+  assert.equal(seen[0].images[1].media_type, 'image/png'); assert.equal(seen[0].images[1].base64.length, Math.ceil(4000 / 3) * 4);
+  assert.equal(fetched.length, 2);
+  assert.equal((await submitEmail(env, { subject: 'AFL Hot & Cold', date: '2026-10-12', html }, { extractor, doFetch })).duplicate, true);
+  await assert.rejects(() => submitEmail(env, { subject: 'x', html: '<p>hi</p>' }, { extractor, doFetch }), /too short/);
+  const pend = await listPendingPosts(env); assert.equal(pend.pending, 1);
 });
 
 console.log(`\n${passed} tests passed`);

@@ -160,8 +160,8 @@ export async function extractWithClaude(env, { text, images = [], title = null, 
   const model = env.PROSPECT_MODEL || DEFAULT_MODEL;
   const content = [];
   for (const img of images.slice(0, 20)) {
-    if (img.url) content.push({ type: 'image', source: { type: 'url', url: img.url } });
-    else if (img.base64) content.push({ type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/png', data: img.base64 } });
+    if (img.base64) content.push({ type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/png', data: img.base64 } });
+    else if (img.url) content.push({ type: 'image', source: { type: 'url', url: img.url } });
   }
   content.push({ type: 'text', text: `${title ? `Email/post title: ${title}\n` : ''}${publishedAt ? `Post date: ${publishedAt}\n` : ''}\nPOST TEXT:\n${text}` });
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -413,8 +413,70 @@ export async function postDetail(env, postId) {
       price_c: r.price_c, expected_c: r.expected_c, ranks: r.ranks, take: r.take })) };
 }
 
+// ── Email in (Gmail script -> here) ───────────────────────────────────────────
+// The Gmail script sends one email: subject, date, html (and/or plain text), plus any inline images as base64.
+// We turn the HTML into text, download the table screenshots it links to, and hand everything to the normal Inbox pipeline.
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', ndash: '–', mdash: '—', hellip: '…', bull: '•', middot: '·' };
+function decodeEntities(s) {
+  return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === '#') { const n = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m; }
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
+export function htmlToText(html) {
+  let s = String(html || '');
+  s = s.replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, '').replace(/<!--[\s\S]*?-->/g, '');
+  s = s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|h[1-6]|li|tr|table|ul|ol|blockquote|section|article)>/gi, '\n')
+    .replace(/<(p|div|h[1-6]|li|tr|blockquote)\b[^>]*>/gi, '\n').replace(/<\/t[dh]>/gi, ' ');
+  s = decodeEntities(s.replace(/<[^>]+>/g, ''));
+  return s.replace(/[ \t\u00a0]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+// Table screenshots in the email body: https images that are not tracking pixels, logos or icons.
+export function emailImageUrls(html) {
+  const urls = [], seen = new Set();
+  for (const m of String(html || '').matchAll(/<img\b[^>]*>/gi)) {
+    const tag = m[0], src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag);
+    if (!src) continue;
+    const url = decodeEntities(src[1]).trim();
+    if (!/^https:\/\//i.test(url) || seen.has(url)) continue;
+    const w = +((/\bwidth\s*=\s*["']?(\d+)/i.exec(tag) || [])[1] || 0), h = +((/\bheight\s*=\s*["']?(\d+)/i.exec(tag) || [])[1] || 0);
+    if ((w && w < 120) || (h && h < 60)) continue;
+    if (/(pixel|tracking|spacer|beacon|logo|icon|avatar|badge|facebook|twitter|instagram|linkedin|youtube|\.gif(\?|$))/i.test(url)) continue;
+    seen.add(url); urls.push(url);
+  }
+  return urls.slice(0, 20);
+}
+const toBase64 = buf => { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const IMG_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+// Downloads each image ourselves so one dead link can't fail the whole extraction. Tiny files (icons) and >5MB files are skipped.
+async function downloadImages(urls, doFetch = fetch) {
+  const out = [];
+  await Promise.all(urls.map(async (url, i) => {
+    try {
+      const r = await doFetch(url, { signal: AbortSignal.timeout(8000), redirect: 'follow' });
+      if (!r.ok) return;
+      const type = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      if (!IMG_TYPES.includes(type)) return;
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength < 3000 || buf.byteLength > 5 * 1024 * 1024) return;
+      out[i] = { media_type: type, base64: toBase64(buf), url };
+    } catch { /* skip this image */ }
+  }));
+  return out.filter(Boolean);
+}
+export async function submitEmail(env, b, deps = {}) {
+  const fromHtml = b.html ? htmlToText(b.html) : '';
+  const text = fromHtml.length >= 200 ? fromHtml : String(b.text || fromHtml || '').trim();
+  const inline = (Array.isArray(b.images) ? b.images : []).filter(i => i && i.base64 && IMG_TYPES.includes(i.media_type)).slice(0, 8);
+  const linked = b.html ? await downloadImages(emailImageUrls(b.html), deps.doFetch) : [];
+  const images = [...inline, ...linked].slice(0, 20);
+  const title = String(b.subject || '').trim() || null;
+  const publishedAt = isoDate(b.date) || null;
+  return submitPost(env, { text, images, title, publishedAt, extractor: deps.extractor });
+}
+
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'GET:/prospect-export', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -429,6 +491,7 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-counts': return out({ pending: (await env.DB.prepare(`SELECT COUNT(*) n FROM prospect_posts WHERE status = 'pending'`).first()).n });
       case '/prospect-confirm': { const b = await request.json(); return out(await confirmPost(env, b.post_id, b.extraction || null)); }
       case '/prospect-reject': { const b = await request.json(); return out(await rejectPost(env, b.post_id)); }
+      case '/prospect-email': { const b = await request.json(); return out(await submitEmail(env, b)); }
       case '/prospect-export': return out(await exportForApp(env));
       case '/prospect-posts': return out(await listPosts(env));
       case '/prospect-post': return out(await postDetail(env, url.searchParams.get('id') || ''));
