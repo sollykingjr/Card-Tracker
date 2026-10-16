@@ -356,6 +356,15 @@ await t('rank columns named after the post or the site are his hobby rank', () =
   assert.deepEqual(o.players[0].rankings, [{ list: 'hobby rank', rank: 18 }]);
 });
 
+await t('a plain Rank column is hobby rank only on a hot sheet; rankings mentioned in an article\'s prose are not saved', () => {
+  const art = sanitizeExtraction({ title: 'Bowman Chrome Sleepers', post_type: 'analysis', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'MLB Pipeline org', rank: 22 }, { list: 'Baseball America', rank: 90 }, { list: 'Hobby Ranking', rank: 259 }] }] });
+  assert.deepEqual(art.players[0].rankings, [{ list: 'hobby rank', rank: 259 }]);
+  const bare = sanitizeExtraction({ title: 'Bowman Chrome Rankings', post_type: 'rankings', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'Rank', rank: 5 }] }] });
+  assert.deepEqual(bare.players[0].rankings, [{ list: 'Rank', rank: 5 }]);   // his own list, not hobby: left as named for review
+  const col = sanitizeExtraction({ title: 'Hitter Hot Sheet - Week 23', post_type: 'hot_sheet', summary: 's', players: [{ name: 'Darell Morel', rankings: [{ list: 'MLB', rank: 4 }, { list: 'Rank', rank: 5 }] }] });
+  assert.deepEqual(col.players[0].rankings, [{ list: 'MLB', rank: 4 }, { list: 'hobby rank', rank: 5 }]);   // table columns still count
+});
+
 await t('review checks flag the things that went wrong before, and stay quiet on a clean post', async () => {
   const mk = (n, rank, extra = {}) => ({ name: n, rankings: rank ? [{ list: 'top 200 hitters', rank }] : [], prices: [], ...extra });
   const clean = { title: 'Top 200 Hitters', players: Array.from({ length: 200 }, (_, i) => mk(`Name${i} Surname${'x'.repeat(i % 7)}${i}`, i + 1)) };

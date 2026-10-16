@@ -93,7 +93,7 @@ Rules:
 - A column labelled "Last Week", "Prior Week" or "Previous Week" (no date printed) is dated exactly 7 days before the post date, and "This Week"/"Current" is the post date. Never guess another date.
 - Prices are dollars as numbers ($1,234.50 -> 1234.5).
 - Always capture these when a table has them: Age, Level, Expected (his expected value for the base auto), Buy Rating, also called Buy Score or BS (a number around 1-5, put in buy_rating; this is the most important number he publishes, so read it off every row of every table that has the column, never skip a row) and the Action/label beside it (put in action, exactly as written). A "-" means blank: omit the field.
-- Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too: one ranking entry per column, list named as the header.
+- Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too, but ONLY when they are a column in a table or the post is itself a ranking update from that source: one ranking entry per column, list named as the header. NEVER record a ranking that is only mentioned inside the writing ("ranked 22nd in the org by MLB Pipeline", "top 100 on Baseball America"): that stays in the analysis text and is not a ranking entry. "Hobby Ranking: 273" printed for a player IS his hobby rank (list "hobby rank").
 - Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
@@ -122,9 +122,13 @@ async function sha256(text) {
 
 // The post's own ranking list, named from its title ("Top 200 Hitters" -> 'top 200 hitters'), so a plain "Rank" column always lands on the right list.
 const OWN_LIST_ALIASES = /^(rank|own rank|post rank|ranking|hobby|hobby rank|hitters? rank|pitchers? rank|top \d+ (hitters|pitchers))$/i;
-const LIST_CANON = { rank: 'hobby rank', 'own rank': 'hobby rank', ranking: 'hobby rank', hobby: 'hobby rank', 'hobby rank': 'hobby rank', 'hobby ranking': 'hobby rank', 'overall rank': 'hobby rank', 'hot sheet': 'hobby rank', 'hot sheet rank': 'hobby rank', 'prospect analytics': 'hobby rank', 'prospect analytics rank': 'hobby rank', pa: 'hobby rank',
-  mlb: 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA', 'top 200 hitters': 'top 200 hitters', 'top 100 pitchers': 'top 100 pitchers' };
-const canonicalListName = n => { const k = String(n).trim().toLowerCase(); return LIST_CANON[k] || String(n).trim(); };
+// "Hobby rank" (the market/chase list, one number across hitters and pitchers) and his own Top N list are different things and are never merged.
+// A column literally named hobby is always hobby rank. A bare "Rank"/"Hot Sheet"/"Prospect Analytics" column is the hobby rank only on a hot sheet; anywhere else it is left as named so the review flags it.
+const HOBBY_NAMES = new Set(['hobby', 'hobby rank', 'hobby ranking', 'hobby rankings']);
+const HOT_SHEET_NAMES = new Set(['rank', 'own rank', 'ranking', 'overall rank', 'hot sheet', 'hot sheet rank', 'prospect analytics', 'prospect analytics rank', 'pa']);
+const THIRD_PARTY = { mlb: 'MLB', dd: 'DD', roto: 'Roto', sts: 'StS', ba: 'BA' };
+const canonicalListName = (n, hot) => { const k = String(n).trim().toLowerCase();
+  return HOBBY_NAMES.has(k) || (hot && HOT_SHEET_NAMES.has(k)) ? 'hobby rank' : THIRD_PARTY[k] || (k === 'top 200 hitters' || k === 'top 100 pitchers' ? k : String(n).trim()); };
 export function ownListFromTitle(title) {
   const m = /top\s*(\d+)\s*(hitters|pitchers)/i.exec(String(title || ''));
   return m ? { list: `top ${m[1]} ${m[2].toLowerCase()}`, cap: +m[1] } : null;
@@ -135,6 +139,8 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
   const r = raw || {};
   const date = isoDate(r.published_date) || isoDate(fallbackDate);
   const own = ownListFromTitle(r.title);
+  const hot = r.post_type === 'hot_sheet' || /hot\s*sheet/i.test(r.title || '');
+  const prose = r.post_type === 'analysis' || r.post_type === 'other';   // an article: only hobby rank / his own list count, never other lists he mentions in passing
   const players = (Array.isArray(r.players) ? r.players : []).filter(p => p && String(p.name || '').trim()).map(p => {
     const take = p.take && String(p.take.summary || '').trim() ? {
       stance: STANCES.includes(p.take.stance) ? p.take.stance : 'none',
@@ -154,7 +160,8 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
       rankings: ((list) => {   // one canonical list name per ranking: the post's own list (from its title) or 'hobby rank' for a plain Rank/Hobby column; third-party names keep the case already on file
         const out = [];
         for (const x of list) {
-          const rank = intOrNull(x.rank); let name = canonicalListName(x.list);
+          const rank = intOrNull(x.rank); let name = canonicalListName(x.list, hot);
+          if (prose && !/^hobby/i.test(name) && !(own && name.toLowerCase() === own.list) && !(own && OWN_LIST_ALIASES.test(name))) continue;
           if (own && OWN_LIST_ALIASES.test(name)) { name = own.list; if (rank > own.cap) continue; }
           if (!out.some(y => y.list.toLowerCase() === name.toLowerCase())) out.push({ list: name, rank });   // the same list twice ("Hobby" and "Hobby Rank") is one ranking
         }
