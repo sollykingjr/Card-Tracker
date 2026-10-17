@@ -4,6 +4,8 @@ let phData = null, phLoading = false, phErr = null;
 const PH_CACHE_KEY = 'phCurrentCache';
 const phMoney = c => c == null ? '' : '$' + (c / 100).toFixed(c % 100 ? 2 : 0);
 const phDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? `${+m[2]}/${+m[3]}/${m[1].slice(2)}` : ''; };
+// Green / yellow / red by the score itself.
+const phTone = n => n == null ? '' : n >= 4.5 ? 'hi' : n >= 3 ? 'mid' : 'lo';
 const phBs = n => String(Math.round(Number(n) * 100) / 100);
 
 function phCache() {
@@ -85,7 +87,7 @@ const phWho = p => [p.side === 'pitcher' ? 'Pitcher' : p.side === 'hitter' ? 'Hi
 function phTile(p, owned) {
   const bs = Number(p.buy_rating), prev = p.prev_buy_rating != null ? Number(p.prev_buy_rating) : null;
   return `<div class="ph-tile" data-ph="${pibEsc(p.name)}">
-    <div class="ph-tile-bs bs-${Math.floor(bs)}">${phBs(bs)}</div>
+    <div class="ph-tile-bs t-${phTone(bs)}">${phBs(bs)}</div>
     <div class="ph-tile-name">${pibEsc(p.name)}</div>
     <div class="ph-tile-sub">${phWho(p)}</div>
     <div class="ph-tile-foot"><span>${p.price_cents != null ? phMoney(p.price_cents) : ''}</span><span class="ph-tile-was">${prev != null ? 'was ' + phBs(prev) : 'new score'}</span></div>
@@ -98,11 +100,10 @@ function phRow(p, owned) {
   const e = phEntryPrice(o, phHist[p.prospect_id]), now = p.price_cents;
   const pct = e && now != null && e.cents > 0 ? Math.round((now - e.cents) / e.cents * 100) : null;
   const dir = pct != null ? (pct >= 0 ? 'up' : 'down') : (bs > prev ? 'up' : 'down');
-  const sdir = bs > prev ? 'up' : 'down';
   return `<div class="ph-row ${dir}" data-ph="${pibEsc(p.name)}">
     <div class="ph-row-chg">${pct != null ? `<b>${pct > 0 ? '+' : ''}${pct}%</b><small>since you bought</small>` : `<b>${phBs(bs)}</b><small>was ${phBs(prev)}</small>`}</div>
     <div class="ph-row-main"><div class="ph-row-name">${pibEsc(p.name)}</div><div class="ph-row-sub">${phWho(p)} · ${o.n} owned · $${o.cost.toFixed(0)} in</div>
-      <div class="ph-row-line">${e && now != null ? `<span>${e.approx ? '~' : ''}${phMoney(e.cents)} → ${phMoney(now)}</span>` : ''}<span class="ph-sc ${sdir}">score ${phBs(prev)} → ${phBs(bs)}</span></div>
+      <div class="ph-row-line">${e && now != null ? `<span>${e.approx ? '~' : ''}${phMoney(e.cents)} → ${phMoney(now)}</span>` : ''}<span class="ph-sc t-${phTone(bs)}">score ${phBs(prev)} → ${phBs(bs)}</span></div>
       ${p.note ? `<div class="ph-note">${pibEsc(p.note)}</div>` : ''}</div>
   </div>`;
 }
@@ -111,7 +112,7 @@ function phRow(p, owned) {
 function phNote(p, owned) {
   const o = owned.get(normName(p.name));
   const bs = p.buy_rating != null ? Number(p.buy_rating) : null, prev = p.prev_buy_rating != null ? Number(p.prev_buy_rating) : null;
-  const tone = bs == null ? '' : bs >= 4.5 ? 'hi' : bs >= 3 ? 'mid' : 'lo';   // green / yellow / red by the score itself
+  const tone = phTone(bs);
   return `<div class="ph-item" data-ph="${pibEsc(p.name)}">
     <div class="ph-item-head">
       <div class="ph-item-id"><span class="ph-item-name">${pibEsc(p.name)}</span><span class="ph-item-meta">${phWho(p)}${o ? ' · you own' : ''}</span></div>

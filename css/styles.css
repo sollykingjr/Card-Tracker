@@ -1773,8 +1773,12 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-row-chg small { display: block; font-size: 10px; color: var(--tx3); font-family: inherit; margin-top: 2px; }
 .ph-row-chg b { font-size: 20px; font-weight: 700; }
 .ph-row-line { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 3px; font-size: 12px; color: var(--tx2); font-family: 'DM Mono', monospace; }
-.ph-sc.up { color: var(--up); }
-.ph-sc.down { color: var(--dn); }
+.ph-sc.t-hi { color: var(--b5-tx); }
+.ph-sc.t-mid { color: var(--b35-tx); }
+.ph-sc.t-lo { color: var(--dn); }
+.ph-tile-bs.t-hi { background: var(--b5-bg); color: var(--b5-tx); }
+.ph-tile-bs.t-mid { background: var(--b35-bg); color: var(--b35-tx); }
+.ph-tile-bs.t-lo { background: rgba(248,113,113,.14); color: var(--dn); }
 .ph-row.up .ph-row-chg b { color: var(--up); }
 .ph-row.down .ph-row-chg b { color: var(--dn); }
 .ph-row-main { flex: 1; min-width: 0; }
