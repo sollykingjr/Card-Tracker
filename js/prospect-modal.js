@@ -112,6 +112,7 @@ function phModalHtml(name, row, m, owned, hot) {
   return `<div class="ph-m-top"><div><div class="mname">${pibEsc(name)}</div><div class="msub">${sub}</div></div>
       ${row ? `<button class="ph-m-grad${grad ? ' on' : ''}" onclick="phToggleGrad()">${grad ? 'Graduated' : 'Mark graduated'}</button>` : ''}</div>
     ${row ? tiles : '<div class="srow"><div class="intake-meta" style="margin:0">No prospect data for this player.</div></div>'}
+    ${row && row.buy_rating != null ? '<div id="ph-m-search"><button class="ph-m-listbtn" onclick="phSearchListings()">Search listings</button></div>' : ''}
     <div id="ph-m-cards">${o ? `<div class="srow" style="margin-bottom:9px"><div class="srow-t">My cards</div>${entryLine}<div class="intake-meta" style="margin:4px 0 0">${o.n} owned · $${o.cost.toFixed(0)} invested</div></div>` : ''}</div>
     ${noteBlock}
     ${m ? phChart(phHistoryRows(m)) + phHistoryTable(phHistoryRows(m)) : ''}`;
@@ -158,3 +159,34 @@ async function phToggleGrad() {
 }
 
 function phBack() { if (phModal && phModal.back) { document.getElementById('mcontent').innerHTML = phModal.back; _modalMainHtml = phModal.back; } }
+
+// "Search listings": open the Buy Score search that covers this player (BIN or Auction) with the results already filtered to him.
+async function phSearchListings() {
+  if (!phModal || !phModal.row) return;
+  const row = phModal.row, name = row.name, box = document.getElementById('ph-m-search');
+  const say = (html) => { if (box) box.innerHTML = html; };
+  say('<div class="intake-meta">Looking for his listings…</div>');
+  try {
+    const data = await (await fetch(`${API_BASE}/search-alerts`)).json();
+    const side = row.side || 'hitter', bs = row.buy_rating;
+    const cands = (data.searches || []).filter(s => s.prospectList && (s.prospectList.side || 'hitter') === side && bs >= s.prospectList.min && bs <= s.prospectList.max);
+    const hits = [];
+    for (const s of cands) {
+      const l = await pibCall(`/prospect-buy-list?min=${s.prospectList.min}&max=${s.prospectList.max}&side=${side}`);
+      if ((l.players || []).some(p => normName(p.name) === normName(name))) hits.push(s);
+    }
+    if (!hits.length) { say('<div class="intake-meta">No Buy Score search covers him right now. Add one in Search Results (BS list), or he is not on the current list.</div>'); return; }
+    window._phListHits = { hits, groups: data.groups || [], name };
+    if (hits.length === 1) return phOpenListings(0);
+    say('<div class="ph-m-listrow">' + hits.map((s, i) => `<button class="ph-m-listbtn" onclick="phOpenListings(${i})">${pibEsc(s.label)}</button>`).join('') + '</div>');
+  } catch (e) { say('<div class="intake-meta">Could not load searches. Try again.</div>'); }
+}
+function phOpenListings(i) {
+  const { hits, groups, name } = window._phListHits || {}; const s = hits && hits[i]; if (!s) return;
+  const g = s.groupId ? groups.find(x => x.id === s.groupId) : null;
+  window._pendingDigest = g ? g.digestKey : s.digestKey;
+  window._pendingDigestLabel = s.label;
+  window._pendingResume = { searchId: g ? s.id : null, filterText: name.toLowerCase(), showAll: true };
+  document.getElementById('mwrap').classList.remove('on');
+  setSection('searchresults');
+}

@@ -119,6 +119,26 @@ async function initSearchResults() {
             </select>
           </div>
           <input class="sr-input" id="sr-query" placeholder="eBay search query (e.g. scott brosius)">
+          <div class="sr-form-section">Prospect Buy Score list</div>
+          <div class="sr-form-row">
+            <div class="sr-form-label">List</div>
+            <div class="sr-chip-row" id="sr-pl-tier">
+              <button class="sr-chip-btn on" data-val="">Off</button>
+              <button class="sr-chip-btn" data-val="5">BS 5.0</button>
+              <button class="sr-chip-btn" data-val="4">BS 4.0–4.99</button>
+            </div>
+          </div>
+          <div id="sr-pl-detail" style="display:none">
+            <div class="sr-form-row">
+              <div class="sr-form-label">Side</div>
+              <div class="sr-chip-row" id="sr-pl-side">
+                <button class="sr-chip-btn on" data-val="hitter">Hitters</button>
+                <button class="sr-chip-btn" data-val="pitcher">Pitchers</button>
+              </div>
+            </div>
+            <input class="sr-input" id="sr-pl-base" placeholder="Words every listing must match" value="Bowman Chrome Auto">
+            <div class="sr-pl-note" id="sr-pl-count" style="font-size:12px;color:var(--tx3);margin:4px 0 8px"></div>
+          </div>
           <div class="sr-form-section">Seller</div>
           <div class="sr-seller-row">
             <div class="sr-chip-row" id="sr-seller-mode-chips">
@@ -890,6 +910,7 @@ function openSearchForm(search, presetGroupId) {
   if (search) {
     document.getElementById('sr-label').value = search.label || '';
     document.getElementById('sr-query').value = search.query || '';
+    plWrite(search.prospectList || null);
     document.getElementById('sr-seller').value = search.seller || '';
     document.getElementById('sr-keywords').value = (search.priorityKeywords || []).join(', ');
     document.getElementById('sr-serial').checked = search.serial || false;
@@ -917,7 +938,8 @@ function openSearchForm(search, presetGroupId) {
 
     document.getElementById('sr-save-btn').onclick = async () => {
       search.label = document.getElementById('sr-label').value.trim();
-      search.query = document.getElementById('sr-query').value.trim();
+      search.prospectList = plRead() || undefined;
+      search.query = search.prospectList ? '' : document.getElementById('sr-query').value.trim();
       search.seller = document.getElementById('sr-seller').value.trim();
       search.groupId = document.getElementById('sr-group-select').value || null;
       search.sectionId = document.getElementById('sr-section-select').value || null;
@@ -970,6 +992,7 @@ function closeSearchForm() {
 }
 
 function clearSearchForm() {
+  plWrite(null);
   document.getElementById('sr-label').value = '';
   document.getElementById('sr-query').value = '';
   document.getElementById('sr-seller').value = '';
@@ -1000,9 +1023,10 @@ function clearSearchForm() {
 
 async function saveSearch() {
   const label = document.getElementById('sr-label').value.trim();
-  const query = document.getElementById('sr-query').value.trim();
+  const pl = plRead();
+  const query = pl ? '' : document.getElementById('sr-query').value.trim();
   const seller = document.getElementById('sr-seller').value.trim();
-  if (!label || (!query && !seller)) return;
+  if (!label || (!query && !seller && !pl)) return;
 
   const groupId = document.getElementById('sr-group-select').value || null;
   const sectionId = document.getElementById('sr-section-select').value || null;
@@ -1011,7 +1035,7 @@ async function saveSearch() {
   const keywords = document.getElementById('sr-keywords').value.trim();
 
   srData.searches.push({
-    id, label, query, seller, groupId, sectionId, digestKey,
+    id, label, query, seller, groupId, sectionId, digestKey, prospectList: pl || undefined,
     sellerMode: getChipVal('sr-seller-mode-chips') || 'exclude',
     categoryType: getChipVal('sr-category-chips') || 'sports',
     sport: getChipVal('sr-sport-chips'),
@@ -1056,7 +1080,35 @@ function setChip(groupId, val) {
   });
 }
 
+// Prospect Buy Score list: the query is built on the server from the current list, so the query box is not used.
+function plRead() {
+  const tier = getChipVal('sr-pl-tier'); if (!tier) return null;
+  const range = tier === '5' ? { min: 5, max: 5 } : { min: 4, max: 4.99 };
+  return { ...range, side: getChipVal('sr-pl-side') || 'hitter', base: document.getElementById('sr-pl-base').value.trim() };
+}
+function plWrite(pl) {
+  setChip('sr-pl-tier', pl ? (pl.min >= 5 ? '5' : '4') : '');
+  setChip('sr-pl-side', pl ? pl.side : 'hitter');
+  document.getElementById('sr-pl-base').value = pl ? (pl.base ?? 'Bowman Chrome Auto') : 'Bowman Chrome Auto';
+  plRefresh();
+}
+async function plRefresh() {
+  const pl = plRead(), on = !!pl;
+  document.getElementById('sr-pl-detail').style.display = on ? '' : 'none';
+  document.getElementById('sr-query').style.display = on ? 'none' : '';
+  const note = document.getElementById('sr-pl-count');
+  if (!on) { note.textContent = ''; return; }
+  note.textContent = 'Checking the list…';
+  try {
+    const d = await (await fetch(`${WORKER}/prospect-buy-list?min=${pl.min}&max=${pl.max}&side=${pl.side}`, { headers: { 'X-App-Key': APP_KEY } })).json();
+    const n = (d.players || []).length;
+    if (plRead() && plRead().side === pl.side) note.textContent = `${n} ${pl.side}${n === 1 ? '' : 's'} on the list now (${Math.max(1, Math.ceil(n / 25))} eBay quer${n > 25 ? 'ies' : 'y'}). It updates itself with each new rankings post.`;
+  } catch (e) { note.textContent = ''; }
+}
+
 function wireForm() {
+  wireChips('sr-pl-tier'); wireChips('sr-pl-side');
+  document.querySelectorAll('#sr-pl-tier .sr-chip-btn, #sr-pl-side .sr-chip-btn').forEach(b => b.addEventListener('click', plRefresh));
   wireChips('sr-seller-mode-chips');
   wireChips('sr-category-chips');
   wireChips('sr-sport-chips');
@@ -1078,7 +1130,9 @@ function wireForm() {
 }
 
 // ── Digest View ───────────────────────────────────────────────────────────────
+let srSeller = { sel: new Set(), text: '' };   // seller filter for the open results page
 async function showDigest(digestKey, label, searchIdFilter, sortOwner, resume) {
+  srSeller = { sel: new Set(), text: '' };
   const root = document.getElementById('sr-root');
   const key = digestKey + '_archive';
 
@@ -1104,7 +1158,8 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner, resume) {
         </div>
       </div>
       <div class="sr-digest-controls">
-        <input class="sr-search-input" id="sr-digest-search" placeholder="Search titles...">
+        <input class="sr-search-input" id="sr-digest-search" placeholder="Search titles or players...">
+        <div class="sr-chip-row" id="sr-seller-filter" style="flex-wrap:wrap;align-items:center;gap:6px"></div>
         <div class="sr-chip-row" id="sr-sort-chips">
           <button class="sr-chip-btn ${listedIsOn ? 'on' : ''}" data-val="${initialListedVal}" id="sr-date-sort-btn">${initialListedLabel}</button>
           <button class="sr-chip-btn ${listedIsOn ? '' : 'on'}" data-val="ending">Ending Soon</button>
@@ -1220,6 +1275,21 @@ async function showDigest(digestKey, label, searchIdFilter, sortOwner, resume) {
     filterText = e.target.value.toLowerCase();
     renderDigestItems(allItems, sortMode, filterText, key, showAll);
   };
+  // Seller filter: your favorite sellers as one-tap chips plus a box for any other seller
+  const sellerBox = document.getElementById('sr-seller-filter');
+  const rerender = () => renderDigestItems(allItems, sortMode, filterText, key, showAll);
+  const drawSellers = (favs) => {
+    sellerBox.innerHTML = favs.map(n => `<button class="sr-chip-btn${srSeller.sel.has(n.toLowerCase()) ? ' on' : ''}" data-s="${n}">${n}</button>`).join('')
+      + `<input class="sr-search-input" id="sr-seller-text" placeholder="Seller…" value="${srSeller.text}" style="flex:1;min-width:90px;max-width:160px">`;
+    sellerBox.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+      const k = b.dataset.s.toLowerCase();
+      if (srSeller.sel.has(k)) srSeller.sel.delete(k); else srSeller.sel.add(k);
+      b.classList.toggle('on'); rerender();
+    });
+    document.getElementById('sr-seller-text').oninput = (e) => { srSeller.text = e.target.value.trim().toLowerCase(); rerender(); };
+  };
+  drawSellers([]);
+  fetch(`${WORKER}/sb-data`).then(r => r.json()).then(d => drawSellers(d.favSellers || [])).catch(() => {});
   document.querySelectorAll('#sr-sort-chips .sr-chip-btn').forEach(btn => {
     btn.onclick = () => {
       if (btn.dataset.val === 'newest' || btn.dataset.val === 'oldest') {
@@ -1333,6 +1403,14 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
   // Filter to unseen only unless showAll
   if (!showAll) {
     items = items.filter(item => !item.seen);
+  }
+
+  // Filter by seller (any of the selected chips, or what was typed)
+  if (srSeller.sel.size || srSeller.text) {
+    items = items.filter(item => {
+      const sl = (item.seller || '').toLowerCase();
+      return sl && (srSeller.sel.has(sl) || (srSeller.text && sl.includes(srSeller.text)));
+    });
   }
 
   // Filter by search text
