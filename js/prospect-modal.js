@@ -138,11 +138,12 @@ function phDrawModal() {
   _modalMainHtml = html; _modalCurrentPlayer = name;
   document.getElementById('mcontent').innerHTML = html;
   // Card details and sold history come from the older card cache; add them once it is ready.
-  if (owned.get(normName(name)) || getCardStats(name).sold.length) phWaitOld().then(() => {
-    const box = document.getElementById('ph-m-cards'); if (!box || !phModal || phModal.name !== name) return;
-    const more = typeof modalCards === 'function' ? modalCards(name) : '';
+  if (owned.get(normName(name)) || getCardStats(name).sold.length) {
+    const box = document.getElementById('ph-m-cards');
+    const more = box && typeof modalCards === 'function' ? modalCards(name) : '';
     if (more) { box.insertAdjacentHTML('beforeend', more); _modalMainHtml = document.getElementById('mcontent').innerHTML; }
-  });
+  }
+
 }
 
 // His manual switch: graduated on/off. The automatic rule still applies until he flips it.

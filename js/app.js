@@ -98,10 +98,6 @@ function setSection(s) {
     document.getElementById('cntlbl').textContent = '';
     if (tab === 'all') {
       render();
-      loadProspectData(true);   // the player modal still reads the older arrays; load them quietly
-    } else if (!prospectDataLoaded) {
-      loadProspectData();
-      if (tab === 'inbox' || tab === 'posts') render();   // these don't need the prospect arrays, so don't wait for them
     } else {
       render();
     }
@@ -154,10 +150,7 @@ document.getElementById('rfab').addEventListener('click', () => {
   } else {
     loadCardData();
     if (typeof phRefresh === 'function') phRefresh();
-    if (prospectDataLoaded) {
-      prospectDataLoaded = false;
-      loadProspectData(tab === 'all');
-    }
+    parallelsReady = null; loadParallelMultipliers();
   }
 });
 
@@ -181,5 +174,7 @@ if (digestParam) {
   }
 }
 loadCardData();
+phLoad();                   // prospect data (also gives eBay screens the player prices)
+loadParallelMultipliers();  // for estimated card values
 // Check the photo index version once at startup, so a refresh from another device shows up.
 if (typeof ctLoadScanIndex === 'function') ctLoadScanIndex(false);

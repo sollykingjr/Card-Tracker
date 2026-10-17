@@ -12,6 +12,8 @@ function phCache() {
   try { const c = JSON.parse(localStorage.getItem(PH_CACHE_KEY) || 'null'); return c && Array.isArray(c.players) ? c.players : null; } catch (e) { return null; }
 }
 
+phData = phCache();   // show the saved copy straight away (other screens use it for prices too)
+
 // Load once per visit; show the saved copy right away and refresh it in the background.
 async function phLoad(force) {
   if (phLoading) return;
@@ -190,16 +192,6 @@ window.addEventListener('resize', () => { if (section === 'prospects' && tab ===
 async function phOpen(name) {
   return phShowModal(name);
 }
-async function phOpenLegacy(name) {
-  if (prospectDataReady !== true) {
-    document.getElementById('mcontent').innerHTML = '<div class="spin"><div class="spin-ring"></div>Loading…</div>';
-    document.getElementById('mwrap').classList.add('on');
-    await phWaitOld();
-    if (prospectDataReady !== true) { document.getElementById('mcontent').innerHTML = '<div class="err">Could not load the player details. Tap refresh and try again.</div>'; return; }
-  }
-  showDetail({ name }, 'player');
-}
-
 document.getElementById('list').addEventListener('click', e => {
   const g = e.target.closest('[data-go]'); if (g) { const t = document.querySelector(`#tabs .tab[data-t="${g.dataset.go}"]`); if (t) t.click(); return; }   // section titles open Portfolio / Posts
   const c = e.target.closest('[data-ph]'); if (c) phOpen(c.dataset.ph);

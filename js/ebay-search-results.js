@@ -86,55 +86,6 @@ function srRestoreScroll(y) {
   requestAnimationFrame(attempt);
 }
 
-// ── Buy Score auto-managed searches ────────────────────────────────────────────
-const BUY_SCORE_THRESHOLD = 5;
-const BUY_SCORE_SEARCH_LABELS = ['Prospects Buy Score 5 - Auction', 'Prospects Buy Score 5 - BIN'];
-
-function getBuyScoreQualifiers() {
-  if (!buyScores.length) return [];
-  const isPitcher = b => (b.pos || '').toLowerCase().includes('pitcher');
-  const hitterDates = buyScores.filter(b => !isPitcher(b)).map(b => parseDate(b.date));
-  const pitcherDates = buyScores.filter(b => isPitcher(b)).map(b => parseDate(b.date));
-  const maxHitDate = hitterDates.length ? Math.max(...hitterDates) : 0;
-  const maxPitDate = pitcherDates.length ? Math.max(...pitcherDates) : 0;
-
-  const seen = new Set();
-  const names = [];
-  buyScores.forEach(b => {
-    const maxDate = isPitcher(b) ? maxPitDate : maxHitDate;
-    if (parseDate(b.date) !== maxDate) return;
-    const nm = normName(b.name);
-    if (seen.has(nm)) return;
-    const score = parseFloat(b.score || 0);
-    if (score >= BUY_SCORE_THRESHOLD) {
-      seen.add(nm);
-      names.push(b.name);
-    }
-  });
-  return names;
-}
-
-function buildBuyScoreQuery(names) {
-  if (!names.length) return '';
-  return 'Bowman Chrome Auto (' + names.join(', ') + ')';
-}
-
-async function syncBuyScoreSearches() {
-  const names = getBuyScoreQualifiers();
-  if (names.length > 30) console.warn(`Buy Score sync: ${names.length} qualifying players — combined eBay query may be too long.`);
-  const query = buildBuyScoreQuery(names);
-  if (!query) return;
-  let changed = false;
-  BUY_SCORE_SEARCH_LABELS.forEach(label => {
-    const search = srData.searches.find(s => s.label === label);
-    if (search && search.query !== query) {
-      search.query = query;
-      changed = true;
-    }
-  });
-  if (changed) await saveData();
-}
-
 async function initSearchResults() {
   // Back on the main list: stop tracking the listing view
   if (srResumeCleanup) srResumeCleanup();
@@ -369,7 +320,6 @@ async function loadData() {
     if (!srData.groups) srData.groups = [];
     if (!srData.searches) srData.searches = [];
     if (!srData.sections) srData.sections = [];
-    await syncBuyScoreSearches();
     renderList();
   } catch(e) {
     document.getElementById('sr-list').innerHTML = '<div class="sr-empty">Failed to load.</div>';
@@ -1330,7 +1280,7 @@ function updateDigestCount(items, showAll = false) {
 function resolveItemPlayer(title) {
   const lc = (title || '').toLowerCase();
   let best = null;
-  for (const p of players) {
+  for (const p of (typeof phData !== 'undefined' && phData) || []) {
     const nm = (p.name || '').toLowerCase();
     if (nm && lc.includes(nm)) {
       if (!best || nm.length > best.name.toLowerCase().length) best = p;
@@ -1343,7 +1293,7 @@ function getListingExpectedValue(title) {
   if (!player) return null;
   const mult = getParallelMultiplier(title, player.name);
   if (mult === null) return null;
-  const base = safeNum(getResolved(player.name).price);
+  const base = (player.price_cents || 0) / 100;
   if (base <= 0) return null;
   return base * mult;
 }

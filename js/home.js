@@ -151,7 +151,7 @@ function homeRenderClosingSoon() {
     const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
     const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
     const player = resolveItemPlayer(safeTitle);
-    const playerPrice = player ? safeNum(getResolved(player.name).price) : 0;
+    const playerPrice = player ? (player.price_cents || 0) / 100 : 0;
     const playerPriceHtml = playerPrice > 0 ? ` · Player: $${playerPrice.toFixed(2)}` : '';
     return `
       <div class="recent-row" style="align-items:flex-start">

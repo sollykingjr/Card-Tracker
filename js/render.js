@@ -8,196 +8,6 @@ function renderSortChips() {
   ).join('');
 }
 
-// ── Sort helpers ──────────────────────────────────────────────────────────────
-function applySort(pool, defaultSort) {
-  const s = SORT_OPTS[tab]?.find(o=>o.k===sortBy) ? sortBy : 'default';
-  if(s==='default') return defaultSort(pool);
-  if(s==='name') return pool.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-
-  const cache = new Map();
-  pool.forEach(p=>{
-    const d = getResolved(p.name);
-    const cs = getCardStats(p.name);
-    const hi = getHsInfo(p.name);
-    const val =
-      s==='rank'   ? (parseInt(d.rank)||9999) :
-      s==='price'  ? safeNum(d.price) :
-      s==='owned'  ? cs.totalInvested :
-      s==='weeks'  ? hi.totalAppearances :
-      s==='streak' ? hi.streak : 0;
-    cache.set(p.name, val);
-  });
-
-  return pool.slice().sort((a,b)=>{
-    const va=cache.get(a.name)??0, vb=cache.get(b.name)??0;
-    return s==='rank' ? va-vb : vb-va;
-  });
-}
-
-// ── Pool ──────────────────────────────────────────────────────────────────────
-function mostRecent(arr) {
-  const seen = new Map();
-  arr.forEach(r=>{ const ts=parseDate(r.date); if(!seen.has(r.name)||ts>seen.get(r.name)._ts) seen.set(r.name,{...r,_ts:ts}); });
-  return [...seen.values()];
-}
-
-function getPool() {
-  if(tab==='hs')  return [];
-  if(tab==='port') return [];
-  if(tab==='watch') return [];
-
-  let pool=[...players];
-  if(brf==='5') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=5);
-  else if(brf==='4') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4);
-  else if(brf==='owned') pool=pool.filter(p=>getCardStats(p.name).owned.length>0);
-  else if(brf==='sold')  pool=pool.filter(p=>getCardStats(p.name).sold.length>0);
-  if(posf==='hit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('hitter'));
-  else if(posf==='pit') pool=pool.filter(p=>(p.pos||'').toLowerCase().includes('pitcher'));
-  pool=pool.filter(p=>matchQ(p.name,p.team));
-  if(!q && brf==='all') pool=pool.filter(p=>parseFloat(getResolved(p.name).buy||0)>=4 && buyScores.some(b=>normName(b.name)===normName(p.name)));
-  return applySort(pool,p=>p.slice().sort((a,b)=>{
-    const ab=parseFloat(getResolved(a.name).buy||0),bb=parseFloat(getResolved(b.name).buy||0);
-    if(ab!==bb) return bb-ab;
-    return safeNum(getResolved(b.name).price)-safeNum(getResolved(a.name).price);
-  }));
-}
-
-// ── Card builder ──────────────────────────────────────────────────────────────
-function buildCard(name, team, pos, i, tp, overrides={}) {
-  const d      = getResolved(name);
-  const rank   = overrides.rank  ?? d.rank;
-  const price  = overrides.price ?? d.price;
-  const cs     = getCardStats(name);
-  const hi     = getHsInfo(name);
-  const hsLabel= d.hsLabel;
-  const isRepeat  = hsLabel&&hsLabel.toLowerCase().includes('repeat');
-  const isSleeper = hsLabel&&hsLabel.toLowerCase().includes('sleeper');
-  const isPitcher = (pos||'').toLowerCase().includes('pitcher');
-
-  const rankHtml = rank
-    ? `<div class="rnum${isPitcher?' pitcher':''}" style="font-size:10px;font-weight:500">#${rank}</div>`
-    : `<div class="rnum empty" style="font-size:10px">—</div>`;
-
-  const priceStr = price?(String(price).startsWith('$')?price:'$'+price):'';
-  const priceHtml= priceStr?`<div class="pbox">${priceStr}</div>`:`<div class="pbox empty">—</div>`;
-
-  let labelHtml='';
-  if(hsLabel){ const cls=isRepeat?'repeat':isSleeper?'sleeper':''; labelHtml=`<span class="hs-label${cls?' '+cls:''}">${hsLabel}</span>`; }
-
-  let wkHtml='';
-  if(tab==='hs' && hi.totalAppearances>0){
-    if(hi.streak>=2) wkHtml+=`<span class="wk-badge streak">${hi.streak} Straight</span>`;
-    else if(hi.onLatest) wkHtml+=`<span class="wk-badge">Most Recent</span>`;
-    if(hi.totalAppearances>1) wkHtml+=`<span class="wk-badge">x${hi.totalAppearances}</span>`;
-  }
-
-  let invHtml='';
-  if(cs.owned.length>0){ const tier=invTier(cs.totalInvested); invHtml+=`<span class="inv-badge ${tier}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`; }
-  if(cs.sold.length>0) invHtml+=`<span class="sold-badge">${cs.sold.length} sold</span>`;
-
-  const borderClass = hi.onLatest?' recent-hs':'';
-
-  const bs = parseFloat(d.buy||0);
-  const hasBs = buyScores.some(b=>normName(b.name)===normName(name));
-  const bsBadgeHtml = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}${!hasBs?'*':''}</span>` : '';
-
-  return `<div class="card${borderClass}" data-i="${i}" data-tp="${tp}">
-    ${rankHtml}
-    <div class="cbody">
-      <div class="r1"><span class="pname">${name}</span></div>
-      <div class="r2">
-        <span>${team||''}</span><span>${pos||''}</span>
-        ${cs.owned.length>0?`<span class="inv-badge ${invTier(cs.totalInvested)}">${cs.owned.length} owned · $${cs.totalInvested.toFixed(0)}</span>`:''}
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
-      ${bsBadgeHtml}
-      ${priceHtml}
-    </div>
-  </div>`;
-}
-
-// ── Hot Sheet render ──────────────────────────────────────────────────────────
-let hsFilter = 'hitter';
-
-function renderHotSheet() {
-  const list = document.getElementById('list');
-  const cnt  = document.getElementById('cntlbl');
-
-  const isPitcher = pos => pos && (pos.toLowerCase().includes('pitcher') || pos.toLowerCase() === 'p');
-
-  const hitters  = hotsheet.filter(r => !isPitcher(r.pos));
-  const pitchers = hotsheet.filter(r =>  isPitcher(r.pos));
-
-  const latestDate = arr => {
-    let max = 0;
-    arr.forEach(r => { const ts = parseDate(r.date); if(ts > max) max = ts; });
-    return max;
-  };
-  const hLatest = latestDate(hitters);
-  const pLatest = latestDate(pitchers);
-
-  const thisWeekH = hitters.filter(r => parseDate(r.date) === hLatest);
-  const thisWeekP = pitchers.filter(r => parseDate(r.date) === pLatest);
-
-  const active = (hsFilter === 'hitter' ? thisWeekH : thisWeekP).slice().sort((a,b) => {
-    const bsA = parseFloat(a.buyScore) || parseFloat(getResolved(a.name).buy) || 0;
-    const bsB = parseFloat(b.buyScore) || parseFloat(getResolved(b.name).buy) || 0;
-    return bsB - bsA;
-  });
-
-  cnt.textContent = `${active.length} player${active.length===1?'':'s'}`;
-
-  const IGNORE_CATS = new Set(['no','none','']);
-
-  const filterHtml = `<div class="hs-filters">
-    <button class="hs-filter-btn${hsFilter==='hitter'?' on':''}" onclick="hsFilter='hitter';renderHotSheet()">Hitters</button>
-    <button class="hs-filter-btn${hsFilter==='pitcher'?' on':''}" onclick="hsFilter='pitcher';renderHotSheet()">Pitchers</button>
-  </div>`;
-
-  if(!active.length) {
-    list.innerHTML = filterHtml + '<div class="empty-msg">No hot sheet data found</div>';
-    return;
-  }
-
-  let rowsHtml = '';
-  active.forEach(r => {
-    const d       = getResolved(r.name);
-    const bs      = parseFloat(r.buyScore || d.buy || 0);
-    const price   = r.auto || d.price || '';
-    const priceStr= price ? (String(price).startsWith('$') ? price : '$'+price) : '—';
-    const catRaw  = (r.category||'').trim();
-    const cat     = IGNORE_CATS.has(catRaw.toLowerCase()) ? '' : catRaw;
-    const isRepeat= String(r.repeat||'').toLowerCase().includes('yes') || catRaw.toLowerCase().includes('repeat');
-
-    const bsHtml  = bs ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${bs}</span>` : '';
-    const catHtml = cat ? `<span class="hs-row-cat${isRepeat?' repeat':''}">${cat}</span>` : '';
-
-    rowsHtml += `<div class="hs-row" data-name="${r.name}" data-pos="${r.pos||''}" data-aff="${r.aff||''}">
-      <div class="hs-row-left">
-        <span class="hs-row-name">${r.name}</span>
-        <span class="hs-row-level">${r.level||''}</span>
-        ${catHtml}
-      </div>
-      <div class="hs-row-right">
-        ${bsHtml}
-        <span class="hs-row-price">${priceStr}</span>
-      </div>
-    </div>`;
-  });
-
-  list.innerHTML = filterHtml + rowsHtml;
-  list.classList.toggle('grid-2', window.innerWidth >= 768);
-
-  list.querySelectorAll('.hs-row').forEach(row => {
-    row.addEventListener('click', () => {
-      const name = row.dataset.name;
-      const entry = hotsheet.find(h => h.name === name) || { name, pos: row.dataset.pos, aff: row.dataset.aff };
-      showDetail(entry, 'hs');
-    });
-  });
-}
-
 // ── Main render ───────────────────────────────────────────────────────────────
 function render() {
   if(section==='searchbuilder') return;
@@ -206,115 +16,16 @@ function render() {
   document.getElementById('search').placeholder = isPosts ? 'Search posts or players...' : tab==='port' ? 'Search your players...' : 'Search player or team...';
   if(isInbox){ renderProspectInbox(); return; }
   if(isPosts){ renderSortChips(); renderPostsView(); return; }
-  if(tab==='all'){ renderSortChips(); renderProspectHome(); return; }
-  if((tab==='hs'||tab==='port') && prospectDataReady!==true){   // these screens read the older arrays: wait for them
-    if(prospectDataReady==='err'){ document.getElementById('list').innerHTML='<div class="err"><strong>Could not load data</strong><br>Check your connection and tap refresh.</div>'; return; }
-    document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Loading prospects…</div>';
-    if(!prospectDataLoaded) loadProspectData();
-    phWaitOld().then(()=>{ if(section==='prospects' && (tab==='hs'||tab==='port')) render(); });
+  if(tab==='port'){
+    renderSortChips();
+    // estimated card values need the Parallel Multiplier sheet (a small, quick fetch)
+    loadParallelMultipliers().then(()=>{ if(section==='prospects' && tab==='port') renderProspectPortfolio(); });
     return;
   }
-  const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
-  const showChips=!isHS&&!isPort&&!isWatch;
-  renderSortChips();
-    if(isPort){ renderProspectPortfolio(); return; }
-  if(isWatch){ renderWatchlist(); return; }
-  if(isHS){ renderHotSheet(); return; }
-
-  const pool=getPool();
-  document.getElementById('cntlbl').textContent=`${pool.length} player${pool.length===1?'':'s'}`;
-  if(!pool.length){ document.getElementById('list').innerHTML='<div class="empty-msg">No players match</div>'; return; }
-
-  let html=pool.map((p,i)=>buildCard(p.name,p.team,p.pos,i,'player')).join('');
-
-  const listEl = document.getElementById('list');
-  listEl.innerHTML=html;
-  listEl.classList.toggle('grid-2', window.innerWidth >= 768);
-  document.querySelectorAll('#list .card').forEach(c=>{
-    c.addEventListener('click',()=>showDetail(pool[+c.dataset.i],c.dataset.tp));
-  });
+  renderSortChips(); renderProspectHome();
 }
 
 // ── History charts ────────────────────────────────────────────────────────────
-function buildHistoryCharts(name) {
-  const nm=normName(name);
-  const pricePoints=[], rankPoints=[];
-  const add=(dateVal,rawVal,list)=>{
-    const ts=parseDate(dateVal); if(!ts||!rawVal) return;
-    const n=parseFloat(String(rawVal).replace(/[^0-9.]/g,'')); if(isNaN(n)) return;
-    list.push({ts,val:n,fullDate:dateVal});
-  };
-  const buyE=players.find(b=>normName(b.name)===nm);
-  if(buyE){ add(buyE.date,buyE.price,pricePoints); add(buyE.date,buyE.hobby,rankPoints); }
-  [...origTop200,...origTop100].filter(e=>normName(e.name)===nm).forEach(e=>{ add(e.date,e.price,pricePoints); add(e.date,e.rank,rankPoints); });
-  [...top200,...top100].filter(e=>normName(e.name)===nm).forEach(e=>{ add(e.date,e.price,pricePoints); add(e.date,e.rank,rankPoints); });
-  hotsheet.filter(h=>normName(h.name)===nm).forEach(h=>{ add(h.date,h.auto,pricePoints); add(h.date,h.hobby,rankPoints); });
-  buyScores.filter(b=>normName(b.name)===nm).forEach(b=>{ add(b.date,b.price,pricePoints); add(b.date,b.rank,rankPoints); });
-
-  const dedup=pts=>{ pts.sort((a,b)=>a.ts-b.ts); const m=new Map(); pts.forEach(p=>{ if(!m.has(p.ts)) m.set(p.ts,p); }); return [...m.values()]; };
-  const prices=dedup(pricePoints).filter(p=>!isNaN(p.val));
-  const ranks=dedup(rankPoints).filter(p=>!isNaN(p.val));
-
-  const makeSvg=(points,isRank,chartId)=>{
-    if(points.length<2) return '';
-    const W=280,H=80,Pt=12,Pb=22,Pl=10,Pr=10,iW=W-Pl-Pr,iH=H-Pt-Pb;
-    const vals=points.map(p=>p.val);
-    let minV=Math.min(...vals),maxV=Math.max(...vals);
-    if(minV===maxV){minV=Math.max(0,minV*0.85);maxV=maxV*1.15||1;}
-    const yS=v=>isRank?Pt+(v-minV)/(maxV-minV)*iH:Pt+(1-(v-minV)/(maxV-minV))*iH;
-    const xS=i=>Pl+(points.length===1?iW/2:i/(points.length-1)*iW);
-    const pts=points.map((p,i)=>({...p,x:xS(i),y:yS(p.val)}));
-    const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    const cls=isRank?'chart-line-rank':'chart-line', dc=isRank?'chart-dot-rank':'chart-dot';
-
-    // Month checkpoint x-axis labels
-    const monthsSeen=new Set();
-    const xLabels=pts.map((p,i)=>{
-      const d=new Date(p.ts); const mk=`${d.getFullYear()}-${d.getMonth()}`;
-      const d1=new Date(d.getFullYear(),d.getMonth(),1).getTime();
-      // Find the point closest to 1st of this month
-      const isCheckpoint = !monthsSeen.has(mk) && pts.reduce((a,b)=>Math.abs(b.ts-d1)<Math.abs(a.ts-d1)?b:a).ts===p.ts;
-      if(isCheckpoint) monthsSeen.add(mk);
-      const lbl=isCheckpoint?`${d.getMonth()+1}/1`:'';
-      return lbl?`<text x="${p.x.toFixed(1)}" y="${(H-3).toFixed(1)}" text-anchor="middle" class="chart-label">${lbl}</text>`:'';
-    }).join('');
-
-    const dots=pts.map((p,i)=>{
-      const prefix=isRank?'#':'$';
-      const tooltip=`${prefix}${p.val} · ${fmtShortDate(p.fullDate)}`;
-      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" class="${dc}" style="cursor:pointer"
-        onclick="showChartTooltip(event,'${chartId}','${tooltip}')"/>`;
-    }).join('');
-
-    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg" onclick="hideChartTooltip('${chartId}')">
-      <polyline points="${poly}" class="${cls}"/>
-      ${dots}${xLabels}
-      <text id="${chartId}-tip" x="140" y="10" text-anchor="middle" class="chart-val" style="display:none;font-size:10px;fill:var(--acc)"></text>
-    </svg>`;
-  };
-
-  const pct = prices.length>=2 ? ((prices[prices.length-1].val-prices[0].val)/prices[0].val*100) : null;
-  const pctHtml = pct!==null ? `<span class="${pct>=0?'up':'dn'}" style="font-size:10px;margin-left:6px">${pct>=0?'+':''}${pct.toFixed(0)}%</span>` : '';
-
-  let html='';
-  const pSvg=makeSvg(prices,false,'pchart'), rSvg=makeSvg(ranks,true,'rchart');
-  if(pSvg) html+=`<div class="chart-wrap"><div class="chart-title">Price history${pctHtml}</div>${pSvg}</div>`;
-  if(rSvg) html+=`<div class="chart-wrap"><div class="chart-title">Rank history <span style="font-size:9px;color:var(--tx3)">(lower = better)</span></div>${rSvg}</div>`;
-  return html;
-}
-
-function showChartTooltip(e, chartId, text) {
-  e.stopPropagation();
-  const tip = document.getElementById(chartId+'-tip');
-  if(!tip) return;
-  tip.textContent = text;
-  tip.style.display = '';
-}
-function hideChartTooltip(chartId) {
-  const tip = document.getElementById(chartId+'-tip');
-  if(tip) tip.style.display = 'none';
-}
-
 // ── Modal sections ────────────────────────────────────────────────────────────
 function modalCards(name) {
   const cs = getCardStats(name);
@@ -341,28 +52,19 @@ function modalCards(name) {
   return summary;
 }
 
-function showCardsSubview(type, name) {
+async function showCardsSubview(type, name) {
   const cs = getCardStats(name);
   const {owned, sold} = cs;
-  const currentPrice = safeNum(getResolved(name).price);
+  const prow = (typeof phData !== 'undefined' && phData || []).find(p => normName(p.name) === normName(name));
+  const currentPrice = prow && prow.price_cents ? prow.price_cents / 100 : 0;
+  if (prow && !phHist[prow.prospect_id]) { phHistAsked.delete(prow.prospect_id); await phLoadHist([prow.prospect_id]); }
+  const histPts = prow ? (phHist[prow.prospect_id] || []).map(([d, c]) => ({ ts: parseDate(d), price: c / 100 })).filter(x => x.ts && x.price) : [];
   const items = type==='owned' ? owned : sold;
 
   const rows = items.map(c=>{
     if(type==='owned'){
       const cardTs = parseDate(c.datePurchased||c.transactionDate);
-      const cardPriceHistory = [];
-      [...origTop200,...origTop100,...top200,...top100].filter(e=>normName(e.name)===normName(name)).forEach(e=>{
-        const ts=parseDate(e.date); const pr=safeNum(e.price);
-        if(ts&&pr) cardPriceHistory.push({ts,price:pr});
-      });
-      hotsheet.filter(h=>normName(h.name)===normName(name)).forEach(h=>{
-        const ts=parseDate(h.date); const pr=safeNum(h.auto);
-        if(ts&&pr) cardPriceHistory.push({ts,price:pr});
-      });
-      buyScores.filter(b=>normName(b.name)===normName(name)).forEach(b=>{
-        const ts=parseDate(b.date); const pr=safeNum(b.price);
-        if(ts&&pr) cardPriceHistory.push({ts,price:pr});
-      });
+      const cardPriceHistory = histPts;
       const mult = getParallelMultiplier(c.fullCard, c.player);
       let pctHtml='';
       let evHtml='';
@@ -483,101 +185,6 @@ async function pnShowAll() {
 
 // Every player tap (Prospects home, Hot Sheet, Portfolio) opens the new modal; the old one is kept below until the rest is retired.
 function showDetail(p, tp) { return phShowModal(p.name); }
-function showDetailLegacy(p, tp) {
-  const nm     = normName(p.name);
-  const master = players.find(b=>normName(b.name)===nm);
-  const d      = getResolved(p.name);
-  const hist   = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
-
-  const currentPrice = d.price?(String(d.price).startsWith('$')?d.price:'$'+d.price):'—';
-  const currentRank  = d.rank?'#'+d.rank:'—';
-  const currentEV    = d.expectedValue?(String(d.expectedValue).startsWith('$')?d.expectedValue:'$'+d.expectedValue):'—';
-
-  // Buy Score asterisk if no Buy Score sheet entry
-  const hasBsEntry = buyScores.some(b=>normName(b.name)===nm);
-  const bsDisplay  = d.buy ? `${d.buy}${!hasBsEntry?'*':''}` : '—';
-
-
- const html=`
-    <div class="mname">${p.name}</div>
-    <div class="msub">${master?master.team:p.team||p.aff||''} · ${master?master.pos:p.pos||''}</div>
-    <div class="sgrid" style="margin-bottom:9px">
-      <div class="scard"><div class="slbl">Rank</div><div class="sval">${currentRank}</div></div>
-      <div class="scard"><div class="slbl">Price</div><div class="sval">${currentPrice}</div></div>
-      <div class="scard"><div class="slbl">Age</div><div class="sval">${fmt(master?master.age:p.age)}</div></div>
-      <div class="scard"><div class="slbl">Buy Score</div><div class="sval">${bsDisplay}</div></div>
-      <div class="scard"><div class="slbl">Expected Value</div><div class="sval">${currentEV}</div></div>
-    </div>
-${modalCards(p.name)}
-    <div id="pn-box"></div>
-    ${buildHistoryCharts(p.name)}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:9px">
-      ${hist.length?`<button onclick="showHsSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Hot Sheet History <span style="float:right;color:var(--tx3)">${hist.length} entries →</span></button>`:''}
-      ${master?`<button onclick="showSourceRanksSubview()" style="width:100%;padding:10px;border:.5px solid var(--bdr2);border-radius:8px;background:var(--surf);color:var(--tx);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">Source Ranks <span style="float:right;color:var(--tx3)">→</span></button>`:''}
-    </div>`;
-  _modalMainHtml = html;
-  _modalCurrentPlayer = p.name;
-  document.getElementById('mcontent').innerHTML = html;
-  document.getElementById('mwrap').classList.add('on');
-  loadModalNotes(p.name);
-}
-
-
-function modalHsHistory(hist) {
-  if(!hist.length) return '';
-  const rows = hist.map(h=>{
-    return `<div class="hs-entry${h.repeat?' repeat':''}">
-      <div class="hs-hdr">
-        <span class="hs-wk">${fmtDateLabel(h.date)||'Wk '+h.week}</span>
-        <span class="hs-lvl">${h.level}</span>
-        ${h.category?`<span class="hs-cat">${h.category}</span>`:''}
-        ${h.auto?`<span style="margin-left:auto;font-size:12px;font-weight:500">${h.auto}</span>`:''}
-      </div>
-      <div class="hs-stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-        <div><div class="hs-sl">14-Day</div><div class="hs-sv">${fmt(h.day14)}</div></div>
-        <div><div class="hs-sl">Hobby</div><div class="hs-sv">${fmt(h.hobby)}</div></div>
-        <div><div class="hs-sl">Buy Score</div><div class="hs-sv">${fmt(h.buyScore)}</div></div>
-      </div>
-    </div>`;
-  }).join('');
-  return `<div class="section-hdr">Hot Sheet History</div>${rows}`;
-}
-
-function showHsSubview() {
-  const name = _modalCurrentPlayer;
-  const nm = normName(name);
-  const hist = hotsheet.filter(h=>normName(h.name)===nm).sort((a,b)=>parseDate(b.date)-parseDate(a.date));
-  const content = modalHsHistory(hist);
-  document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">Hot Sheet History — ${name}</div>
-    ${content||'<div class="empty-msg">No hot sheet entries found</div>'}`;
-}
-
-function showSourceRanksSubview() {
-  const name = _modalCurrentPlayer;
-  const nm = normName(name);
-  const master = players.find(b=>normName(b.name)===nm);
-  if(!master) return;
-  document.getElementById('mcontent').innerHTML=`
-    <button onclick="document.getElementById('mcontent').innerHTML=_modalMainHtml"
-      style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--acc);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;padding:0;margin-bottom:14px">
-      ← Back
-    </button>
-    <div class="section-hdr">Source Ranks — ${name}</div>
-    <div class="srow"><div class="s3">
-      <div><div class="sc-l">MLB</div><div class="sc-v">${fmt(master.mlb)}</div></div>
-      <div><div class="sc-l">DD</div><div class="sc-v">${fmt(master.dd)}</div></div>
-      <div><div class="sc-l">Roto</div><div class="sc-v">${fmt(master.roto)}</div></div>
-      <div><div class="sc-l">StS</div><div class="sc-v">${fmt(master.sts)}</div></div>
-      <div><div class="sc-l">BA</div><div class="sc-v">${fmt(master.ba)}</div></div>
-      <div><div class="sc-l">Hobby</div><div class="sc-v">${fmt(master.hobby)}</div></div>
-    </div></div>`;
-}
-
 // ── Snipe ─────────────────────────────────────────────────────────────────────
 // No confirmation popup: copy the Item ID, then go straight to Gixen.
 function openSnipeModal(itemId) {
