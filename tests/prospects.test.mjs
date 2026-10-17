@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet } from '../worker/prospect-current.js';
-import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
+import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, searchPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
   const db = new DatabaseSync(':memory:');
@@ -596,4 +596,14 @@ await t('hot sheet counts: times on the sheet and straight weeks, by the player\
   assert.deepEqual((await listPosts(env)).posts.find(p => p.post_id === 'hs1').top_ranked.map(x => [x.name, x.rank]), [['H Two', 1], ['H One', 2]]);   // ranking posts show their top ranks
 });
 
+await t('searchPosts finds posts by player name or title', async () => {
+  const env = { DB: makeDb() };
+  const raw = env.DB._raw;
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('h1','Jo Smith','jo smith','hitter'),('h2','Al Jones','al jones','hitter');
+    INSERT INTO prospect_posts (post_id, title, post_type, published_at, raw_text, status) VALUES ('a','Hot Sheet 9/1','hot_sheet','2026-09-01','x','confirmed'),('b','Pitchers','analysis','2026-09-02','x','confirmed'),('c','Pending Jo','analysis','2026-09-03','x','pending');
+    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents) VALUES ('a','h1','2026-09-01',100),('c','h1','2026-09-03',100);`);
+  assert.deepEqual((await searchPosts(env, 'jo sm')).post_ids, ['a']);   // by player; pending posts never show
+  assert.deepEqual((await searchPosts(env, 'pitch')).post_ids, ['b']);   // by title
+  assert.deepEqual((await searchPosts(env, 'x')).post_ids, []);          // too short
+});
 console.log(`\n${passed} tests passed`);

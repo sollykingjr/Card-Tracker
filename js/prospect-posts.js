@@ -19,6 +19,7 @@ function ppCard(p) {
 }
 const ppOldRow = p => `<div class="po-old" onclick="ppOpen('${p.post_id}')"><span class="po-old-t">${pibEsc(p.title || 'Untitled')}</span><span class="po-meta">${ppDate(p.published_at)} · ${pibEsc(ppType(p.post_type))} · ${p.players}</span></div>`;
 
+const ppSearchCache = {};
 async function renderPostsView() {
   const listEl = document.getElementById('list');
   listEl.classList.remove('grid-2');
@@ -31,11 +32,21 @@ async function renderPostsView() {
     ppPosts = d.posts || []; ppLoaded = true;
   }
   const f = sortBy === 'default' ? null : sortBy;
-  const posts = f ? ppPosts.filter(p => p.post_type === f) : ppPosts;
+  let posts = f ? ppPosts.filter(p => p.post_type === f) : ppPosts;
+  const ql = (typeof q === 'string' ? q : '').trim().toLowerCase();
+  if (ql.length >= 2) {   // top search box: posts that mention the player, or whose title/summary match
+    if (!ppSearchCache[ql]) {
+      const d = await pibCall('/prospect-posts-search?q=' + encodeURIComponent(ql));
+      if (tab !== 'posts' || (typeof q === 'string' ? q : '').trim().toLowerCase() !== ql) return;   // user moved on
+      ppSearchCache[ql] = new Set(d.post_ids || []);
+    }
+    const ids = ppSearchCache[ql];
+    posts = posts.filter(p => ids.has(p.post_id));
+  }
   const fresh = posts.filter(p => p.source !== 'prospect-master-sheet'), old = posts.filter(p => p.source === 'prospect-master-sheet');
   document.getElementById('cntlbl').textContent = `${posts.length} post${posts.length === 1 ? '' : 's'}`;
-  listEl.innerHTML = (fresh.length ? `<div class="po-grid">${fresh.map(ppCard).join('')}</div>` : '<div class="empty-msg">No posts yet</div>')
-    + (old.length ? `<div class="po-oldbar" onclick="ppShowOld=!ppShowOld;renderPostsView()">Older history (${old.length} posts from the old Sheet) <span>${ppShowOld ? '▲' : '▼'}</span></div>${ppShowOld ? `<div class="po-oldlist">${old.map(ppOldRow).join('')}</div>` : ''}` : '');
+  listEl.innerHTML = (fresh.length ? `<div class="po-grid">${fresh.map(ppCard).join('')}</div>` : `<div class="empty-msg">${ql ? 'No posts match' : 'No posts yet'}</div>`)
+    + (old.length ? `<div class="po-oldbar" onclick="ppShowOld=!ppShowOld;renderPostsView()">Older history (${old.length} posts from the old Sheet) <span>${(ppShowOld || ql) ? '▲' : '▼'}</span></div>${(ppShowOld || ql) ? `<div class="po-oldlist">${old.map(ppOldRow).join('')}</div>` : ''}` : '');
 }
 
 // One row in an opened post: score, name, price and his note.

@@ -731,6 +731,21 @@ export async function listPosts(env) {
   return { posts: [...posts.values()] };
 }
 
+// Search posts: ids of confirmed posts whose title or summary matches, or that mention a player whose name matches.
+export async function searchPosts(env, q) {
+  const term = String(q || '').trim().toLowerCase().replace(/[%_\\]/g, m => '\\' + m);
+  if (term.length < 2) return { post_ids: [] };
+  const like = `%${term}%`;
+  const { results } = await env.DB.prepare(`SELECT post_id FROM prospect_posts WHERE status = 'confirmed' AND (LOWER(title) LIKE ?1 ESCAPE '\\' OR LOWER(COALESCE(summary, '')) LIKE ?1 ESCAPE '\\')
+    UNION SELECT x.post_id FROM (
+      SELECT post_id, prospect_id FROM prospect_takes UNION SELECT post_id, prospect_id FROM prospect_snapshots
+      UNION SELECT post_id, prospect_id FROM prospect_prices UNION SELECT post_id, prospect_id FROM prospect_rankings) x
+      JOIN prospects p ON p.prospect_id = x.prospect_id
+      JOIN prospect_posts pp ON pp.post_id = x.post_id AND pp.status = 'confirmed'
+      WHERE LOWER(p.name) LIKE ?1 ESCAPE '\\'`).bind(like).all();
+  return { post_ids: results.map(r => r.post_id) };
+}
+
 // One post: summary, the original text (kept for real posts), every player's take and numbers.
 export async function postDetail(env, postId) {
   const post = await env.DB.prepare(`SELECT post_id, title, post_type, published_at, summary, thesis, source, raw_text FROM prospect_posts WHERE post_id = ? AND status = 'confirmed'`).bind(postId).first();
@@ -805,7 +820,7 @@ export async function submitEmail(env, b, deps = {}) {
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect-current', 'GET:/prospect-price-history', 'GET:/prospect-hotsheet', 'POST:/prospect-graduate', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['GET:/prospect-posts-search', 'POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect-current', 'GET:/prospect-price-history', 'GET:/prospect-hotsheet', 'POST:/prospect-graduate', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -823,6 +838,7 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-email': { const b = await request.json(); return out(await submitEmail(env, b)); }
       case '/prospect-export': return out(await exportForApp(env));
       case '/prospect-posts': return out(await listPosts(env));
+      case '/prospect-posts-search': return out(await searchPosts(env, url.searchParams.get('q') || ''));
       case '/prospect-post': return out(await postDetail(env, url.searchParams.get('id') || ''));
       case '/prospect-takes': return out(await playerTakes(env, url.searchParams.get('name') || '', url.searchParams.get('offset'), url.searchParams.get('limit')));
       case '/prospect-current': return out(await listCurrent(env));
