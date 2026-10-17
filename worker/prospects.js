@@ -467,9 +467,11 @@ export async function usageSummary(env) {
 }
 
 // Existing players a name could be: exact spelling, or a spelling you already confirmed as an alias.
+// A player's team is not stored on the player: it is the newest team on his snapshots (a trade shows up with the next post that lists him).
+const TEAM_OF = alias => `(SELECT s.team FROM prospect_snapshots s WHERE s.prospect_id = ${alias}.prospect_id AND s.team IS NOT NULL ORDER BY s.dated DESC, s.id DESC LIMIT 1)`;
 async function nameCandidates(env, norm) {
-  const { results } = await env.DB.prepare(`SELECT prospect_id, name, org FROM prospects WHERE norm_name = ?
-    UNION SELECT p.prospect_id, p.name, p.org FROM prospect_aliases a JOIN prospects p ON p.prospect_id = a.prospect_id WHERE a.alias_norm = ?`).bind(norm, norm).all();
+  const { results } = await env.DB.prepare(`SELECT p.prospect_id, p.name, ${TEAM_OF('p')} AS org FROM prospects p WHERE p.norm_name = ?
+    UNION SELECT p.prospect_id, p.name, ${TEAM_OF('p')} AS org FROM prospect_aliases a JOIN prospects p ON p.prospect_id = a.prospect_id WHERE a.alias_norm = ?`).bind(norm, norm).all();
   return results;
 }
 // How far a player's age is from what we have on file, moved forward to the post's date. Unknown on either side counts as close.
@@ -499,7 +501,7 @@ async function previewMatches(env, players, postDate = null) {
       if (r) return { name: p.name, status: 'linked', prospect_id: r.prospect_id, linked_to: r.name }; }
     const pick = await pickCandidate(env, p, postDate, await nameCandidates(env, normName(p.name)));
     if (pick.length) return { name: p.name, status: pick.length === 1 ? 'existing' : 'ambiguous', prospect_id: pick.length === 1 ? pick[0].prospect_id : null };
-    roster ??= (await env.DB.prepare(`SELECT prospect_id, name, org FROM prospects`).all()).results;
+    roster ??= (await env.DB.prepare(`SELECT p.prospect_id, p.name, ${TEAM_OF('p')} AS org FROM prospects p`).all()).results;
     const near = []; for (const r of roster) if (typoMatch(p.name, r.name) && await ageClose(env, r.prospect_id, p.age, postDate)) near.push(r);
     return near.length === 1 ? { name: p.name, status: 'suggest', prospect_id: null, suggestion: { prospect_id: near[0].prospect_id, name: near[0].name, org: near[0].org } }
       : { name: p.name, status: 'new', prospect_id: null };
@@ -512,21 +514,21 @@ async function resolveProspect(env, p, postDate = null) {
     const r = await env.DB.prepare(`SELECT prospect_id, norm_name FROM prospects WHERE prospect_id = ?`).bind(p.match_id).first();
     if (r) {
       if (r.norm_name !== norm) await env.DB.prepare(`INSERT OR IGNORE INTO prospect_aliases (alias_norm, prospect_id) VALUES (?, ?)`).bind(norm, r.prospect_id).run();
-      await env.DB.prepare(`UPDATE prospects SET org = COALESCE(?, org), side = COALESCE(side, ?), updated_at = datetime('now') WHERE prospect_id = ?`).bind(p.team, p.side, r.prospect_id).run();
+      await env.DB.prepare(`UPDATE prospects SET side = COALESCE(side, ?), updated_at = datetime('now') WHERE prospect_id = ?`).bind(p.side, r.prospect_id).run();
       return r.prospect_id;
     }
   }
   const results = await nameCandidates(env, norm);
   const hit = (await pickCandidate(env, p, postDate, results)).filter((_, __, a) => a.length === 1)[0] || null;
   if (hit) {
-    await env.DB.prepare(`UPDATE prospects SET org = COALESCE(?, org), side = COALESCE(side, ?), updated_at = datetime('now') WHERE prospect_id = ?`)
-      .bind(p.team, p.side, hit.prospect_id).run();
+    await env.DB.prepare(`UPDATE prospects SET side = COALESCE(side, ?), updated_at = datetime('now') WHERE prospect_id = ?`)
+      .bind(p.side, hit.prospect_id).run();
     return hit.prospect_id;
   }
   const base = slug(p.name) || 'player';
   let id = base, n = 1;
   while (await env.DB.prepare(`SELECT 1 FROM prospects WHERE prospect_id = ?`).bind(id).first()) id = `${base}-${++n}`;
-  await env.DB.prepare(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES (?,?,?,?,?)`).bind(id, p.name, norm, p.team, p.side).run();
+  await env.DB.prepare(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES (?,?,?,?)`).bind(id, p.name, norm, p.side).run();
   return id;
 }
 
@@ -540,7 +542,7 @@ export async function confirmPost(env, postId, edited = null) {
   const counts = { prospects: 0, takes: 0, rankings: 0, prices: 0, snapshots: 0 };
   const stmts = [];
   const prep = (sql, ...binds) => env.DB.prepare(sql).bind(...binds);
-  const newPrices = new Map();
+  const newPrices = new Map(), newSnaps = new Map();
   for (const p of ex.players) {
     const pid = await resolveProspect(env, p, dated);
     counts.prospects++;
@@ -548,24 +550,28 @@ export async function confirmPost(env, postId, edited = null) {
       postId, pid, p.take.stance, p.take.summary, p.take.analysis, p.post_rank, dated)); counts.takes++; }
     for (const r of p.rankings) { stmts.push(prep(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES (?,?,?,?,?)`,
       postId, pid, r.list, r.rank, dated)); counts.rankings++; }
-    // One price row per player and date, whichever post it comes from: a repeat only fills in what is missing (e.g. the Expected value).
-    if (p.prices.length) {
-      const onFile = (await env.DB.prepare(`SELECT id, dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ?`).bind(pid).all()).results;
-      for (const x of p.prices) {
-        const key = pid + '|' + x.date, old = onFile.find(r => r.dated === x.date), queued = newPrices.get(key);
-        if (old) {
-          if ((old.base_auto_cents == null && x.base_auto_cents != null) || (old.expected_cents == null && x.expected_cents != null))
-            stmts.push(prep(`UPDATE prospect_prices SET base_auto_cents = COALESCE(base_auto_cents, ?), expected_cents = COALESCE(expected_cents, ?) WHERE id = ?`, x.base_auto_cents, x.expected_cents, old.id));
-        } else if (queued) { queued.base_auto_cents ??= x.base_auto_cents; queued.expected_cents ??= x.expected_cents; }
-        else newPrices.set(key, { pid, date: x.date, base_auto_cents: x.base_auto_cents, expected_cents: x.expected_cents });
+    // One price row per player and date, whichever post it comes from: a repeat only fills in a missing price.
+    const withBase = p.prices.filter(x => x.base_auto_cents != null);
+    if (withBase.length) {
+      const onFile = (await env.DB.prepare(`SELECT id, dated, base_auto_cents FROM prospect_prices WHERE prospect_id = ?`).bind(pid).all()).results;
+      for (const x of withBase) {
+        const key = pid + '|' + x.date, old = onFile.find(r => r.dated === x.date);
+        if (old) { if (old.base_auto_cents == null) stmts.push(prep(`UPDATE prospect_prices SET base_auto_cents = ? WHERE id = ?`, x.base_auto_cents, old.id)); }
+        else if (!newPrices.has(key)) newPrices.set(key, { pid, date: x.date, base_auto_cents: x.base_auto_cents });
       }
     }
-    if (p.age != null || p.level || p.buy_rating != null || p.action) {
-      stmts.push(prep(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES (?,?,?,?,?,?,?,?)`,
-        postId, pid, dated, p.team, p.age, p.level, p.buy_rating, p.action)); counts.snapshots++; }
+    // Expected Value goes with the Buy Score, Action, age, level and team: one row per player for this post. If he is listed twice, the rows fill each other in.
+    const withExp = p.prices.filter(x => x.expected_cents != null).sort((a, b) => (b.date === dated) - (a.date === dated) || String(b.date).localeCompare(String(a.date)))[0];
+    const snap = { team: p.team, age: p.age, level: p.level, buy_rating: p.buy_rating, action: p.action, expected_cents: withExp ? withExp.expected_cents : null };
+    if (Object.values(snap).some(v => v != null && v !== '')) {
+      const had = newSnaps.get(pid);
+      if (had) for (const k of Object.keys(snap)) had[k] ??= snap[k]; else newSnaps.set(pid, snap);
+    }
   }
-  for (const x of newPrices.values()) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
-    postId, x.pid, x.date, x.base_auto_cents, x.expected_cents)); counts.prices++; }
+  for (const x of newPrices.values()) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents) VALUES (?,?,?,?)`,
+    postId, x.pid, x.date, x.base_auto_cents)); counts.prices++; }
+  for (const [pid, s] of newSnaps) { stmts.push(prep(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action, expected_cents) VALUES (?,?,?,?,?,?,?,?,?)`,
+    postId, pid, dated, s.team, s.age, s.level, s.buy_rating, s.action, s.expected_cents)); counts.snapshots++; }
   stmts.push(prep(`UPDATE prospect_posts SET status = 'confirmed', confirmed_at = datetime('now'), summary = ?, thesis = ?, post_type = ?, extraction_json = ? WHERE post_id = ?`,
     ex.summary, ex.thesis, ex.post_type, JSON.stringify(ex), postId));
   if (stmts.length) await env.DB.batch(stmts);   // all rows for the post land together or not at all
@@ -590,8 +596,8 @@ export async function prospectDetail(env, name) {
       prospect: pr,
       takes: (await q(`SELECT t.dated, t.stance, t.summary, t.analysis, t.post_rank, p.title, p.post_id FROM prospect_takes t JOIN prospect_posts p USING (post_id) WHERE t.prospect_id = ? ORDER BY t.dated DESC, t.id DESC`)),
       rankings: await q(`SELECT dated, list_name, rank FROM prospect_rankings WHERE prospect_id = ? ORDER BY dated DESC`),
-      prices: await q(`SELECT dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ? ORDER BY dated DESC`),
-      snapshots: await q(`SELECT dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE prospect_id = ? ORDER BY dated DESC`)
+      prices: await q(`SELECT dated, base_auto_cents FROM prospect_prices WHERE prospect_id = ? ORDER BY dated DESC`),
+      snapshots: await q(`SELECT dated, team, age, level, buy_rating, action, expected_cents FROM prospect_snapshots WHERE prospect_id = ? ORDER BY dated DESC`)
     });
   }
   return { found: true, matches: out };
@@ -608,9 +614,9 @@ async function loadRows(env, postId = null) {
   const inPosts = `post_id IN (SELECT post_id FROM prospect_posts WHERE status = 'confirmed' ${where})`;
   const [pros, prices, ranks, snaps, takes] = await Promise.all([
     all(`SELECT prospect_id, name, side FROM prospects`),
-    all(`SELECT post_id, prospect_id, dated, base_auto_cents, expected_cents FROM prospect_prices WHERE ${inPosts}`, ...args),
+    all(`SELECT post_id, prospect_id, dated, base_auto_cents FROM prospect_prices WHERE ${inPosts}`, ...args),
     all(`SELECT post_id, prospect_id, list_name, rank, dated FROM prospect_rankings WHERE ${inPosts}`, ...args),
-    all(`SELECT post_id, prospect_id, dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE ${inPosts}`, ...args),
+    all(`SELECT post_id, prospect_id, dated, team, age, level, buy_rating, action, expected_cents FROM prospect_snapshots WHERE ${inPosts}`, ...args),
     all(`SELECT post_id, prospect_id, stance, summary, analysis, dated FROM prospect_takes WHERE ${inPosts}`, ...args)
   ]);
   const P = new Map(pros.map(p => [p.prospect_id, p])), PO = new Map(posts.map(p => [p.post_id, p]));
@@ -636,7 +642,7 @@ async function loadRows(env, postId = null) {
       rows.push({
         post_id: x.post_id, post_type: post.post_type, title: post.title, source: post.source,
         prospect_id: x.prospect_id, name: pr.name, side: pr.side, dated: e.dated,
-        price_c: e.base_auto_cents ?? null, expected_c: e.expected_cents ?? null,
+        price_c: e.base_auto_cents ?? null, expected_c: full && x.snap ? x.snap.expected_cents ?? null : null,
         team: full && x.snap ? x.snap.team : null, age: full && x.snap ? x.snap.age : null, level: full && x.snap ? x.snap.level : null,
         buy: full && x.snap ? x.snap.buy_rating : null, action: full && x.snap ? x.snap.action : null,
         ranks: full ? x.ranks : {}, take: full && x.take ? { stance: x.take.stance, summary: x.take.summary, analysis: x.take.analysis } : null

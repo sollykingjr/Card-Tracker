@@ -149,7 +149,7 @@ await t('pending list flags new players; confirm writes every table', async () =
   assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, snapshots: 3 });
   assert.equal((await listPendingPosts(env)).pending, 0);
   const d = await prospectDetail(env, 'ramiro dominguez');
-  assert.equal(d.matches[0].prospect.org, 'MIN');
+  assert.equal(d.matches[0].snapshots[0].team, 'MIN');
   assert.equal(d.matches[0].prices[0].base_auto_cents, 421);
 });
 
@@ -162,12 +162,12 @@ await t('buy rating, action, level, age and expected-only rows are kept (Top 100
   ] };
   const { postId } = await submitPost(env, { text: POST_TEXT + ' top100', extractor: fakeExtractor(top100) });
   const c = await confirmPost(env, postId);
-  assert.equal(c.counts.snapshots, 2); assert.equal(c.counts.prices, 2); assert.equal(c.counts.rankings, 3);
+  assert.equal(c.counts.snapshots, 2); assert.equal(c.counts.prices, 1); assert.equal(c.counts.rankings, 3);
   const d = await prospectDetail(env, 'Braylon Doughty');
-  assert.deepEqual({ ...d.matches[0].snapshots[0] }, { dated: '2026-10-04', team: 'CLE', age: 20.8, level: 'AA', buy_rating: 5, action: 'Strongest Buy' });
+  assert.deepEqual({ ...d.matches[0].snapshots[0] }, { dated: '2026-10-04', team: 'CLE', age: 20.8, level: 'AA', buy_rating: 5, action: 'Strongest Buy', expected_cents: 2925 });
   const m = await prospectDetail(env, 'Ramon Marquez');
   assert.equal(m.matches[0].snapshots[0].buy_rating, null); assert.equal(m.matches[0].snapshots[0].action, null);
-  assert.equal(m.matches[0].prices[0].base_auto_cents, null); assert.equal(m.matches[0].prices[0].expected_cents, 3575);
+  assert.equal(m.matches[0].prices.length, 0); assert.equal(m.matches[0].snapshots[0].expected_cents, 3575);   // expected value lives on the snapshot; no price row without a base auto
 });
 
 await t('second post matches existing players (no duplicates) and builds a price/take timeline', async () => {
@@ -191,7 +191,7 @@ await t('two different players with the same name are told apart by team', async
   const mk = (team, n) => ({ post_type: 'other', summary: 's', players: [{ name: 'Luis Hernandez', team, take: { stance: 'none', summary: 'note ' + n } }] });
   const a = await submitPost(env, { text: 'x'.repeat(50) + 'a', extractor: fakeExtractor(mk('LAD', 1)) });
   await confirmPost(env, a.postId);
-  env.DB._raw.exec("INSERT INTO prospects (prospect_id, name, norm_name, org) VALUES ('luis-hernandez-2','Luis Hernandez','luis hernandez','KC')");
+  env.DB._raw.exec("INSERT INTO prospects (prospect_id, name, norm_name) VALUES ('luis-hernandez-2','Luis Hernandez','luis hernandez'); INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team) VALUES ('x','luis-hernandez-2','2026-01-01','KC')");
   const b = await submitPost(env, { text: 'x'.repeat(50) + 'b', extractor: fakeExtractor(mk('KC', 2)) });
   const pend = await listPendingPosts(env);
   assert.equal(pend.posts[0].matches[0].prospect_id, 'luis-hernandez-2');
@@ -237,7 +237,7 @@ await t('routes require the app key and pass other paths through', async () => {
 
 await t('app export, posts list and post detail (sheet-shaped arrays for the existing Prospects screens)', async () => {
   const env = { DB: makeDb() }, raw = env.DB._raw;
-  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES ('dax-kilby','Dax Kilby','dax kilby','NYY','hitter'), ('kade-anderson','Kade Anderson','kade anderson','SEA','pitcher');
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('dax-kilby','Dax Kilby','dax kilby','hitter'), ('kade-anderson','Kade Anderson','kade anderson','pitcher');
     INSERT INTO prospect_posts (post_id, source, title, post_type, published_at, raw_text, status, summary) VALUES
       ('pa','prospect-master-sheet','Players All · 2026-03-12','analysis','2026-03-12','x','confirmed','Imported 1'),
       ('hs','prospect-master-sheet','Hot Sheet · 2026-04-14','hot_sheet','2026-04-14','x','confirmed','Imported 1'),
@@ -245,8 +245,8 @@ await t('app export, posts list and post detail (sheet-shaped arrays for the exi
       ('pend','prospect-analytics','Pending one','analysis','2026-10-01','x','pending','nope');
     INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, dated) VALUES ('pa','dax-kilby','none','Long baseline note','2026-03-12');
     INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('pa','dax-kilby','hobby rank',20,'2026-03-12'),('pa','dax-kilby','MLB',4,'2026-03-12'),('hs','dax-kilby','hobby rank',44,'2026-04-14'),('bs','kade-anderson','top 100 pitchers',1,'2026-05-31');
-    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES ('pa','dax-kilby','2026-03-12',8400,NULL),('hs','dax-kilby','2026-04-14',8453,5320),('bs','kade-anderson','2026-05-31',12800,15000);
-    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES ('pa','dax-kilby','2026-03-12','NYY',19.3,NULL,4,NULL),('hs','dax-kilby','2026-04-14','NYY',19.4,'A+',2.3,NULL),('bs','kade-anderson','2026-05-31','SEA',21.8,NULL,4.5,'Strong Buy');`);
+    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents) VALUES ('pa','dax-kilby','2026-03-12',8400),('hs','dax-kilby','2026-04-14',8453),('bs','kade-anderson','2026-05-31',12800);
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action, expected_cents) VALUES ('pa','dax-kilby','2026-03-12','NYY',19.3,NULL,4,NULL,NULL),('hs','dax-kilby','2026-04-14','NYY',19.4,'A+',2.3,NULL,5320),('bs','kade-anderson','2026-05-31','SEA',21.8,NULL,4.5,'Strong Buy',15000);`);
   const ex = await exportForApp(env);
   assert.equal(ex.players.length, 1);   // only the Players All baseline
   assert.deepEqual({ ...ex.players[0] }, { date: '3/12/2026', team: 'NYY', pos: 'Hitter', name: 'Dax Kilby', age: 19.3, price: '84', mlb: 4, dd: null, roto: null, sts: null, ba: null, hobby: 20, buy: 4, lastYr: null, chg: null });
@@ -388,8 +388,8 @@ await t('across posts: a typo is suggested, confirming it links the player and r
 await t('same name on two players: age picks the right one', async () => {
   const env = { DB: makeDb() };
   const db = env.DB._raw;
-  db.exec(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES ('luis-hernandez','Luis Hernandez','luis hernandez','SF','hitter'),('luis-hernandez-2','Luis Hernandez','luis hernandez','SF','pitcher');
-    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, age) VALUES ('x','luis-hernandez','2026-10-01',19.0),('x','luis-hernandez-2','2026-10-01',24.0);`);
+  db.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('luis-hernandez','Luis Hernandez','luis hernandez','hitter'),('luis-hernandez-2','Luis Hernandez','luis hernandez','pitcher');
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age) VALUES ('x','luis-hernandez','2026-10-01','SF',19.0),('x','luis-hernandez-2','2026-10-01','SF',24.0);`);
   const mk = age => ({ post_type: 'analysis', published_date: '2026-10-14', summary: 's', players: [{ name: 'Luis Hernandez', team: 'SF', age }] });
   await submitPost(env, { text: POST_TEXT + ' a', extractor: fakeExtractor(mk(19.1)) });
   assert.equal((await listPendingPosts(env)).posts[0].matches[0].prospect_id, 'luis-hernandez');
@@ -517,8 +517,9 @@ await t('one price row per player and date: a repeat from another post (or the s
   await confirmPost(env, a.postId);
   const b = await submitPost(env, { text: 'x'.repeat(50) + 'two', extractor: fakeExtractor(mk([{ date: '2026-08-14', base_auto: 25.07, expected: 40 }])) });
   await confirmPost(env, b.postId);
-  let rows = raw.prepare('SELECT base_auto_cents b, expected_cents e FROM prospect_prices').all();
-  assert.equal(rows.length, 1); assert.equal(rows[0].b, 2507); assert.equal(rows[0].e, 4000);   // second post only added the Expected value
+  let rows = raw.prepare('SELECT base_auto_cents b FROM prospect_prices').all();
+  assert.equal(rows.length, 1); assert.equal(rows[0].b, 2507);
+  assert.equal(raw.prepare('SELECT expected_cents e FROM prospect_snapshots WHERE expected_cents IS NOT NULL').get().e, 4000);   // second post's Expected value goes on the snapshot
   const c = await submitPost(env, { text: 'x'.repeat(50) + 'three', extractor: fakeExtractor(mk([{ date: '2026-08-14', base_auto: 25.07, expected: 40 }])) });
   await confirmPost(env, c.postId);
   assert.equal(raw.prepare('SELECT COUNT(*) n FROM prospect_prices').get().n, 1);   // an identical repeat adds nothing
@@ -527,14 +528,15 @@ await t('one price row per player and date: a repeat from another post (or the s
     { name: 'Coy James', team: 'MIA', prices: [{ date: '2026-09-11', base_auto: 5.71, expected: 17.4 }] }] };
   const d = await submitPost(env, { text: 'x'.repeat(50) + 'four', extractor: fakeExtractor(two) });
   await confirmPost(env, d.postId);
-  rows = raw.prepare("SELECT base_auto_cents b, expected_cents e FROM prospect_prices WHERE dated = '2026-09-11'").all();
-  assert.equal(rows.length, 1); assert.equal(rows[0].e, 1740);
+  rows = raw.prepare("SELECT base_auto_cents b FROM prospect_prices WHERE dated = '2026-09-11'").all();
+  assert.equal(rows.length, 1);
+  assert.equal(raw.prepare("SELECT COUNT(*) n FROM prospect_snapshots s JOIN prospects p USING (prospect_id) WHERE p.name = 'Coy James' AND s.expected_cents = 1740").get().n, 1);
 });
 
 await t('current-state row: score with its own price and date, newest price and rank, graduated from the full lists, manual switch', async () => {
   const env = { DB: makeDb() }, raw = env.DB._raw;
-  const hit = (id, nm) => `('${id}','${nm}','${nm.toLowerCase()}','ATL','hitter')`;
-  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES ${hit('ann-a','Ann A')}, ${hit('bob-b','Bob B')}, ${hit('cal-c','Cal C')}, ${hit('dan-d','Dan D')}, ${hit('eli-e','Eli E')};
+  const hit = (id, nm) => `('${id}','${nm}','${nm.toLowerCase()}','hitter')`;
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ${hit('ann-a','Ann A')}, ${hit('bob-b','Bob B')}, ${hit('cal-c','Cal C')}, ${hit('dan-d','Dan D')}, ${hit('eli-e','Eli E')};
     INSERT INTO prospect_posts (post_id, title, post_type, published_at, raw_text, status) VALUES ('p1','Top 200 · 9/1','rankings','2026-09-01','x','confirmed'),('p2','Top 200 · 9/15','rankings','2026-09-15','x','confirmed'),('p3','Hot Sheet · 9/22','hot_sheet','2026-09-22','x','confirmed'),('p4','Analysis · 10/1','analysis','2026-10-01','x','confirmed');`);
   // two full 200-player lists; Ann (#40) and Dan (#150) drop off the second, Bob stays, Cal is #30 on the first only (also dropped), Eli never listed
   const filler = (post, date, from, to) => { for (let r = from; r <= to; r++) raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name) VALUES ('f${r}-${post}','F ${r} ${post}','f ${r} ${post}') ON CONFLICT DO NOTHING; INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('${post}','f${r}-${post}','top 200 hitters',${r},'${date}')`); };
@@ -542,10 +544,10 @@ await t('current-state row: score with its own price and date, newest price and 
   raw.exec(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES
     ('p1','ann-a','top 200 hitters',40,'2026-09-01'),('p1','dan-d','top 200 hitters',150,'2026-09-01'),('p1','cal-c','top 200 hitters',30,'2026-09-01'),('p1','bob-b','top 200 hitters',60,'2026-09-01'),
     ('p2','bob-b','top 200 hitters',55,'2026-09-15'),('p3','bob-b','hobby rank',47,'2026-09-22');
-    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES
-    ('p2','bob-b','2026-09-15','ATL',20.1,'A+',4.4,'Strong Buy'),('p3','bob-b','2026-09-22','ATL',20.2,NULL,NULL,NULL),('p4','eli-e','2026-10-01','SEA',22,'AA',NULL,NULL);
-    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES
-    ('p2','bob-b','2026-09-15',2500,4000),('p3','bob-b','2026-09-22',3100,NULL),('p4','eli-e','2026-10-01',900,NULL);
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action, expected_cents) VALUES
+    ('p2','bob-b','2026-09-15','ATL',20.1,'A+',4.4,'Strong Buy',4000),('p3','bob-b','2026-09-22','ATL',20.2,NULL,NULL,NULL,NULL),('p4','eli-e','2026-10-01','SEA',22,'AA',NULL,NULL,NULL);
+    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents) VALUES
+    ('p2','bob-b','2026-09-15',2500),('p3','bob-b','2026-09-22',3100),('p4','eli-e','2026-10-01',900);
     INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, dated) VALUES ('p4','bob-b','none','His words','2026-10-01');`);
   await refreshCurrent(env);
   const by = Object.fromEntries((await listCurrent(env)).players.map(p => [p.prospect_id, p]));

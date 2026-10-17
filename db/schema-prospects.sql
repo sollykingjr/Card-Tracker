@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS prospects (
   prospect_id TEXT PRIMARY KEY,          -- slug of normalized name, with -2, -3 if two players collide
   name TEXT NOT NULL,
   norm_name TEXT NOT NULL,               -- lowercase, no accents/punctuation/Jr/Sr, used for matching
-  org TEXT,                              -- latest team abbreviation seen
   side TEXT CHECK (side IN ('hitter','pitcher')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -60,8 +59,7 @@ CREATE TABLE IF NOT EXISTS prospect_prices (
   post_id TEXT NOT NULL,
   prospect_id TEXT NOT NULL,
   dated TEXT NOT NULL,                   -- the date the price applies to (a post can carry two: current and prior)
-  base_auto_cents INTEGER,
-  expected_cents INTEGER
+  base_auto_cents INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_prices_prospect ON prospect_prices(prospect_id, dated);
 
@@ -75,7 +73,8 @@ CREATE TABLE IF NOT EXISTS prospect_snapshots (
   age REAL,
   level TEXT,
   buy_rating REAL,                       -- his 1-5 Buy Rating / Buy Score
-  action TEXT                            -- e.g. 'Strongest Buy', 'Slightly Overvalued'
+  action TEXT,                           -- e.g. 'Strongest Buy', 'Slightly Overvalued'
+  expected_cents INTEGER                 -- his Expected Value for the base auto, kept with the score it set (moved here from prospect_prices 2026-10-17)
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_prospect ON prospect_snapshots(prospect_id, dated);
 

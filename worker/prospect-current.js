@@ -7,7 +7,7 @@ export const REFRESH_SQL = `
 WITH
 rk AS (SELECT prospect_id, rank, dated, list_name, ROW_NUMBER() OVER (PARTITION BY prospect_id ORDER BY dated DESC, (list_name IN (${TOP})) DESC, id DESC) rn
        FROM prospect_rankings WHERE list_name IN (${LISTS})),
-sc AS (SELECT prospect_id, buy_rating, action, dated, ROW_NUMBER() OVER (PARTITION BY prospect_id ORDER BY dated DESC, id DESC) rn
+sc AS (SELECT prospect_id, buy_rating, action, expected_cents, dated, ROW_NUMBER() OVER (PARTITION BY prospect_id ORDER BY dated DESC, id DESC) rn
        FROM prospect_snapshots WHERE buy_rating IS NOT NULL),
 fd AS (SELECT list_name, dated FROM prospect_rankings WHERE list_name IN (${TOP}) GROUP BY list_name, dated
        HAVING SUM(CASE WHEN rank <= (CASE list_name WHEN 'top 200 hitters' THEN 200 ELSE 100 END) THEN 1 ELSE 0 END) >= (CASE list_name WHEN 'top 200 hitters' THEN 180 ELSE 90 END)),
@@ -20,13 +20,13 @@ INSERT INTO prospect_current (prospect_id, side, team, age, age_dated, level, ra
 SELECT p.prospect_id,
   CASE WHEN EXISTS (SELECT 1 FROM prospect_rankings r WHERE r.prospect_id = p.prospect_id AND r.list_name = 'top 100 pitchers') THEN 'pitcher'
        WHEN EXISTS (SELECT 1 FROM prospect_rankings r WHERE r.prospect_id = p.prospect_id AND r.list_name = 'top 200 hitters') THEN 'hitter' ELSE p.side END,
-  COALESCE((SELECT team FROM prospect_snapshots s WHERE s.prospect_id = p.prospect_id AND s.team IS NOT NULL ORDER BY s.dated DESC, s.id DESC LIMIT 1), p.org),
+  (SELECT team FROM prospect_snapshots s WHERE s.prospect_id = p.prospect_id AND s.team IS NOT NULL ORDER BY s.dated DESC, s.id DESC LIMIT 1),
   (SELECT age FROM prospect_snapshots s WHERE s.prospect_id = p.prospect_id AND s.age IS NOT NULL ORDER BY s.dated DESC, s.id DESC LIMIT 1),
   (SELECT dated FROM prospect_snapshots s WHERE s.prospect_id = p.prospect_id AND s.age IS NOT NULL ORDER BY s.dated DESC, s.id DESC LIMIT 1),
   (SELECT level FROM prospect_snapshots s WHERE s.prospect_id = p.prospect_id AND s.level IS NOT NULL ORDER BY s.dated DESC, s.id DESC LIMIT 1),
   rk.rank, rk.dated, rk.list_name,
   sc.buy_rating, sc.action, sc.dated,
-  (SELECT x.expected_cents FROM prospect_prices x WHERE x.prospect_id = p.prospect_id AND x.expected_cents IS NOT NULL AND x.dated <= sc.dated AND julianday(sc.dated) - julianday(x.dated) <= 3 ORDER BY x.dated DESC LIMIT 1),
+  sc.expected_cents,
   (SELECT x.base_auto_cents FROM prospect_prices x WHERE x.prospect_id = p.prospect_id AND x.base_auto_cents IS NOT NULL AND x.dated <= sc.dated AND julianday(sc.dated) - julianday(x.dated) <= 3 ORDER BY x.dated DESC LIMIT 1),
   (SELECT x.base_auto_cents FROM prospect_prices x WHERE x.prospect_id = p.prospect_id AND x.base_auto_cents IS NOT NULL ORDER BY x.dated DESC, x.id DESC LIMIT 1),
   (SELECT x.dated FROM prospect_prices x WHERE x.prospect_id = p.prospect_id AND x.base_auto_cents IS NOT NULL ORDER BY x.dated DESC, x.id DESC LIMIT 1),
