@@ -39,6 +39,7 @@ const TEAM_NAMES = {
 const SORT_OPTS = {
   all:  [],
   hs:   [{k:'default',l:'Recent'},{k:'name',l:'Name'},{k:'owned',l:'$ Owned'}],
+  port: [{k:'default',l:'Attention'},{k:'up',l:'Gain'},{k:'down',l:'Loss'},{k:'invested',l:'Invested'}],
   posts:[{k:'default',l:'All'},{k:'rankings',l:'Rankings'},{k:'hot_sheet',l:'Hot Sheet'},{k:'analysis',l:'Analysis'},{k:'price_update',l:'Prices'}],
 };
 

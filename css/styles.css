@@ -1875,3 +1875,19 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .po-pl-price { text-align: right; font-size: 14px; font-weight: 600; color: var(--tx); }
 .po-pl-price small { display: block; font-size: 11px; font-weight: 400; color: var(--tx3); }
 .ph-m-back { display: block; margin: 0 0 8px; padding: 4px 0; background: none; border: none; color: var(--acc); font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; }
+
+/* Prospects portfolio */
+.pf-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0 12px 12px; border-bottom: .5px solid var(--bdr2); border-left: 3px solid var(--bdr); cursor: pointer; }
+.pf-row.up { border-left-color: var(--up); } .pf-row.down { border-left-color: var(--dn); }
+.pf-row:active { opacity: .7; }
+.pf-bs { flex: 0 0 44px; font-family: 'DM Mono', monospace; font-size: 24px; font-weight: 700; line-height: 1.1; }
+.pf-main { flex: 1; min-width: 0; }
+.pf-name { font-size: 15px; font-weight: 600; color: var(--tx); }
+.pf-sub { font-size: 12px; color: var(--tx3); margin-top: 1px; }
+.pf-val { text-align: right; flex-shrink: 0; padding-right: 2px; }
+.pf-val b { display: block; font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 700; }
+.pf-val b.up { color: var(--up); } .pf-val b.down { color: var(--dn); }
+.pf-val small { display: block; font-size: 11px; color: var(--tx3); margin-top: 1px; }
+.pf-gap { display: grid; grid-template-columns: 1fr auto 52px; gap: 10px; padding: 9px 0; border-bottom: .5px solid var(--bdr2); font-size: 13px; color: var(--tx); cursor: pointer; }
+.pf-gap span:nth-child(2) { color: var(--tx3); font-family: 'DM Mono', monospace; }
+.pf-gap b { text-align: right; font-family: 'DM Mono', monospace; }

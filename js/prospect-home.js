@@ -25,6 +25,7 @@ async function phLoad(force) {
   } catch (e) { phErr = e.message; }
   phLoading = false;
   if (section === 'prospects' && tab === 'all') renderProspectHome();
+  else if (section === 'prospects' && tab === 'port') renderProspectPortfolio();
 }
 function phRefresh() { phLoad(true); }
 
@@ -58,6 +59,7 @@ async function phLoadHist(ids) {
   need.forEach(i => phHistAsked.add(i));
   try { const d = await pibCall('/prospect-price-history?ids=' + need.map(encodeURIComponent).join(',')); Object.assign(phHist, d.prices || {}); } catch (e) {}
   if (section === 'prospects' && tab === 'all' && !q) renderProspectHome();
+  else if (section === 'prospects' && tab === 'port') renderProspectPortfolio();
 }
 
 // Search results: the full card (score, price, expected value, rank, age, level).
