@@ -1823,8 +1823,8 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-m-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 9px; }
 @media (min-width: 560px) { .ph-m-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .ph-m-tiles .scard { text-align: left; }
-.ph-m-read { min-height: 18px; font-size: 13px; color: var(--tx2); margin: 4px 0 2px; }
-.ph-m-read b { color: var(--tx); font-weight: 700; }
+.ph-m-read { min-height: 48px; font-size: 17px; line-height: 1.4; color: var(--tx2); margin: 6px 0 6px; }
+.ph-m-read b { color: var(--tx); font-weight: 700; font-size: 18px; }
 #ph-chart { width: 100%; height: auto; display: block; touch-action: pan-y; cursor: crosshair; }
 .ph-c-grid { stroke: var(--bdr2); stroke-width: .5; stroke-dasharray: 2 3; }
 .ph-c-lbl { font-size: 9px; fill: var(--tx3); font-family: 'DM Mono', monospace; }
