@@ -150,21 +150,10 @@ function sbGetAllPlayerNames() {
   return out;
 }
 
-// Players whose newest Buy Score falls in the range and is no more than 14 days older than the newest score for their side
-// (he re-scores on a roughly two-week cycle). Graduated players are left out.
-const BS_FRESH_DAYS = 14;
-function sbGetBuyScorePlayers(min, max) {
-  const rows = (phData || []).filter(p => p.buy_rating != null && p.scored_dated && !p.graduated);
-  const newest = {};
-  (phData || []).forEach(p => { if (p.buy_rating != null && p.scored_dated) { const s = p.side || 'hitter'; if (!newest[s] || p.scored_dated > newest[s]) newest[s] = p.scored_dated; } });
-  const seen = new Set(), out = [];
-  rows.forEach(p => {
-    const cutoff = new Date(newest[p.side || 'hitter'] + 'T12:00:00Z').getTime() - BS_FRESH_DAYS * 86400000;
-    if (new Date(p.scored_dated + 'T12:00:00Z').getTime() < cutoff) return;
-    const bs = Number(p.buy_rating);
-    if (bs >= min && bs <= (max == null ? Infinity : max) && !seen.has(p.name)) { seen.add(p.name); out.push({ name: p.name, source: 'prospect' }); }
-  });
-  return out;
+// The current Buy Score lists come from the backend (GET /prospect-buy-list): scores since the last Top Rankings post, graduated left out.
+async function sbGetBuyScorePlayers(min, max) {
+  const d = await pibCall('/prospect-buy-list?min=' + encodeURIComponent(min) + '&max=' + encodeURIComponent(max == null ? 5 : max));
+  return (d.players || []).map(p => ({ name: p.name, source: 'prospect' }));
 }
 
 function sbUpdatePool() {
@@ -176,14 +165,14 @@ function sbUpdatePool() {
   ).join('');
 }
 
-function sbApplyPreset(minScore) {
-  SB.players = sbGetBuyScorePlayers(minScore);
+async function sbApplyPreset(minScore) {
+  SB.players = await sbGetBuyScorePlayers(minScore);
   sbUpdatePool();
   sbUpdateOutput();
 }
 
-function sbApplyPresetRange(min, max) {
-  const results = sbGetBuyScorePlayers(min, max);
+async function sbApplyPresetRange(min, max) {
+  const results = await sbGetBuyScorePlayers(min, max);
 
   // Merge into existing pool
   results.forEach(p => {
