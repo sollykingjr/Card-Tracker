@@ -1,5 +1,6 @@
 // ── search-alerts.js — eBay search building, cron jobs, digests, run/mark-seen
 import { notifyCronFailure } from './misc.js';
+import { listBuyList } from './prospect-current.js';
 
 export function buildEbaySearchUrl(search, offset) {
   const filters = [];
@@ -34,6 +35,26 @@ export function buildEbaySearchUrl(search, offset) {
   return `https://api.ebay.com/buy/browse/v1/item_summary/search?q=${encodeURIComponent(q)}&sort=newlyListed${categoryParam}${filterStr}${aspectFilter}&limit=200${offsetStr}`;
 }
 
+// ── Prospect Buy Score list searches ──────────────────────────────────────────
+// A saved search can carry prospectList: {min, max, side, base}. Its eBay query is built here, every run, from the current Buy Score
+// list (GET /prospect-buy-list logic), so the search stays current on its own. Lists longer than PROSPECT_CHUNK names are split into
+// several queries that share the search's id, label and digest; only the first one sends a notification. Never saved back.
+export const PROSPECT_CHUNK = 25;
+export async function expandProspectSearches(env, searches) {
+  const out = [];
+  for (const s of searches || []) {
+    if (!s.prospectList) { out.push(s); continue; }
+    const pl = s.prospectList;
+    const r = await listBuyList(env, pl.min, pl.max, pl.side || null);
+    const names = r.players.map(p => p.name.replace(/[(),"]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const base = String(pl.base ?? 'Bowman Chrome Auto').trim();
+    for (let i = 0; i < names.length; i += PROSPECT_CHUNK) {
+      out.push({ ...s, query: `${base} (${names.slice(i, i + PROSPECT_CHUNK).join(', ')})`.trim(), notify: i === 0 ? s.notify : false });
+    }
+  }
+  return out;
+}
+
 // Returns only the incoming items not already in `existing`, and not repeated within `incoming`.
 // Matches on eBay itemId, falling back to URL (older stored items have no itemId).
 export function dedupeNewItems(existing, incoming) {
@@ -54,6 +75,7 @@ export function dedupeNewItems(existing, incoming) {
 export async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  data.searches = await expandProspectSearches(env, data.searches || []);
   const searches = (data.searches || []).filter(s => !s.groupId);
   const groups = data.groups || [];
   if (searches.length === 0 && groups.length === 0) return;
@@ -129,6 +151,7 @@ export async function checkPlayerSearches(env) {
         date: item.itemCreationDate,
         endDate: item.itemEndDate || null,
         image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seller: item.seller?.username || null,
         seen: false,
         searchId: search.id,
         searchLabel: search.label
@@ -223,6 +246,7 @@ for (const search of searches) {
       date: item.itemCreationDate,
       endDate: item.itemEndDate || null,
       image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+      seller: item.seller?.username || null,
       seen: false
     }));
 
@@ -248,7 +272,7 @@ for (const search of searches) {
     // Daily digest
     const existing = await env.CACHE.get(search.digestKey);
     const digestItems = existing ? JSON.parse(existing) : [];
-    await env.CACHE.put(search.digestKey, JSON.stringify([...digestItems, ...newMapped]));
+    await env.CACHE.put(search.digestKey, JSON.stringify([...digestItems, ...dedupeNewItems(digestItems, newMapped)]));
 
     // 7-day archive — drop anything older than 7 days
     const archiveKey = search.digestKey + '_archive';
@@ -256,7 +280,7 @@ for (const search of searches) {
     const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
-    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...newMapped]));
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...dedupeNewItems(trimmed, newMapped)]));
   }
 }
 
@@ -264,6 +288,7 @@ for (const search of searches) {
 export async function checkNightlySearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
+  data.searches = await expandProspectSearches(env, data.searches || []);
   const groups = (data.groups || []).filter(g => g.schedule === 'nightly');
   const searches = (data.searches || []).filter(s => !s.groupId && s.schedule === 'nightly');
   if (groups.length === 0 && searches.length === 0) return;
@@ -351,6 +376,7 @@ export async function checkNightlySearches(env) {
         date: item.itemCreationDate,
         endDate: item.itemEndDate || null,
         image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seller: item.seller?.username || null,
         seen: false,
         searchId: search.id,
         searchLabel: search.label
@@ -427,19 +453,20 @@ export async function checkNightlySearches(env) {
       date: item.itemCreationDate,
       endDate: item.itemEndDate || null,
       image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+      seller: item.seller?.username || null,
       seen: false
     }));
 
     const existing = await env.CACHE.get(search.digestKey);
     const digestItems = existing ? JSON.parse(existing) : [];
-    await env.CACHE.put(search.digestKey, JSON.stringify([...digestItems, ...newMapped]));
+    await env.CACHE.put(search.digestKey, JSON.stringify([...digestItems, ...dedupeNewItems(digestItems, newMapped)]));
 
     const archiveKey = search.digestKey + '_archive';
     const existingArchive = await env.CACHE.get(archiveKey);
     const archiveItems = existingArchive ? JSON.parse(existingArchive) : [];
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const trimmed = archiveItems.filter(item => new Date(item.date).getTime() > sevenDaysAgo);
-    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...newMapped]));
+    await env.CACHE.put(archiveKey, JSON.stringify([...trimmed, ...dedupeNewItems(trimmed, newMapped)]));
   }
 }
 
@@ -694,9 +721,9 @@ export async function handleRunSearch(request, env, cors) {
     });
 
     const cutoff = Date.now() - (2 * 60 * 60 * 1000);
-    const searchList = group
+    const searchList = await expandProspectSearches(env, group
       ? data.searches.filter(s => s.groupId === group.id && (!searchId || s.id === searchId))
-      : [search];
+      : [search]);
     const allItems = [];
 
     for (const s of searchList) {
@@ -705,7 +732,7 @@ export async function handleRunSearch(request, env, cors) {
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
       const apiData = await res.json();
       const allSummaries = apiData.itemSummaries || [];
-      let filtered = allSummaries.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
+      let filtered = s.prospectList ? allSummaries.slice() : allSummaries.filter(item => new Date(item.itemCreationDate).getTime() > cutoff);
       if (filtered.length < 10) {
         const haveUrls = new Set(filtered.map(i => i.itemWebUrl));
         const backfill = allSummaries.filter(i => !haveUrls.has(i.itemWebUrl)).slice(0, 10 - filtered.length);
@@ -734,6 +761,7 @@ export async function handleRunSearch(request, env, cors) {
         date: item.itemCreationDate,
         endDate: item.itemEndDate || null,
         image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+        seller: item.seller?.username || null,
         seen: false,
         searchId: s.id,
         searchLabel: s.label

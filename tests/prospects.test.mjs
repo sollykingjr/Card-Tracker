@@ -3,6 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { expandProspectSearches, buildEbaySearchUrl, PROSPECT_CHUNK } from '../worker/search-alerts.js';
 import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, searchPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
@@ -617,5 +618,21 @@ await t('buy list: scores on or after the last Top Rankings post, per side, grad
   assert.deepEqual(r.players.map(p => p.name), ['A Hit', 'D Pit']);       // B is older than the last list, E graduated
   assert.equal(r.cutoffs.hitter, '2026-09-25'); assert.equal(r.cutoffs.pitcher, '2026-09-21');   // no pitcher list yet: 14 days before his newest pitcher score
   assert.deepEqual((await listBuyList(env, 4, 4.99, 'hitter')).players.map(p => p.name), ['C Four']);   // on the cutoff date counts
+});
+await t('prospect list searches: query built from the current list, long lists split, ordinary searches untouched', async () => {
+  const env = { DB: makeDb() }; const raw = env.DB._raw;
+  for (let i = 0; i < 30; i++) raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('h${i}','Hit ${String(i).padStart(2, '0')}','hit ${i}','hitter'); INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES ('h${i}','hitter',5,'2026-10-07',0);`);
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('p1','Pit One','pit one','pitcher'); INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES ('p1','pitcher',5,'2026-10-07',0);`);
+  const plain = { id: 'x', label: 'Plain', query: 'foo' };
+  const bulk = { id: 'b', label: 'BS 5 Hitters BIN', listingType: 'FIXED_PRICE', notify: true, prospectList: { min: 5, max: 5, side: 'hitter' } };
+  const out = await expandProspectSearches(env, [plain, bulk]);
+  assert.equal(out[0], plain);                                   // ordinary search passes through unchanged
+  const chunks = out.slice(1);
+  assert.equal(chunks.length, 2); assert.equal(PROSPECT_CHUNK, 25);
+  assert(chunks[0].query.startsWith('Bowman Chrome Auto (Hit 00, Hit 01') && !chunks[0].query.includes('Pit One'));   // hitters only
+  assert.equal(chunks[0].query.split(',').length, 25); assert.equal(chunks[1].query.split(',').length, 5);
+  assert.equal(chunks[0].notify, true); assert.equal(chunks[1].notify, false);   // only the first chunk notifies
+  assert(chunks.every(c => c.id === 'b' && c.label === bulk.label));
+  assert(buildEbaySearchUrl(chunks[0]).includes('buyingOptions%3A%7BFIXED_PRICE%7D'));
 });
 console.log(`\n${passed} tests passed`);
