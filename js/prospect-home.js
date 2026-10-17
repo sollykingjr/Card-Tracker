@@ -111,11 +111,11 @@ function phRow(p, owned) {
 function phNote(p, owned) {
   const o = owned.get(normName(p.name));
   const bs = p.buy_rating != null ? Number(p.buy_rating) : null, prev = p.prev_buy_rating != null ? Number(p.prev_buy_rating) : null;
-  const dir = bs != null && prev != null && bs !== prev ? (bs > prev ? 'up' : 'down') : '';
+  const tone = bs == null ? '' : bs >= 4.5 ? 'hi' : bs >= 3 ? 'mid' : 'lo';   // green / yellow / red by the score itself
   return `<div class="ph-item" data-ph="${pibEsc(p.name)}">
     <div class="ph-item-head">
       <div class="ph-item-id"><span class="ph-item-name">${pibEsc(p.name)}</span><span class="ph-item-meta">${phWho(p)}${o ? ' · you own' : ''}</span></div>
-      <div class="ph-item-nums">${p.price_cents != null ? `<span class="ph-item-price">${phMoney(p.price_cents)}</span>` : ''}${bs != null ? `<span class="ph-item-bs ${dir}">${phBs(bs)}</span>` : ''}</div>
+      <div class="ph-item-nums">${p.price_cents != null ? `<span class="ph-item-price">${phMoney(p.price_cents)}</span>` : ''}${bs != null ? `<span class="ph-item-bs ${tone}">${phBs(bs)}</span>` : ''}</div>
     </div>
     <div class="ph-note">${pibEsc(p.latest_note)}</div>
   </div>`;

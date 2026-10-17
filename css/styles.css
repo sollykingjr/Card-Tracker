@@ -1792,5 +1792,6 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-item-nums { display: flex; align-items: baseline; gap: 10px; flex-shrink: 0; }
 .ph-item-price { font-size: 14px; font-weight: 600; color: var(--tx); }
 .ph-item-bs { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 700; color: var(--tx2); }
-.ph-item-bs.up { color: var(--up); }
-.ph-item-bs.down { color: var(--dn); }
+.ph-item-bs.hi { color: var(--b5-tx); }
+.ph-item-bs.mid { color: var(--b35-tx); }
+.ph-item-bs.lo { color: var(--dn); }
