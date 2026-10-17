@@ -8,15 +8,17 @@ const phTime = d => new Date(d + 'T12:00:00Z').getTime();
 let phChartRows = [];
 function phHistoryRows(m) {
   const by = new Map();
-  const at = d => { if (!by.has(d)) by.set(d, { date: d, price: null, score: null, exp: null, action: null }); return by.get(d); };
+  const at = d => { if (!by.has(d)) by.set(d, { date: d, price: null, score: null, exp: null, action: null, rank: null }); return by.get(d); };
   (m.prices || []).forEach(x => { if (x.base_auto_cents != null) at(x.dated).price = x.base_auto_cents; });
+  // Hobby rank and the Top 200 / Top 100 lists are one ranking; if both are on a date, the Top list wins.
+  (m.rankings || []).filter(x => ['hobby rank', 'top 200 hitters', 'top 100 pitchers'].includes(x.list_name)).forEach(x => { const r = at(x.dated); if (r.rank == null || x.list_name !== 'hobby rank') r.rank = x.rank; });
   (m.snapshots || []).forEach(x => { if (x.buy_rating != null) { const r = at(x.dated); r.score = Number(x.buy_rating); r.exp = x.expected_cents; r.action = x.action; } });
   return [...by.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 function phChart(rows) {
-  const pr = rows.filter(r => r.price != null), sc = rows.filter(r => r.score != null);
+  const pr = rows.filter(r => r.price != null), sc = rows.filter(r => r.score != null), rk = rows.filter(r => r.rank != null);
   if (rows.length < 2) return `<div class="srow ph-m-chart"><div class="srow-t">History</div><div class="intake-meta" style="margin:4px 0 0">Not enough history yet</div></div>`;
-  const W = 320, H = 240, L = 44, R = 12, t0 = phTime(rows[0].date), t1 = phTime(rows[rows.length - 1].date), sp = (t1 - t0) || 1;
+  const W = 320, H = 330, L = 44, R = 12, t0 = phTime(rows[0].date), t1 = phTime(rows[rows.length - 1].date), sp = (t1 - t0) || 1;
   const X = d => L + (phTime(d) - t0) / sp * (W - L - R);
   const sv = sc.map(r => r.score), slo = Math.min(...sv), shi = Math.max(...sv), sspan = Math.max(shi - slo, 1), smid = (slo + shi) / 2;
   const sy = v => 78 - ((v - (smid - sspan / 2)) / sspan) * 56;                          // score lane, scaled to his range for this player -> y 78..22
@@ -31,6 +33,18 @@ function phChart(rows) {
   const hiI = sc.findIndex(r => r.score === shi), loI = sc.findIndex(r => r.score === slo);
   const labeled = new Set([0, sc.length - 1, hiI, loI]);   // only the first, latest, highest and lowest get a number; the rest are in the tap readout and the table
   const scores = sc.map((r, i) => `<circle cx="${X(r.date).toFixed(1)}" cy="${sy(r.score).toFixed(1)}" r="5" class="ph-c-s t-${phTone(r.score)}"/>${labeled.has(i) ? `<text x="${Math.min(W - R, Math.max(L, X(r.date))).toFixed(1)}" y="${(sy(r.score) - 9).toFixed(1)}" text-anchor="middle" class="ph-c-val t-${phTone(r.score)}">${phBs(r.score)}</text>` : ''}`).join('');
+  let rankLane = '';
+  if (rk.length) {
+    const rv = rk.map(r => r.rank), rlo = Math.min(...rv), rhi = Math.max(...rv), rsp = Math.max(rhi - rlo, 1);
+    const ry = v => 258 + (v - rlo) / rsp * 52;                                           // best (lowest number) at the top
+    const lastR = rk[rk.length - 1];
+    rankLane = `<text x="${L}" y="240" class="ph-c-lbl">Rank (up is better)</text>
+      <line x1="${L}" x2="${W - R}" y1="${ry(rlo).toFixed(1)}" y2="${ry(rlo).toFixed(1)}" class="ph-c-grid"/><text x="${L - 6}" y="${(ry(rlo) + 3).toFixed(1)}" text-anchor="end" class="ph-c-lbl">#${rlo}</text>
+      ${rhi !== rlo ? `<line x1="${L}" x2="${W - R}" y1="${ry(rhi).toFixed(1)}" y2="${ry(rhi).toFixed(1)}" class="ph-c-grid"/><text x="${L - 6}" y="${(ry(rhi) + 3).toFixed(1)}" text-anchor="end" class="ph-c-lbl">#${rhi}</text>` : ''}
+      ${rk.length > 1 ? `<polyline class="ph-c-rank" points="${rk.map(r => X(r.date).toFixed(1) + ',' + ry(r.rank).toFixed(1)).join(' ')}"/>` : ''}
+      ${rk.map(r => `<circle cx="${X(r.date).toFixed(1)}" cy="${ry(r.rank).toFixed(1)}" r="2.4" class="ph-c-rdot"/>`).join('')}
+      <circle cx="${X(lastR.date).toFixed(1)}" cy="${ry(lastR.rank).toFixed(1)}" r="4" class="ph-c-rdot"/><text x="${Math.min(W - R, X(lastR.date)).toFixed(1)}" y="${(ry(lastR.rank) - 8).toFixed(1)}" text-anchor="end" class="ph-c-val">#${lastR.rank}</text>`;
+  }
   const mid = rows[Math.floor(rows.length / 2)].date;
   const axis = [[rows[0].date, 'start'], [mid, 'middle'], [rows[rows.length - 1].date, 'end']].map(([d, an]) => `<text x="${X(d).toFixed(1)}" y="${H - 4}" text-anchor="${an}" class="ph-c-lbl">${phDate(d)}</text>`).join('');
   phChartRows = rows.map(r => ({ ...r, x: X(r.date) }));
@@ -38,14 +52,14 @@ function phChart(rows) {
     <div class="ph-m-read" id="ph-read">Tap the chart to read a date</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Buy Score and base auto price over time" id="ph-chart">
       <text x="${L}" y="9" class="ph-c-lbl">Buy Score</text><text x="${L}" y="116" class="ph-c-lbl">Base auto price</text>
-      ${grid}${line}${dots}${scores}${endLbl}${axis}<line id="ph-guide" x1="0" x2="0" y1="10" y2="${H - 14}" class="ph-c-guide" style="display:none"/></svg></div>`;
+      ${grid}${line}${dots}${scores}${endLbl}${rankLane}${axis}<line id="ph-guide" x1="0" x2="0" y1="10" y2="${H - 14}" class="ph-c-guide" style="display:none"/></svg></div>`;
 }
 function phChartPoint(e) {
   const svg = document.getElementById('ph-chart'); if (!svg || !phChartRows.length) return;
   const box = svg.getBoundingClientRect(), x = (e.clientX - box.left) / box.width * 320;
   const r = phChartRows.reduce((best, c) => Math.abs(c.x - x) < Math.abs(best.x - x) ? c : best);
   const g = document.getElementById('ph-guide'); g.setAttribute('x1', r.x); g.setAttribute('x2', r.x); g.style.display = '';
-  document.getElementById('ph-read').innerHTML = `<b>${phDate(r.date)}</b>` + (r.score != null ? ` · score <b class="ph-t-${phTone(r.score)}">${phBs(r.score)}</b>${r.action ? ' ' + pibEsc(r.action) : ''}` : '') + (r.price != null ? ` · price <b>${phMoney(r.price)}</b>` : '') + (r.exp != null ? ` · expected <b>${phMoney(r.exp)}</b>` : '');
+  document.getElementById('ph-read').innerHTML = `<b>${phDate(r.date)}</b>` + (r.score != null ? ` · score <b class="ph-t-${phTone(r.score)}">${phBs(r.score)}</b>${r.action ? ' ' + pibEsc(r.action) : ''}` : '') + (r.price != null ? ` · price <b>${phMoney(r.price)}</b>` : '') + (r.exp != null ? ` · expected <b>${phMoney(r.exp)}</b>` : '') + (r.rank != null ? ` · rank <b>#${r.rank}</b>` : '');
 }
 document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#ph-chart')) phChartPoint(e); });
 document.addEventListener('pointermove', e => { if (e.buttons && e.target.closest && e.target.closest('#ph-chart')) phChartPoint(e); });
@@ -54,8 +68,8 @@ document.addEventListener('pointermove', e => { if (e.buttons && e.target.closes
 function phHistoryTable(rows) {
   if (!rows.length) return '';
   const rev = rows.slice().reverse();
-  const row = r => `<div class="ph-h-row"><span class="ph-h-d">${phDate(r.date)}</span><span class="ph-h-s ph-t-${phTone(r.score)}">${r.score != null ? phBs(r.score) : ''}</span><span>${r.price != null ? phMoney(r.price) : ''}</span><span>${r.exp != null ? phMoney(r.exp) : ''}</span></div>`;
-  return `<div class="srow"><div class="srow-t">Every update</div><div class="ph-h-row ph-h-head"><span class="ph-h-d">Date</span><span class="ph-h-s">Score</span><span>Price</span><span>Expected</span></div>
+  const row = r => `<div class="ph-h-row"><span class="ph-h-d">${phDate(r.date)}</span><span class="ph-h-s ph-t-${phTone(r.score)}">${r.score != null ? phBs(r.score) : ''}</span><span>${r.price != null ? phMoney(r.price) : ''}</span><span>${r.exp != null ? phMoney(r.exp) : ''}</span><span>${r.rank != null ? '#' + r.rank : ''}</span></div>`;
+  return `<div class="srow"><div class="srow-t">Every update</div><div class="ph-h-row ph-h-head"><span class="ph-h-d">Date</span><span class="ph-h-s">Score</span><span>Price</span><span>Expected</span><span>Rank</span></div>
     ${rev.slice(0, 8).map(row).join('')}${rev.length > 8 ? `<div id="ph-h-more" style="display:none">${rev.slice(8).map(row).join('')}</div><button class="ph-m-more" onclick="document.getElementById('ph-h-more').style.display='block';this.remove()">Show ${rev.length - 8} older</button>` : ''}</div>`;
 }
 

@@ -1830,11 +1830,13 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-c-lbl { font-size: 9px; fill: var(--tx3); font-family: 'DM Mono', monospace; }
 .ph-c-line { fill: none; stroke: var(--acc); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .ph-c-dot { fill: var(--acc); }
+.ph-c-rank { fill: none; stroke: var(--tx2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ph-c-rdot { fill: var(--tx2); }
 .ph-c-val { font-size: 10px; font-weight: 700; fill: var(--tx); font-family: 'DM Mono', monospace; }
 .ph-c-s.t-hi { fill: var(--b5-tx); } .ph-c-s.t-mid { fill: var(--b35-tx); } .ph-c-s.t-lo { fill: var(--dn); }
 .ph-c-val.t-hi { fill: var(--b5-tx); } .ph-c-val.t-mid { fill: var(--b35-tx); } .ph-c-val.t-lo { fill: var(--dn); }
 .ph-c-guide { stroke: var(--tx3); stroke-width: 1; }
-.ph-h-row { display: grid; grid-template-columns: 1.1fr .8fr 1fr 1fr; gap: 6px; padding: 7px 0; border-top: .5px solid var(--bdr2); font-size: 13px; font-family: 'DM Mono', monospace; color: var(--tx); }
+.ph-h-row { display: grid; grid-template-columns: 1.15fr .7fr 1fr 1fr .8fr; gap: 6px; padding: 7px 0; border-top: .5px solid var(--bdr2); font-size: 13px; font-family: 'DM Mono', monospace; color: var(--tx); }
 .ph-h-row:first-of-type { border-top: 0; }
 .ph-h-head { font-size: 11px; color: var(--tx3); font-family: inherit; }
 .ph-h-s { font-weight: 700; }
