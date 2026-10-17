@@ -161,13 +161,13 @@ function renderProspectHome() {
     html = rows.length ? rows.map(p => phCard(p, owned)).join('') : '<div class="empty-msg">No players match</div>';
   } else {
     const L = phHomeLists(phData, owned);
-    const sec = (title, sub, inner) => inner ? `<section class="ph-s"><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}${inner}</section>` : '';
+    const sec = (title, sub, inner, go) => inner ? `<section class="ph-s"><h2${go ? ` class="ph-go" data-go="${go}"` : ''}>${title}</h2>${sub ? `<p>${sub}</p>` : ''}${inner}</section>` : '';
     phLoadHist(L.mine.map(p => p.prospect_id));
     const withNote = p => ({ ...p, note: L.noteFor(p) });
     html = sec('Worth a look', 'Buy Score rose to 4 or higher on players you don\'t own', L.buys.length ? `<div class="ph-tiles">${L.buys.map(p => phTile(p, owned)).join('')}</div>` : '')
       + `<div class="ph-cols">`
-      + sec('Your players', 'Buy Score changed since his previous score', L.mine.map(p => phRow(withNote(p), owned)).join(''))
-      + sec('From his latest posts', L.newestNote ? 'notes since ' + phDate(phDaysAgo(L.newestNote, 7)) : '', L.notes.map(p => phNote(p, owned)).join(''))
+      + sec('Your players', 'Buy Score changed since his previous score', L.mine.map(p => phRow(withNote(p), owned)).join(''), 'port')
+      + sec('From his latest posts', L.newestNote ? 'notes since ' + phDate(phDaysAgo(L.newestNote, 7)) : '', L.notes.map(p => phNote(p, owned)).join(''), 'posts')
       + `</div>`;
     html = (html || '<div class="empty-msg">Nothing new right now</div>') + `<div class="ph-foot">Search above to find any of the ${phData.length} players</div>`;
   }
@@ -196,5 +196,6 @@ async function phOpen(name) {
 }
 
 document.getElementById('list').addEventListener('click', e => {
+  const g = e.target.closest('[data-go]'); if (g) { const t = document.querySelector(`#tabs .tab[data-t="${g.dataset.go}"]`); if (t) t.click(); return; }   // section titles open Portfolio / Posts
   const c = e.target.closest('[data-ph]'); if (c) phOpen(c.dataset.ph);
 });

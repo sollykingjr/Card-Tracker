@@ -1745,6 +1745,8 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-s { margin: 22px 0 6px; }
 .ph-s:first-child { margin-top: 6px; }
 .ph-s h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--tx); }
+.ph-s h2.ph-go { cursor: pointer; display: inline-block; }
+.ph-s h2.ph-go::after { content: '›'; margin-left: 7px; color: var(--tx3); font-weight: 400; }
 .ph-s > p { margin: 2px 0 10px; font-size: 12px; color: var(--tx3); }
 .ph-grad { margin-left: 6px; padding: 1px 6px; border-radius: 5px; font-size: 10px; font-weight: 600; background: var(--surf2); color: var(--tx3); border: .5px solid var(--bdr2); vertical-align: middle; }
 .ph-exp { font-size: 11px; color: var(--tx3); font-family: 'DM Mono', monospace; }
