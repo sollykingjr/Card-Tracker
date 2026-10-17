@@ -69,11 +69,21 @@ function mostRecentStatic(arr) {
 // ── Build global cache after data load ───────────────────────────────────────
 function buildCache() {
   CACHE = new Map();
+  // Group every list by player once, so each player's lookup is instant (this used to filter whole lists once per player and took seconds).
+  const by = (arr, key) => { const m = new Map(); for (const r of arr) { const k = normName(key(r)); const l = m.get(k); if (l) l.push(r); else m.set(k, [r]); } return m; };
+  const none = [];
+  const playersBy = by(players, p => p.name), bsBy = by(buyScores, b => b.name), t200By = by(top200, p => p.name), t100By = by(top100, p => p.name);
+  const o200By = by(origTop200, p => p.name), o100By = by(origTop100, p => p.name), hsBy = by(hotsheet, h => h.name);
+  const cardsBy = by(cards, c => c.player);
+  const isPitcherPos = x => (x || '').toLowerCase().includes('pitcher');
 
-  const hitWeeks = hotsheet.filter(h=>!(h.pos||'').toLowerCase().includes('pitcher')).map(h=>parseInt(h.week)||0);
-  const pitWeeks = hotsheet.filter(h=>(h.pos||'').toLowerCase().includes('pitcher')).map(h=>parseInt(h.week)||0);
+  const hitWeeks = hotsheet.filter(h=>!isPitcherPos(h.pos)).map(h=>parseInt(h.week)||0);
+  const pitWeeks = hotsheet.filter(h=>isPitcherPos(h.pos)).map(h=>parseInt(h.week)||0);
   const maxHitWk = hitWeeks.length ? Math.max(...hitWeeks) : 0;
   const maxPitWk = pitWeeks.length ? Math.max(...pitWeeks) : 0;
+  const maxDate = arr => arr.reduce((m, r) => Math.max(m, parseDate(r.date)), 0);
+  const maxTop200 = maxDate(top200), maxTop100 = maxDate(top100);
+  const maxBSPit = maxDate(buyScores.filter(b => isPitcherPos(b.pos))), maxBSHit = maxDate(buyScores.filter(b => !isPitcherPos(b.pos)));
 
   const allNames = new Set([
     ...players.map(p=>p.name),
@@ -90,49 +100,41 @@ function buildCache() {
 
     const srcPri = {bs:0, top:1, hs:2, orig:3, buy:4};
     const candidates = [];
-    const buyEntry = players.find(b=>normName(b.name)===nm);
+    const buyEntry = (playersBy.get(nm) || none)[0];
     if(buyEntry) candidates.push({src:'buy', ts:parseDate(buyEntry.date), rank:null, price:cl(buyEntry.price)});
-    const bsCandidates = buyScores.filter(b=>normName(b.name)===nm);
-    bsCandidates.forEach(b=>candidates.push({src:'bs', ts:parseDate(b.date), rank:null, price:cl(b.price)}));
+    const bsMatches = bsBy.get(nm) || none;
+    bsMatches.forEach(b=>candidates.push({src:'bs', ts:parseDate(b.date), rank:null, price:cl(b.price)}));
 
-    const topEntries = [...top200,...top100].filter(e=>normName(e.name)===nm);
-    topEntries.forEach(e=>candidates.push({src:'top', ts:parseDate(e.date), rank:cl(e.rank), price:cl(e.price)}));
-    [...origTop200,...origTop100].filter(e=>normName(e.name)===nm).forEach(e=>
+    const t200 = t200By.get(nm) || none, t100 = t100By.get(nm) || none;
+    [...t200, ...t100].forEach(e=>candidates.push({src:'top', ts:parseDate(e.date), rank:cl(e.rank), price:cl(e.price)}));
+    [...(o200By.get(nm) || none), ...(o100By.get(nm) || none)].forEach(e=>
       candidates.push({src:'orig', ts:parseDate(e.date), rank:null, price:cl(e.price)}));
-    const hsEntries = hotsheet.filter(h=>normName(h.name)===nm);
+    const hsEntries = hsBy.get(nm) || none;
     hsEntries.forEach(h=>candidates.push({src:'hs', ts:parseDate(h.date), rank:null, price:cl(h.auto)}));
 
     if(candidates.length) {
       candidates.sort((a,b)=>b.ts!==a.ts?b.ts-a.ts:srcPri[a.src]-srcPri[b.src]);
       const best = candidates[0];
-      const isPitcher = (players.find(p=>normName(p.name)===nm)?.pos||'').toLowerCase().includes('pitcher') ||
-                        buyScores.find(b=>normName(b.name)===nm)?.pos?.toLowerCase().includes('pitcher');
-      const relevantTop = isPitcher ? top100 : top200;
-      const relevantBS  = buyScores.filter(b=>normName(b.name)===nm);
-
-      const maxTopDate = relevantTop.length ? Math.max(...relevantTop.map(r=>parseDate(r.date))) : 0;
-      const allBSForType = isPitcher 
-        ? buyScores.filter(b=>(b.pos||'').toLowerCase().includes('pitcher'))
-        : buyScores.filter(b=>!(b.pos||'').toLowerCase().includes('pitcher'));
-      const maxBSDate = allBSForType.length ? Math.max(...allBSForType.map(r=>parseDate(r.date))) : 0;
+      const isPitcher = isPitcherPos(buyEntry?.pos) || bsMatches[0]?.pos?.toLowerCase().includes('pitcher');
+      const relevantTop = isPitcher ? t100 : t200;
+      const hasTopList = isPitcher ? top100.length : top200.length;
+      const maxTopDate = hasTopList ? (isPitcher ? maxTop100 : maxTop200) : 0;
+      const maxBSDate = isPitcher ? maxBSPit : maxBSHit;
 
       let topRank = null;
       if(maxBSDate >= maxTopDate && maxBSDate > 0) {
-        const bsRecent = relevantBS.filter(b=>parseDate(b.date)===maxBSDate);
-        const bsEntry  = bsRecent.find(b=>normName(b.name)===nm);
+        const bsEntry = bsMatches.find(b=>parseDate(b.date)===maxBSDate);
         topRank = bsEntry ? cl(bsEntry.rank) : null;
       } else if(maxTopDate > 0) {
-        const topRecent = relevantTop.filter(r=>parseDate(r.date)===maxTopDate);
-        const topEntry  = topRecent.find(r=>normName(r.name)===nm);
+        const topEntry = relevantTop.find(r=>parseDate(r.date)===maxTopDate);
         topRank = topEntry ? cl(topEntry.rank) : null;
       }
       entry.rank = topRank;
       entry.price = best.price;
-      const bsMatches = buyScores.filter(b=>normName(b.name)===nm);
       const bsBest = bsMatches.length
         ? bsMatches.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a)
         : null;
-      const hsScoreMatches = hotsheet.filter(h=>normName(h.name)===nm && h.buyScore);
+      const hsScoreMatches = hsEntries.filter(h=>h.buyScore);
       const hsBest = hsScoreMatches.length
         ? hsScoreMatches.reduce((a,b)=>parseDate(b.date)>=parseDate(a.date)?b:a)
         : null;
@@ -161,7 +163,7 @@ function buildCache() {
       entry.rank=null; entry.price=null; entry.buy=null; entry.hsLabel=null; entry.priceChange=null; entry.expectedValue=null;
     }
 
-    const playerCards = cards.filter(c=>normName(c.player)===nm);
+    const playerCards = cardsBy.get(nm) || none;
     const owned = playerCards.filter(c=>!c.salePrice);
     const sold  = playerCards.filter(c=> c.salePrice);
     const totalInvested  = owned.reduce((s,c)=>s+safeNum(c.purchasePrice),0);
@@ -172,8 +174,7 @@ function buildCache() {
     const bestFlip= sold.reduce((best,c)=>{ const p=safeNum(c.netProfit,true); return (!best||p>safeNum(best.netProfit,true))?c:best; },null);
     entry.cards = {owned, sold, totalInvested, totalSoldFor, totalNetProfit, avgHold, bestFlip};
 
-    const isPit = (players.find(p=>normName(p.name)===nm)?.pos||'').toLowerCase().includes('pitcher') ||
-                  (hsEntries[0]?.pos||'').toLowerCase().includes('pitcher');
+    const isPit = isPitcherPos(playersBy.get(nm)?.[0]?.pos) || isPitcherPos(hsEntries[0]?.pos);
     const maxWk = isPit ? maxPitWk : maxHitWk;
     const playerWeeks = [...new Set(hsEntries.map(h=>parseInt(h.week)).filter(n=>!isNaN(n)))].sort((a,b)=>a-b);
     const onLatest = playerWeeks.includes(maxWk);
