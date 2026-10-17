@@ -264,8 +264,6 @@ async function loadCardData() {
     })).map(cleanCardNames);
 
     buildCache();
-
-    buildCache();
     saveCardsToCache();
 
     if (section === 'home') { renderHome(); }
