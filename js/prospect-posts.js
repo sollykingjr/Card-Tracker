@@ -4,7 +4,7 @@ let ppPosts = [], ppLoaded = false, ppShowOld = false, ppBack = '';
 const ppType = t => ({ rankings: 'Rankings', hot_sheet: 'Hot Sheet', analysis: 'Analysis', price_update: 'Prices', other: 'Other' }[t] || t || '');
 const ppDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? `${+m[2]}/${+m[3]}/${m[1].slice(2)}` : ''; };
 const ppMoney = c => c == null ? '' : '$' + (c / 100).toFixed(c % 100 ? 2 : 0);
-const ppTone = n => n == null ? '' : n >= 4.5 ? 'hi' : n >= 3 ? 'mid' : 'lo';
+const ppTone = n => n == null ? '' : n >= 5 ? 'top' : n >= 4 ? 'hi' : n > 2.5 ? 'mid' : 'lo';
 const ppBs = n => String(Math.round(Number(n) * 100) / 100);
 // His ranking for a player in a post: a Top list wins over the hobby rank (same ranking, different label).
 const ppRank = x => { const r = x.ranks || {}; return r['top 200 hitters'] ?? r['top 100 pitchers'] ?? r['hobby rank'] ?? null; };

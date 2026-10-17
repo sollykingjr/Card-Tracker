@@ -5,7 +5,7 @@ const PH_CACHE_KEY = 'phCurrentCache';
 const phMoney = c => c == null ? '' : '$' + (c / 100).toFixed(c % 100 ? 2 : 0);
 const phDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? `${+m[2]}/${+m[3]}/${m[1].slice(2)}` : ''; };
 // Green / yellow / red by the score itself.
-const phTone = n => n == null ? '' : n >= 4.5 ? 'hi' : n >= 3 ? 'mid' : 'lo';
+const phTone = n => n == null ? '' : n >= 5 ? 'top' : n >= 4 ? 'hi' : n > 2.5 ? 'mid' : 'lo';
 const phBs = n => String(Math.round(Number(n) * 100) / 100);
 
 function phCache() {
