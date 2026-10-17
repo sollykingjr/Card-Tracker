@@ -53,7 +53,13 @@ function renderProspectPortfolio() {
   listEl.classList.remove('grid-2');
   document.getElementById('cntlbl').textContent = '';
   if (!phData) { listEl.innerHTML = '<div class="spin"><div class="spin-ring"></div>Loading portfolio…</div>'; phLoad(); return; }
-  const { holdings, sold } = pfBuild();
+  let { holdings, sold } = pfBuild();
+  const ql = (typeof q === 'string' ? q : '').trim().toLowerCase();
+  if (ql) {   // top search box narrows the whole tab to matching players
+    const hit = t => String(t || '').toLowerCase().includes(ql);
+    holdings = holdings.filter(h => hit(h.row.name) || hit(h.row.team));
+    sold = sold.filter(c => hit(c.player) || hit(c.playerDisplay) || hit(c.fullCard));
+  }
   phLoadHist(holdings.map(h => h.row.prospect_id));
   const owned = holdings.reduce((n, h) => n + h.cards.length, 0), invested = holdings.reduce((s, h) => s + h.cost, 0);
   const evCost = holdings.reduce((s, h) => s + h.evCost, 0), ev = holdings.reduce((s, h) => s + h.ev, 0), evPct = evCost > 0 ? (ev - evCost) / evCost * 100 : null;
