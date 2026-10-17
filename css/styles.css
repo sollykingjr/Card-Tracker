@@ -1808,17 +1808,33 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-m-grad.on { background: var(--surf2); color: var(--tx); }
 .ph-m-tilesub { font-size: 10px; color: var(--tx3); margin-top: 3px; line-height: 1.35; }
 .ph-t-hi { color: var(--b5-tx); } .ph-t-mid { color: var(--b35-tx); } .ph-t-lo { color: var(--dn); }
-.ph-m-hot { font-size: 12px; color: var(--tx2); margin: 0 2px 10px; }
-.ph-m-hot b { color: var(--tx); font-weight: 600; margin-right: 4px; }
 .ph-m-entry { font-size: 12px; color: var(--tx3); }
 .ph-m-entry b { font-size: 20px; font-weight: 700; margin-right: 6px; font-family: 'DM Mono', monospace; }
 .ph-m-entry.up b { color: var(--up); } .ph-m-entry.down b { color: var(--dn); }
 .ph-m-note { padding: 9px 0; border-top: .5px solid var(--bdr2); }
 .ph-m-note:first-of-type { border-top: 0; }
-.ph-m-notehead { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--tx3); margin-bottom: 3px; }
+.ph-m-notehead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 14px; font-weight: 600; color: var(--tx); margin-bottom: 4px; }
+.ph-m-notehead b { font-weight: 700; }
+.ph-m-notehead span { font-weight: 500; color: var(--tx2); }
 .ph-m-notetext { font-size: 13px; line-height: 1.55; color: var(--tx); white-space: pre-wrap; }
 .ph-m-note details { margin-top: 6px; } .ph-m-note summary { font-size: 11px; color: var(--tx3); cursor: pointer; }
 .ph-m-more { margin-top: 6px; padding: 8px; width: 100%; border: .5px solid var(--bdr2); border-radius: 8px; background: var(--surf); color: var(--acc); font-size: 13px; font-family: inherit; cursor: pointer; }
 .ph-m-chart { margin-bottom: 9px; }
-.ph-m-chart svg { width: 100%; height: 72px; display: block; margin-top: 6px; }
-.ph-m-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--tx3); margin-top: 4px; font-family: 'DM Mono', monospace; }
+.ph-m-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 9px; }
+@media (min-width: 560px) { .ph-m-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ph-m-tiles .scard { text-align: left; }
+.ph-m-read { min-height: 18px; font-size: 13px; color: var(--tx2); margin: 4px 0 2px; }
+.ph-m-read b { color: var(--tx); font-weight: 700; }
+#ph-chart { width: 100%; height: auto; display: block; touch-action: pan-y; cursor: crosshair; }
+.ph-c-grid { stroke: var(--bdr2); stroke-width: .5; stroke-dasharray: 2 3; }
+.ph-c-lbl { font-size: 9px; fill: var(--tx3); font-family: 'DM Mono', monospace; }
+.ph-c-line { fill: none; stroke: var(--acc); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ph-c-dot { fill: var(--acc); }
+.ph-c-val { font-size: 10px; font-weight: 700; fill: var(--tx); font-family: 'DM Mono', monospace; }
+.ph-c-s.t-hi { fill: var(--b5-tx); } .ph-c-s.t-mid { fill: var(--b35-tx); } .ph-c-s.t-lo { fill: var(--dn); }
+.ph-c-val.t-hi { fill: var(--b5-tx); } .ph-c-val.t-mid { fill: var(--b35-tx); } .ph-c-val.t-lo { fill: var(--dn); }
+.ph-c-guide { stroke: var(--tx3); stroke-width: 1; }
+.ph-h-row { display: grid; grid-template-columns: 1.1fr .8fr 1fr 1fr; gap: 6px; padding: 7px 0; border-top: .5px solid var(--bdr2); font-size: 13px; font-family: 'DM Mono', monospace; color: var(--tx); }
+.ph-h-row:first-of-type { border-top: 0; }
+.ph-h-head { font-size: 11px; color: var(--tx3); font-family: inherit; }
+.ph-h-s { font-weight: 700; }
