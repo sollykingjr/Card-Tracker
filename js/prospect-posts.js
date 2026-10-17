@@ -73,8 +73,8 @@ async function ppOpen(id) {
   const rest = all.filter(x => !asRanking || ppRank(x) == null).sort((a, b) => (b.buy ?? -1) - (a.buy ?? -1) || String(a.name).localeCompare(b.name));
   ppCur = [...(asRanking ? ranked : []), ...rest];
   const split = (rows, base, mk, limit) => `${rows.slice(0, limit).map((x, k) => mk(x, base + k)).join('')}${rows.length > limit ? `<div id="po-more-${base}" style="display:none">${rows.slice(limit).map((x, k) => mk(x, base + limit + k)).join('')}</div><button class="ph-m-more" onclick="ppMore('po-more-${base}',this)">Show ${rows.length - limit} more</button>` : ''}`;
-  const rankBlock = asRanking ? `<div class="srow"><div class="srow-t">Rankings</div><div class="po-rk po-rk-head"><span class="po-rk-n">#</span><span class="po-rk-name">Player</span><span class="po-rk-bs">Score</span><span class="po-rk-p">Price</span></div>${split(ranked, 0, ppRankRow, 25)}</div>` : '';
-  const restBlock = rest.length ? `<div class="srow"><div class="srow-t">${asRanking ? 'Not on the list' : 'Players, highest Buy Score first'}</div>${split(rest, asRanking ? ranked.length : 0, ppPlayerRow, 40)}</div>` : '';
+  const rankBlock = asRanking ? `<div class="srow"><div class="srow-t">Rankings</div><div class="po-rk po-rk-head"><span class="po-rk-n">#</span><span class="po-rk-name">Player</span><span class="po-rk-bs">Score</span><span class="po-rk-p">Price</span></div>${split(ranked, 0, ppRankRow, 100000)}</div>` : '';
+  const restBlock = rest.length ? `<div class="srow"><div class="srow-t">${asRanking ? 'Not on the list' : 'Players, highest Buy Score first'}</div>${split(rest, asRanking ? ranked.length : 0, ppPlayerRow, 100000)}</div>` : '';
   mc.innerHTML = `
     <div class="mname">${pibEsc(p.title || 'Untitled')}</div>
     <div class="msub">${ppDate(p.published_at)} · ${pibEsc(ppType(p.post_type))} · ${all.length} players</div>
