@@ -121,6 +121,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   t.classList.add('on');
   tab = t.dataset.t;
   sortBy = 'default';
+  q = ''; document.getElementById('search').value = ''; document.getElementById('clear').classList.remove('on');   // each tab starts with a clean search
   window.scrollTo(0, 0);
   render();
 });

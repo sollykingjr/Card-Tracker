@@ -202,7 +202,8 @@ function renderHotSheet() {
 function render() {
   if(section==='searchbuilder') return;
   const isInbox=tab==='inbox', isPosts=tab==='posts';
-  document.getElementById('hdr').style.display = (isInbox||isPosts) ? 'none' : '';   // no player search on the Inbox / Posts
+  document.getElementById('hdr').style.display = isInbox ? 'none' : '';   // no search on the Inbox
+  document.getElementById('search').placeholder = isPosts ? 'Search posts or players...' : tab==='port' ? 'Search your players...' : 'Search player or team...';
   if(isInbox){ renderProspectInbox(); return; }
   if(isPosts){ renderSortChips(); renderPostsView(); return; }
   if(tab==='all'){ renderSortChips(); renderProspectHome(); return; }
