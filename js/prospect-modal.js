@@ -16,25 +16,28 @@ function phHistoryRows(m) {
 function phChart(rows) {
   const pr = rows.filter(r => r.price != null), sc = rows.filter(r => r.score != null);
   if (rows.length < 2) return `<div class="srow ph-m-chart"><div class="srow-t">History</div><div class="intake-meta" style="margin:4px 0 0">Not enough history yet</div></div>`;
-  const W = 320, H = 196, L = 44, R = 12, t0 = phTime(rows[0].date), t1 = phTime(rows[rows.length - 1].date), sp = (t1 - t0) || 1;
+  const W = 320, H = 240, L = 44, R = 12, t0 = phTime(rows[0].date), t1 = phTime(rows[rows.length - 1].date), sp = (t1 - t0) || 1;
   const X = d => L + (phTime(d) - t0) / sp * (W - L - R);
-  const sy = v => 52 - (Math.min(5, Math.max(1, v)) - 1) / 4 * 38;                      // score lane 1..5 -> y 52..14
+  const sv = sc.map(r => r.score), slo = Math.min(...sv), shi = Math.max(...sv), sspan = Math.max(shi - slo, 1), smid = (slo + shi) / 2;
+  const sy = v => 78 - ((v - (smid - sspan / 2)) / sspan) * 56;                          // score lane, scaled to his range for this player -> y 78..22
   const pv = pr.map(r => r.price), lo = Math.min(...pv), hi = Math.max(...pv), pad = (hi - lo) * 0.08 || hi * 0.1 || 1;
-  const a = lo - pad, b = hi + pad, py = v => 168 - (v - a) / (b - a) * 90;              // price lane -> y 168..78
+  const a = lo - pad, b = hi + pad, py = v => 218 - (v - a) / (b - a) * 90;              // price lane -> y 218..128
   const ticks = [lo, (lo + hi) / 2, hi];
   const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${py(v).toFixed(1)}" y2="${py(v).toFixed(1)}" class="ph-c-grid"/><text x="${L - 6}" y="${(py(v) + 3).toFixed(1)}" text-anchor="end" class="ph-c-lbl">${phMoney(Math.round(v))}</text>`).join('');
   const line = pr.length > 1 ? `<polyline class="ph-c-line" points="${pr.map(r => X(r.date).toFixed(1) + ',' + py(r.price).toFixed(1)).join(' ')}"/>` : '';
   const dots = pr.map(r => `<circle cx="${X(r.date).toFixed(1)}" cy="${py(r.price).toFixed(1)}" r="2.4" class="ph-c-dot"/>`).join('');
   const lastP = pr[pr.length - 1];
   const endLbl = lastP ? `<circle cx="${X(lastP.date).toFixed(1)}" cy="${py(lastP.price).toFixed(1)}" r="4" class="ph-c-dot"/><text x="${Math.min(W - R, X(lastP.date)).toFixed(1)}" y="${(py(lastP.price) - 8).toFixed(1)}" text-anchor="end" class="ph-c-val">${phMoney(lastP.price)}</text>` : '';
-  const scores = sc.map(r => `<circle cx="${X(r.date).toFixed(1)}" cy="${sy(r.score).toFixed(1)}" r="5" class="ph-c-s t-${phTone(r.score)}"/><text x="${X(r.date).toFixed(1)}" y="${(sy(r.score) - 8).toFixed(1)}" text-anchor="middle" class="ph-c-val t-${phTone(r.score)}">${phBs(r.score)}</text>`).join('');
+  const hiI = sc.findIndex(r => r.score === shi), loI = sc.findIndex(r => r.score === slo);
+  const labeled = new Set([0, sc.length - 1, hiI, loI]);   // only the first, latest, highest and lowest get a number; the rest are in the tap readout and the table
+  const scores = sc.map((r, i) => `<circle cx="${X(r.date).toFixed(1)}" cy="${sy(r.score).toFixed(1)}" r="5" class="ph-c-s t-${phTone(r.score)}"/>${labeled.has(i) ? `<text x="${Math.min(W - R, Math.max(L, X(r.date))).toFixed(1)}" y="${(sy(r.score) - 9).toFixed(1)}" text-anchor="middle" class="ph-c-val t-${phTone(r.score)}">${phBs(r.score)}</text>` : ''}`).join('');
   const mid = rows[Math.floor(rows.length / 2)].date;
   const axis = [[rows[0].date, 'start'], [mid, 'middle'], [rows[rows.length - 1].date, 'end']].map(([d, an]) => `<text x="${X(d).toFixed(1)}" y="${H - 4}" text-anchor="${an}" class="ph-c-lbl">${phDate(d)}</text>`).join('');
   phChartRows = rows.map(r => ({ ...r, x: X(r.date) }));
   return `<div class="srow ph-m-chart"><div class="srow-t">History</div>
     <div class="ph-m-read" id="ph-read">Tap the chart to read a date</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Buy Score and base auto price over time" id="ph-chart">
-      <text x="${L}" y="9" class="ph-c-lbl">Buy Score</text><text x="${L}" y="${68}" class="ph-c-lbl">Base auto price</text>
+      <text x="${L}" y="9" class="ph-c-lbl">Buy Score</text><text x="${L}" y="116" class="ph-c-lbl">Base auto price</text>
       ${grid}${line}${dots}${scores}${endLbl}${axis}<line id="ph-guide" x1="0" x2="0" y1="10" y2="${H - 14}" class="ph-c-guide" style="display:none"/></svg></div>`;
 }
 function phChartPoint(e) {
