@@ -716,7 +716,19 @@ export async function listPosts(env) {
       (SELECT COUNT(*) FROM prospect_takes t WHERE t.post_id = p.post_id) takes,
       (SELECT COUNT(DISTINCT prospect_id) FROM (SELECT prospect_id FROM prospect_prices WHERE post_id = p.post_id UNION SELECT prospect_id FROM prospect_rankings WHERE post_id = p.post_id UNION SELECT prospect_id FROM prospect_takes WHERE post_id = p.post_id)) players
     FROM prospect_posts p WHERE p.status = 'confirmed' ORDER BY p.published_at DESC, p.created_at DESC`).all();
-  return { posts: results };
+  // Standouts for each post card: the four highest Buy Scores (with that post's price) and, for ranking posts, the top three ranks.
+  const posts = new Map(results.map(r => [r.post_id, { ...r, top: [], top_ranked: [] }]));
+  const all = async sql => (await env.DB.prepare(sql).all()).results;
+  const scores = await all(`SELECT s.post_id, s.prospect_id, s.buy_rating, p.name FROM prospect_snapshots s JOIN prospects p USING (prospect_id) WHERE s.buy_rating IS NOT NULL AND s.post_id IN (SELECT post_id FROM prospect_posts WHERE status = 'confirmed')`);
+  const prices = new Map((await all(`SELECT post_id, prospect_id, MAX(dated) d, base_auto_cents FROM prospect_prices WHERE base_auto_cents IS NOT NULL GROUP BY post_id, prospect_id`)).map(r => [r.post_id + '|' + r.prospect_id, r.base_auto_cents]));
+  for (const r of scores) { const po = posts.get(r.post_id); if (po) po.top.push({ name: r.name, buy: r.buy_rating, price_c: prices.get(r.post_id + '|' + r.prospect_id) ?? null }); }
+  const ranks = await all(`SELECT r.post_id, r.prospect_id, r.list_name, r.rank, p.name FROM prospect_rankings r JOIN prospects p USING (prospect_id) WHERE r.list_name IN ('top 200 hitters', 'top 100 pitchers') AND r.rank <= 5 AND r.post_id IN (SELECT post_id FROM prospect_posts WHERE status = 'confirmed')`);
+  for (const r of ranks) { const po = posts.get(r.post_id); if (po) po.top_ranked.push({ name: r.name, rank: r.rank, list: r.list_name }); }
+  for (const po of posts.values()) {
+    po.top = po.top.sort((a, b) => b.buy - a.buy || (b.price_c ?? -1) - (a.price_c ?? -1)).slice(0, 4);
+    po.top_ranked = po.top_ranked.sort((a, b) => a.rank - b.rank).slice(0, 3);
+  }
+  return { posts: [...posts.values()] };
 }
 
 // One post: summary, the original text (kept for real posts), every player's take and numbers.

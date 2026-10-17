@@ -256,6 +256,8 @@ await t('app export, posts list and post detail (sheet-shaped arrays for the exi
   assert.deepEqual(ex.buyScores.map(r => [r.name, r.rank, r.score, r.notes, r.expectedValue]), [['Kade Anderson', 1, 4.5, 'Strong Buy', '150']]);
   assert.equal(ex.top200.length, 0);
   const lp = await listPosts(env);
+  assert.deepEqual(lp.posts.find(p => p.post_id === 'bs').top.map(x => [x.name, x.buy, x.price_c]), [['Kade Anderson', 4.5, 12800]]);   // standouts for the post card
+  assert.deepEqual(lp.posts.find(p => p.post_id === 'pa').top_ranked, []);
   assert.deepEqual(lp.posts.map(p => p.title), ['Buy Score · 2026-05-31', 'Hot Sheet · 2026-04-14', 'Players All · 2026-03-12']);   // newest first, pending excluded
   assert.equal(lp.posts[2].takes, 1); assert.equal(lp.posts[2].players, 1);
   const pd = await postDetail(env, 'hs');
@@ -590,6 +592,8 @@ await t('hot sheet counts: times on the sheet and straight weeks, by the player\
   const { hot } = await listHotSheet(env);
   assert.deepEqual(hot.h1, [3, 3, '2026-09-15']); assert.deepEqual(hot.h2, [2, 1, '2026-09-15']);   // the Hot & Cold post does not count
   assert.deepEqual(hot.pt1, [1, 0, '2026-09-02']); assert.deepEqual(hot.pt2, [2, 2, '2026-09-09']);   // pitchers are measured against pitcher sheets only
+  raw.exec(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('hs1','h1','top 200 hitters',2,'2026-09-01'),('hs1','h2','top 200 hitters',1,'2026-09-01')`);
+  assert.deepEqual((await listPosts(env)).posts.find(p => p.post_id === 'hs1').top_ranked.map(x => [x.name, x.rank]), [['H Two', 1], ['H One', 2]]);   // ranking posts show their top ranks
 });
 
 console.log(`\n${passed} tests passed`);

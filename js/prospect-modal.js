@@ -117,7 +117,7 @@ function phModalHtml(name, row, m, owned, hot) {
     ${m ? phChart(phHistoryRows(m)) + phHistoryTable(phHistoryRows(m)) : ''}`;
 }
 
-async function phShowModal(name) {
+async function phShowModal(name, backHtml) {
   const mc = document.getElementById('mcontent');
   mc.innerHTML = '<div class="spin"><div class="spin-ring"></div>Loading…</div>';
   document.getElementById('mwrap').classList.add('on');
@@ -127,14 +127,14 @@ async function phShowModal(name) {
   if (d.error) { mc.innerHTML = `<div class="err">${pibEsc(d.error)}</div>`; return; }
   if (!phHot && h && h.hot) phHot = h.hot;
   const m = d.found ? (d.matches.find(x => row && x.prospect.prospect_id === row.prospect_id) || d.matches[0]) : null;
-  phModal = { name, row, m };
+  phModal = { name, row, m, back: backHtml || '' };
   phDrawModal();
 }
 
 function phDrawModal() {
-  const { name, row, m } = phModal;
+  const { name, row, m, back } = phModal;
   const owned = phOwnedMap();
-  const html = phModalHtml(name, row, m, owned, row && phHot ? phHot[row.prospect_id] : null);
+  const html = (back ? '<button class="ph-m-back" onclick="phBack()">← Back</button>' : '') + phModalHtml(name, row, m, owned, row && phHot ? phHot[row.prospect_id] : null);
   _modalMainHtml = html; _modalCurrentPlayer = name;
   document.getElementById('mcontent').innerHTML = html;
   // Card details and sold history come from the older card cache; add them once it is ready.
@@ -155,3 +155,5 @@ async function phToggleGrad() {
   phDrawModal();
   if (section === 'prospects' && tab === 'all') renderProspectHome();
 }
+
+function phBack() { if (phModal && phModal.back) { document.getElementById('mcontent').innerHTML = phModal.back; _modalMainHtml = phModal.back; } }
