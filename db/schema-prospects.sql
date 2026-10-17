@@ -40,7 +40,6 @@ CREATE TABLE IF NOT EXISTS prospect_takes (
   stance TEXT,                           -- buy | hold | sell | watch | avoid | none
   summary TEXT,                          -- short summary written by the model
   analysis TEXT,                         -- his own words about the player, copied from the post (or the original note for imported rows)
-  key_points TEXT,                       -- JSON array of short strings
   post_rank INTEGER,                     -- position within that post's list, if it had one
   dated TEXT
 );

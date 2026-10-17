@@ -436,9 +436,8 @@ function pnToggleRow(label, text, dated, sub) {
 }
 function pnItemHtml(t) {
   const stance = t.stance && t.stance !== 'none' ? ` <span class="pib-badge stance">${pibEsc(t.stance)}</span>` : '';
-  const kp = (t.key_points || []).length ? `<ul class="intake-list">${t.key_points.map(k => `<li>${pibEsc(k)}</li>`).join('')}</ul>` : '';
   return `<details style="padding:8px 0;border-top:.5px solid var(--bdr2)"><summary style="cursor:pointer;font-size:12px"><b>${pnDate(t.dated)}</b> <span style="color:var(--tx3)">${pibEsc(t.title || '')}</span>${stance}</summary>
-    ${t.summary ? `<div style="font-size:13px;line-height:1.5;margin-top:6px;white-space:pre-wrap"><b>Summary</b><br>${pibEsc(t.summary)}</div>` : ''}${kp}
+    ${t.summary ? `<div style="font-size:13px;line-height:1.5;margin-top:6px;white-space:pre-wrap"><b>Summary</b><br>${pibEsc(t.summary)}</div>` : ''}
     ${t.analysis ? `<div style="font-size:13px;line-height:1.55;margin-top:6px;white-space:pre-wrap"><b>Note</b><br>${pibEsc(t.analysis)}</div>` : ''}</details>`;
 }
 async function pnFetch(name, offset) {

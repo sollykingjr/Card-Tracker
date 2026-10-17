@@ -31,13 +31,13 @@ const BOUNCE_BACK = {
   players: [
     { name: 'Ramiro Dominguez', team: 'MIN', side: 'hitter', age: 19.5, post_rank: 5, rankings: [{ list: 'hobby hitters', rank: 180 }],
       prices: [{ date: '2026-10-14', base_auto: 4.21 }],
-      take: { stance: 'buy', summary: 'Elite pull-air rate and strong contact; power should come as he gets stronger.', key_points: ['PullAir% 93rd percentile', 'Pull% ranked #1 of 132 teens'] } },
+      take: { stance: 'buy', summary: 'Elite pull-air rate and strong contact; power should come as he gets stronger.' } },
     { name: 'Handelfry Encarnacion', team: 'MIL', side: 'hitter', age: 19.3, post_rank: 2, rankings: [{ list: 'hobby hitters', rank: 137 }],
       prices: [{ date: '2026-10-14', base_auto: 10.10 }],
-      take: { stance: 'buy', summary: 'Well-rounded, advanced zone feel; hype faded so the price dipped.', key_points: ['Only teen with K% under 20 and 10 HR/25 SB'] } },
+      take: { stance: 'buy', summary: 'Well-rounded, advanced zone feel; hype faded so the price dipped.' } },
     { name: 'Devin Fitz-Gerald', team: 'WAS', side: 'hitter', age: 21.2, post_rank: 1, rankings: [{ list: 'hobby hitters', rank: 53 }],
       prices: [{ date: '2026-10-14', base_auto: 15.79 }],
-      take: { stance: 'buy', summary: 'Promoted aggressively and struggled; finished strong. Price never recovered.', key_points: ['61 games above rookie ball at promotion'] } }
+      take: { stance: 'buy', summary: 'Promoted aggressively and struggled; finished strong. Price never recovered.' } }
   ]
 };
 const AFL = {
@@ -46,10 +46,10 @@ const AFL = {
   players: [
     { name: 'Jhonny Severino', team: 'PIT', side: 'hitter', age: 21.9, rankings: [{ list: 'hobby hitters', rank: 228 }],
       prices: [{ date: '2026-10-12', base_auto: 25.93 }, { date: '2026-10-03', base_auto: 5.41 }],
-      take: { stance: 'watch', summary: 'Price up nearly 400% in ten days with no clear catalyst.', key_points: [] } },
+      take: { stance: 'watch', summary: 'Price up nearly 400% in ten days with no clear catalyst.' } },
     { name: 'Caleb Bonemer', team: 'CHW', side: 'hitter', age: 21.0, rankings: [{ list: 'hobby hitters', rank: 7 }],
       prices: [{ date: '2026-10-12', base_auto: 66.20, expected: 107.80 }, { date: '2026-10-03', base_auto: 70.17 }],
-      take: { stance: 'buy', summary: 'Hitting over 1.000 OPS yet price fell; already a buy.', key_points: ['Expected value $107.80'] } },
+      take: { stance: 'buy', summary: 'Hitting over 1.000 OPS yet price fell; already a buy.' } },
     { name: 'Jarlin Susana', team: 'WAS', side: 'pitcher', age: 22.6, rankings: [{ list: 'hobby pitchers', rank: 3 }],
       prices: [{ date: '2026-10-12', base_auto: 57.86 }, { date: '2026-10-03', base_auto: 45.39 }] }
   ]
@@ -151,7 +151,6 @@ await t('pending list flags new players; confirm writes every table', async () =
   const d = await prospectDetail(env, 'ramiro dominguez');
   assert.equal(d.matches[0].prospect.org, 'MIN');
   assert.equal(d.matches[0].prices[0].base_auto_cents, 421);
-  assert.equal(d.matches[0].takes[0].key_points[0], 'PullAir% 93rd percentile');
 });
 
 await t('buy rating, action, level, age and expected-only rows are kept (Top 100 style table)', async () => {
@@ -175,7 +174,7 @@ await t('second post matches existing players (no duplicates) and builds a price
   const env = { DB: makeDb() };
   const first = await submitPost(env, { text: POST_TEXT, publishedAt: '2026-10-14', extractor: fakeExtractor(BOUNCE_BACK) });
   await confirmPost(env, first.postId);
-  const withFitz = { ...AFL, players: [...AFL.players, { name: 'Devin Fitz-Gerald', team: 'WAS', take: { stance: 'hold', summary: 'Quiet AFL.', key_points: [] } }] };
+  const withFitz = { ...AFL, players: [...AFL.players, { name: 'Devin Fitz-Gerald', team: 'WAS', take: { stance: 'hold', summary: 'Quiet AFL.' } }] };
   const second = await submitPost(env, { text: POST_TEXT + ' second post body, different text', publishedAt: '2026-10-13', extractor: fakeExtractor(withFitz) });
   const pend = await listPendingPosts(env);
   assert.equal(pend.posts[0].matches.find(m => m.name === 'Devin Fitz-Gerald').status, 'existing');
@@ -244,7 +243,7 @@ await t('app export, posts list and post detail (sheet-shaped arrays for the exi
       ('hs','prospect-master-sheet','Hot Sheet · 2026-04-14','hot_sheet','2026-04-14','x','confirmed','Imported 1'),
       ('bs','prospect-master-sheet','Buy Score · 2026-05-31','rankings','2026-05-31','x','confirmed','Imported 1'),
       ('pend','prospect-analytics','Pending one','analysis','2026-10-01','x','pending','nope');
-    INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, key_points, dated) VALUES ('pa','dax-kilby','none','Long baseline note','[]','2026-03-12');
+    INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, dated) VALUES ('pa','dax-kilby','none','Long baseline note','2026-03-12');
     INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('pa','dax-kilby','hobby rank',20,'2026-03-12'),('pa','dax-kilby','MLB',4,'2026-03-12'),('hs','dax-kilby','hobby rank',44,'2026-04-14'),('bs','kade-anderson','top 100 pitchers',1,'2026-05-31');
     INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES ('pa','dax-kilby','2026-03-12',8400,NULL),('hs','dax-kilby','2026-04-14',8453,5320),('bs','kade-anderson','2026-05-31',12800,15000);
     INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES ('pa','dax-kilby','2026-03-12','NYY',19.3,NULL,4,NULL),('hs','dax-kilby','2026-04-14','NYY',19.4,'A+',2.3,NULL),('bs','kade-anderson','2026-05-31','SEA',21.8,NULL,4.5,'Strong Buy');`);
@@ -467,7 +466,7 @@ await t('buy/sell tag comes only from the table (buy rating / action), never fro
 await t('his full analysis is saved apart from the summary and reaches the export; imported notes count as analysis', async () => {
   const env = { DB: makeDb() };
   const ex = { title: 'Pitcher Rankings', post_type: 'analysis', summary: 's', published_date: '2026-10-16', players: [
-    { name: 'Argenis Cayama', side: 'pitcher', rankings: [{ list: 'hobby rank', rank: 52 }], take: { stance: 'none', summary: 'Author is very high on him.', analysis: 'Para one.\n\nPara two, word for word.', key_points: [] } }] };
+    { name: 'Argenis Cayama', side: 'pitcher', rankings: [{ list: 'hobby rank', rank: 52 }], take: { stance: 'none', summary: 'Author is very high on him.', analysis: 'Para one.\n\nPara two, word for word.' } }] };
   const { postId } = await submitPost(env, { text: POST_TEXT + ' analysis', extractor: async () => ({ extraction: sanitizeExtraction(ex), model: 'fake' }) });
   assert.equal((await listPendingPosts(env)).posts[0].extraction.players[0].take.analysis, 'Para one.\n\nPara two, word for word.');
   await confirmPost(env, postId);

@@ -72,8 +72,7 @@ const EXTRACT_TOOL = {
               properties: {
                 stance: { type: 'string', enum: STANCES },
                 summary: { type: 'string', description: '1-3 sentences in your own words: what he thinks and why' },
-                analysis: { type: 'string', description: "His full written analysis of this player copied WORD FOR WORD from the post: every paragraph about the player, in order, separated by blank lines. Do not paraphrase, shorten or fix it. Leave out the data header (throws, hobby rank, signing bonus, scouting grades, stat line) and anything about other players." },
-                key_points: { type: 'array', items: { type: 'string' }, description: 'Short, specific points he cites (stats, context, risks)' }
+                analysis: { type: 'string', description: "His full written analysis of this player copied WORD FOR WORD from the post: every paragraph about the player, in order, separated by blank lines. Do not paraphrase, shorten or fix it. Leave out the data header (throws, hobby rank, signing bonus, scouting grades, stat line) and anything about other players." }
               }
             }
           }
@@ -97,7 +96,7 @@ Rules:
 - ONLY these ranks are ever recorded: his hobby rank (a column or line named Hobby / Hobby Rank / Hobby Ranking), the post's own list rank, and the known third-party lists MLB, DD, Roto, StS, BA, BP when they are a table column. Any other rank (an AFL table rank, a rank within a chart, a plain unlabeled "Rank" in a table of another kind) is NOT recorded.
 - A rank column that sits beside a dated price column ("9/17 Rank", "9/24 Rank") is the player's rank by price that week, not a ranking list: do not record it as a ranking.
 - Third-party rank columns (MLB, DD, Roto, StS, BA, etc.) are rankings too, but ONLY when they are a column in a table or the post is itself a ranking update from that source: one ranking entry per column, list named as the header. NEVER record a ranking that is only mentioned inside the writing ("ranked 22nd in the org by MLB Pipeline", "top 100 on Baseball America"): that stays in the analysis text and is not a ranking entry. "Hobby Ranking: 273" printed for a player IS his hobby rank (list "hobby rank").
-- Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats only appear in a take's key_points when the author cites them as part of his argument.
+- Do NOT extract performance stats (OPS, PA, HR, wRC+, ERA, etc.) as data. Stats stay inside the analysis text when the author cites them as part of his argument.
 - The analysis matters most: for every player the author discusses, fill "take" with a short faithful summary in your own words, plus the specific points he cites. Do not copy long passages.
 - Players only listed in a table (no commentary) get data but no take.
 - Put each player in the list once, merging data from the text and from tables.
@@ -161,8 +160,7 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
     const take = p.take && String(p.take.summary || '').trim() ? {
       stance: STANCES.includes(p.take.stance) ? p.take.stance : 'none',
       summary: String(p.take.summary).trim(),
-      analysis: p.take.analysis && String(p.take.analysis).trim() ? String(p.take.analysis).trim() : null,
-      key_points: (Array.isArray(p.take.key_points) ? p.take.key_points : []).map(x => String(x).trim()).filter(Boolean).slice(0, 12)
+      analysis: p.take.analysis && String(p.take.analysis).trim() ? String(p.take.analysis).trim() : null
     } : null;
     return {
       name: String(p.name).trim(),
@@ -546,8 +544,8 @@ export async function confirmPost(env, postId, edited = null) {
   for (const p of ex.players) {
     const pid = await resolveProspect(env, p, dated);
     counts.prospects++;
-    if (p.take) { stmts.push(prep(`INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, analysis, key_points, post_rank, dated) VALUES (?,?,?,?,?,?,?,?)`,
-      postId, pid, p.take.stance, p.take.summary, p.take.analysis, JSON.stringify(p.take.key_points), p.post_rank, dated)); counts.takes++; }
+    if (p.take) { stmts.push(prep(`INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, analysis, post_rank, dated) VALUES (?,?,?,?,?,?,?)`,
+      postId, pid, p.take.stance, p.take.summary, p.take.analysis, p.post_rank, dated)); counts.takes++; }
     for (const r of p.rankings) { stmts.push(prep(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES (?,?,?,?,?)`,
       postId, pid, r.list, r.rank, dated)); counts.rankings++; }
     // One price row per player and date, whichever post it comes from: a repeat only fills in what is missing (e.g. the Expected value).
@@ -590,8 +588,7 @@ export async function prospectDetail(env, name) {
     const q = sql => env.DB.prepare(sql).bind(id).all().then(r => r.results);
     out.push({
       prospect: pr,
-      takes: (await q(`SELECT t.dated, t.stance, t.summary, t.analysis, t.key_points, t.post_rank, p.title, p.post_id FROM prospect_takes t JOIN prospect_posts p USING (post_id) WHERE t.prospect_id = ? ORDER BY t.dated DESC, t.id DESC`))
-        .map(t => ({ ...t, key_points: JSON.parse(t.key_points || '[]') })),
+      takes: (await q(`SELECT t.dated, t.stance, t.summary, t.analysis, t.post_rank, p.title, p.post_id FROM prospect_takes t JOIN prospect_posts p USING (post_id) WHERE t.prospect_id = ? ORDER BY t.dated DESC, t.id DESC`)),
       rankings: await q(`SELECT dated, list_name, rank FROM prospect_rankings WHERE prospect_id = ? ORDER BY dated DESC`),
       prices: await q(`SELECT dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ? ORDER BY dated DESC`),
       snapshots: await q(`SELECT dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE prospect_id = ? ORDER BY dated DESC`)
@@ -614,7 +611,7 @@ async function loadRows(env, postId = null) {
     all(`SELECT post_id, prospect_id, dated, base_auto_cents, expected_cents FROM prospect_prices WHERE ${inPosts}`, ...args),
     all(`SELECT post_id, prospect_id, list_name, rank, dated FROM prospect_rankings WHERE ${inPosts}`, ...args),
     all(`SELECT post_id, prospect_id, dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE ${inPosts}`, ...args),
-    all(`SELECT post_id, prospect_id, stance, summary, analysis, key_points, dated FROM prospect_takes WHERE ${inPosts}`, ...args)
+    all(`SELECT post_id, prospect_id, stance, summary, analysis, dated FROM prospect_takes WHERE ${inPosts}`, ...args)
   ]);
   const P = new Map(pros.map(p => [p.prospect_id, p])), PO = new Map(posts.map(p => [p.post_id, p]));
   const groups = new Map();
@@ -642,7 +639,7 @@ async function loadRows(env, postId = null) {
         price_c: e.base_auto_cents ?? null, expected_c: e.expected_cents ?? null,
         team: full && x.snap ? x.snap.team : null, age: full && x.snap ? x.snap.age : null, level: full && x.snap ? x.snap.level : null,
         buy: full && x.snap ? x.snap.buy_rating : null, action: full && x.snap ? x.snap.action : null,
-        ranks: full ? x.ranks : {}, take: full && x.take ? { stance: x.take.stance, summary: x.take.summary, analysis: x.take.analysis, key_points: JSON.parse(x.take.key_points || '[]') } : null
+        ranks: full ? x.ranks : {}, take: full && x.take ? { stance: x.take.stance, summary: x.take.summary, analysis: x.take.analysis } : null
       });
     }
   }
@@ -695,8 +692,8 @@ export async function playerTakes(env, name, offset = 0, limit = 3) {
   if (!found.length) return { found: false, total: 0, latest: { note: null, summary: null }, takes: [] };
   const ids = found.map(f => f.prospect_id), ph = ids.map(() => '?').join(',');
   const base = `FROM prospect_takes t JOIN prospect_posts p ON p.post_id = t.post_id WHERE p.status = 'confirmed' AND t.prospect_id IN (${ph})`;
-  const cols = `t.dated, t.stance, t.summary, t.analysis, t.key_points, p.title, p.post_id`;
-  const shape = t => ({ dated: t.dated, stance: t.stance, title: t.title, post_id: t.post_id, analysis: t.analysis, summary: t.summary, key_points: JSON.parse(t.key_points || '[]') });
+  const cols = `t.dated, t.stance, t.summary, t.analysis, p.title, p.post_id`;
+  const shape = t => ({ dated: t.dated, stance: t.stance, title: t.title, post_id: t.post_id, analysis: t.analysis, summary: t.summary });
   const one = async extra => { const r = await env.DB.prepare(`SELECT ${cols} ${base} ${extra} ORDER BY t.dated DESC, t.id DESC LIMIT 1`).bind(...ids).first(); return r ? shape(r) : null; };
   const total = (await env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...ids).first()).n;
   const lim = Math.min(Math.max(+limit || 3, 1), 10), off = Math.max(+offset || 0, 0);

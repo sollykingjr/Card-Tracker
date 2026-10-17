@@ -42,9 +42,8 @@ async function ppOpen(id) {
     const head = `<b>${pibEsc(x.name)}</b> <span class="intake-meta" style="margin:0">${pibEsc(x.team || '')}${x.dated && x.dated !== p.published_at ? ' · ' + ppDate(x.dated) : ''}</span>`;
     const meta = `${nums ? `<div class="intake-meta" style="margin:2px 0 0">${nums}</div>` : ''}${ranks ? `<div class="intake-meta" style="margin:2px 0 0">${ranks}</div>` : ''}`;
     if (!x.take) return `<div style="padding:7px 0;border-top:.5px solid var(--bdr2)">${head}${meta}</div>`;
-    const kp = (x.take.key_points || []).length ? `<ul class="intake-list">${x.take.key_points.map(k => `<li>${pibEsc(k)}</li>`).join('')}</ul>` : '';
     return `<details style="padding:7px 0;border-top:.5px solid var(--bdr2)"><summary style="cursor:pointer">${head}${x.take.stance && x.take.stance !== 'none' ? ` <span class="pib-badge stance">${pibEsc(x.take.stance)}</span>` : ''}${meta}</summary>
-      <div style="font-size:13px;line-height:1.5;margin-top:6px;white-space:pre-wrap">${pibEsc(x.take.summary || x.take.analysis)}</div>${kp}
+      <div style="font-size:13px;line-height:1.5;margin-top:6px;white-space:pre-wrap">${pibEsc(x.take.summary || x.take.analysis)}</div>
       ${x.take.summary && x.take.analysis ? `<details style="margin-top:6px"><summary class="intake-meta" style="cursor:pointer">His full analysis</summary><div style="font-size:13px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${pibEsc(x.take.analysis)}</div></details>` : ''}</details>`;
   };
   mc.innerHTML = `
