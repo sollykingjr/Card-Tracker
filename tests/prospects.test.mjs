@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { refreshCurrent, setGraduated, listCurrent } from '../worker/prospect-current.js';
+import { refreshCurrent, setGraduated, listCurrent, listPriceHistory } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
@@ -571,6 +571,9 @@ await t('current-state row: score with its own price and date, newest price and 
   await refreshCurrent(env);
   assert.equal((await listCurrent(env)).players.find(p => p.prospect_id === 'ann-a').graduated, 0);
   await assert.rejects(() => setGraduated(env, 'nobody', true));
+  const ph = await listPriceHistory(env, ['bob-b', 'eli-e', 'nobody']);   // base auto price history by player, oldest first
+  assert.deepEqual(ph.prices['bob-b'], [['2026-09-15', 2500], ['2026-09-22', 3100]]); assert.deepEqual(ph.prices['eli-e'], [['2026-10-01', 900]]); assert.equal(ph.prices.nobody, undefined);
+  assert.deepEqual(await listPriceHistory(env, []), { prices: {} });
 });
 
 console.log(`\n${passed} tests passed`);

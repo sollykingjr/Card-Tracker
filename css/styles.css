@@ -1769,9 +1769,12 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-row.up { border-left-color: var(--up); }
 .ph-row.down { border-left-color: var(--dn); }
 .ph-row:active { opacity: .7; }
-.ph-row-chg { flex: 0 0 52px; font-family: 'DM Mono', monospace; line-height: 1.1; }
-.ph-row-chg small { display: block; font-size: 11px; color: var(--tx3); text-decoration: line-through; }
-.ph-row-chg b { font-size: 22px; font-weight: 700; }
+.ph-row-chg { flex: 0 0 74px; font-family: 'DM Mono', monospace; line-height: 1.1; }
+.ph-row-chg small { display: block; font-size: 10px; color: var(--tx3); font-family: inherit; margin-top: 2px; }
+.ph-row-chg b { font-size: 20px; font-weight: 700; }
+.ph-row-line { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 3px; font-size: 12px; color: var(--tx2); font-family: 'DM Mono', monospace; }
+.ph-sc.up { color: var(--up); }
+.ph-sc.down { color: var(--dn); }
 .ph-row.up .ph-row-chg b { color: var(--up); }
 .ph-row.down .ph-row-chg b { color: var(--dn); }
 .ph-row-main { flex: 1; min-width: 0; }

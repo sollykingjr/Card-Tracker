@@ -61,6 +61,16 @@ export async function setGraduated(env, prospectId, value) {
   return { ok: true, graduated_manual: v };
 }
 
+// Base auto price history for a few players (the home uses it to compare today's price with the price when you bought).
+export async function listPriceHistory(env, ids) {
+  const list = [...new Set(ids)].filter(Boolean).slice(0, 200);
+  if (!list.length) return { prices: {} };
+  const { results } = await env.DB.prepare(`SELECT prospect_id, dated, base_auto_cents FROM prospect_prices WHERE base_auto_cents IS NOT NULL AND prospect_id IN (${list.map(() => '?').join(',')}) ORDER BY prospect_id, dated`).bind(...list).all();
+  const prices = {};
+  for (const r of results) (prices[r.prospect_id] ||= []).push([r.dated, r.base_auto_cents]);
+  return { prices };
+}
+
 export async function listCurrent(env) {
   const { results } = await env.DB.prepare(`SELECT c.*, p.name, COALESCE(c.graduated_manual, c.graduated_auto) AS graduated,
     (SELECT s.buy_rating FROM prospect_snapshots s WHERE s.prospect_id = c.prospect_id AND s.buy_rating IS NOT NULL AND s.dated < c.scored_dated ORDER BY s.dated DESC, s.id DESC LIMIT 1) AS prev_buy_rating,

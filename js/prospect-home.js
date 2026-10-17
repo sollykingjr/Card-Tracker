@@ -31,10 +31,31 @@ function phOwnedMap() {
   const m = new Map();
   (typeof cards !== 'undefined' ? cards : []).forEach(c => {
     if (c.salePrice) return;
-    const k = normName(c.player), o = m.get(k) || { n: 0, cost: 0 };
-    o.n++; o.cost += safeNum(c.purchasePrice); m.set(k, o);
+    const k = normName(c.player), o = m.get(k) || { n: 0, cost: 0, buys: [] };
+    o.n++; o.cost += safeNum(c.purchasePrice); o.buys.push({ t: parseDate(c.datePurchased), cost: safeNum(c.purchasePrice) }); m.set(k, o);
   });
   return m;
+}
+
+// His base auto price when you bought, averaged over your owned cards and weighted by what you paid for each.
+// Each card uses the newest price on or before its purchase date (the earliest known price if it was bought before his data starts).
+let phHist = {}, phHistAsked = new Set();
+function phEntryPrice(o, hist) {
+  if (!o || !hist || !hist.length) return null;
+  let sum = 0, w = 0, approx = false;
+  for (const b of o.buys) {
+    let pick = null;
+    for (const [d, c] of hist) { if (new Date(d + 'T12:00:00Z').getTime() <= b.t) pick = c; else break; }
+    if (pick == null) { pick = hist[0][1]; approx = true; }
+    const wt = b.cost > 0 ? b.cost : 1; sum += pick * wt; w += wt;
+  }
+  return w ? { cents: Math.round(sum / w), approx } : null;
+}
+async function phLoadHist(ids) {
+  const need = ids.filter(i => !phHistAsked.has(i)); if (!need.length) return;
+  need.forEach(i => phHistAsked.add(i));
+  try { const d = await pibCall('/prospect-price-history?ids=' + need.map(encodeURIComponent).join(',')); Object.assign(phHist, d.prices || {}); } catch (e) {}
+  if (section === 'prospects' && tab === 'all' && !q) renderProspectHome();
 }
 
 // Search results: the full card (score, price, expected value, rank, age, level).
@@ -71,13 +92,18 @@ function phTile(p, owned) {
   </div>`;
 }
 
-// Your players: plain rows, the change is the loudest thing and the edge is green or red.
+// Your players: the headline is how his base auto price moved since you bought (average entry), then his Buy Score move.
 function phRow(p, owned) {
-  const bs = Number(p.buy_rating), prev = Number(p.prev_buy_rating), up = bs > prev, o = owned.get(normName(p.name));
-  return `<div class="ph-row ${up ? 'up' : 'down'}" data-ph="${pibEsc(p.name)}">
-    <div class="ph-row-chg"><small>${phBs(prev)}</small><b>${phBs(bs)}</b></div>
-    <div class="ph-row-main"><div class="ph-row-name">${pibEsc(p.name)}</div><div class="ph-row-sub">${phWho(p)}${o ? ` · ${o.n} owned` : ''}</div>${p.note ? `<div class="ph-note">${pibEsc(p.note)}</div>` : ''}</div>
-    <div class="ph-row-price">${p.price_cents != null ? phMoney(p.price_cents) : ''}</div>
+  const bs = Number(p.buy_rating), prev = Number(p.prev_buy_rating), o = owned.get(normName(p.name));
+  const e = phEntryPrice(o, phHist[p.prospect_id]), now = p.price_cents;
+  const pct = e && now != null && e.cents > 0 ? Math.round((now - e.cents) / e.cents * 100) : null;
+  const dir = pct != null ? (pct >= 0 ? 'up' : 'down') : (bs > prev ? 'up' : 'down');
+  const sdir = bs > prev ? 'up' : 'down';
+  return `<div class="ph-row ${dir}" data-ph="${pibEsc(p.name)}">
+    <div class="ph-row-chg">${pct != null ? `<b>${pct > 0 ? '+' : ''}${pct}%</b><small>since you bought</small>` : `<b>${phBs(bs)}</b><small>was ${phBs(prev)}</small>`}</div>
+    <div class="ph-row-main"><div class="ph-row-name">${pibEsc(p.name)}</div><div class="ph-row-sub">${phWho(p)} · ${o.n} owned · $${o.cost.toFixed(0)} in</div>
+      <div class="ph-row-line">${e && now != null ? `<span>${e.approx ? '~' : ''}${phMoney(e.cents)} → ${phMoney(now)}</span>` : ''}<span class="ph-sc ${sdir}">score ${phBs(prev)} → ${phBs(bs)}</span></div>
+      ${p.note ? `<div class="ph-note">${pibEsc(p.note)}</div>` : ''}</div>
   </div>`;
 }
 
@@ -135,6 +161,7 @@ function renderProspectHome() {
   } else {
     const L = phHomeLists(phData, owned);
     const sec = (title, sub, inner) => inner ? `<section class="ph-s"><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}${inner}</section>` : '';
+    phLoadHist(L.mine.map(p => p.prospect_id));
     const withNote = p => ({ ...p, note: L.noteFor(p) });
     html = sec('Worth a look', 'Buy Score rose to 4 or higher on players you don\'t own', L.buys.length ? `<div class="ph-tiles">${L.buys.map(p => phTile(p, owned)).join('')}</div>` : '')
       + `<div class="ph-cols">`

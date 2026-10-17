@@ -1,6 +1,6 @@
 // ── prospects.js — prospect-analytics posts: paste/email in → Claude extracts → review → D1.
 // Nothing is written to the prospect tables until a post is confirmed. The full original text is always kept.
-import { refreshCurrent, setGraduated, listCurrent } from './prospect-current.js';
+import { refreshCurrent, setGraduated, listCurrent, listPriceHistory } from './prospect-current.js';
 const DEFAULT_MODEL = 'claude-haiku-5-5';   // one setting: switch to 'claude-sonnet-5-5' (env PROSPECT_MODEL) if screenshots misread
 const MAX_TEXT = 120000;
 
@@ -793,7 +793,7 @@ export async function submitEmail(env, b, deps = {}) {
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect-current', 'POST:/prospect-graduate', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect-current', 'GET:/prospect-price-history', 'POST:/prospect-graduate', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -814,6 +814,7 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-post': return out(await postDetail(env, url.searchParams.get('id') || ''));
       case '/prospect-takes': return out(await playerTakes(env, url.searchParams.get('name') || '', url.searchParams.get('offset'), url.searchParams.get('limit')));
       case '/prospect-current': return out(await listCurrent(env));
+      case '/prospect-price-history': return out(await listPriceHistory(env, (url.searchParams.get('ids') || '').split(',')));
       case '/prospect-graduate': { const b = await request.json(); return out(await setGraduated(env, b.prospect_id, b.graduated)); }
       case '/prospect': return out(await prospectDetail(env, url.searchParams.get('name') || ''));
     }
