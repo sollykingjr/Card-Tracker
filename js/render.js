@@ -480,7 +480,9 @@ async function pnShowAll() {
   } catch (e) { if (btn) btn.disabled = false; }
 }
 
-function showDetail(p, tp) {
+// Every player tap (Prospects home, Hot Sheet, Portfolio) opens the new modal; the old one is kept below until the rest is retired.
+function showDetail(p, tp) { return phShowModal(p.name); }
+function showDetailLegacy(p, tp) {
   const nm     = normName(p.name);
   const master = players.find(b=>normName(b.name)===nm);
   const d      = getResolved(p.name);

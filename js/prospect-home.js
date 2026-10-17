@@ -186,6 +186,9 @@ function phFitTiles() {
 window.addEventListener('resize', () => { if (section === 'prospects' && tab === 'all') phFitTiles(); });
 
 async function phOpen(name) {
+  return phShowModal(name);
+}
+async function phOpenLegacy(name) {
   if (prospectDataReady !== true) {
     document.getElementById('mcontent').innerHTML = '<div class="spin"><div class="spin-ring"></div>Loading…</div>';
     document.getElementById('mwrap').classList.add('on');

@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { refreshCurrent, setGraduated, listCurrent, listPriceHistory } from '../worker/prospect-current.js';
+import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
@@ -574,6 +574,22 @@ await t('current-state row: score with its own price and date, newest price and 
   const ph = await listPriceHistory(env, ['bob-b', 'eli-e', 'nobody']);   // base auto price history by player, oldest first
   assert.deepEqual(ph.prices['bob-b'], [['2026-09-15', 2500], ['2026-09-22', 3100]]); assert.deepEqual(ph.prices['eli-e'], [['2026-10-01', 900]]); assert.equal(ph.prices.nobody, undefined);
   assert.deepEqual(await listPriceHistory(env, []), { prices: {} });
+});
+
+await t('hot sheet counts: times on the sheet and straight weeks, by the player\'s own side; non-Hot-Sheet posts are ignored', async () => {
+  const env = { DB: makeDb() }, raw = env.DB._raw;
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('h1','H One','h one','hitter'),('h2','H Two','h two','hitter'),('pt1','P One','p one','pitcher'),('pt2','P Two','p two','pitcher');
+    INSERT INTO prospect_posts (post_id, title, post_type, published_at, raw_text, status) VALUES
+    ('hs1','Hitter Hot Sheet - Week 1','hot_sheet','2026-09-01','x','confirmed'),('hs2','Hitter Hot Sheet - Week 2','hot_sheet','2026-09-08','x','confirmed'),('hs3','Hitter Hot Sheet - Week 3','hot_sheet','2026-09-15','x','confirmed'),
+    ('ps1','Pitcher Hot Sheet - Week 1','hot_sheet','2026-09-02','x','confirmed'),('ps2','Pitcher Hot Sheet - Week 2','hot_sheet','2026-09-09','x','confirmed'),
+    ('hc','Fall League - Hot & Cold','hot_sheet','2026-09-20','x','confirmed');
+    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents) VALUES
+    ('hs1','h1','2026-09-01',100),('hs2','h1','2026-09-08',100),('hs3','h1','2026-09-15',100),('hs1','h2','2026-09-01',100),('hs3','h2','2026-09-15',100),
+    ('ps1','pt1','2026-09-02',100),('ps1','pt2','2026-09-02',100),('ps2','pt2','2026-09-09',100),('hc','h2','2026-09-20',100);`);
+  await refreshCurrent(env);
+  const { hot } = await listHotSheet(env);
+  assert.deepEqual(hot.h1, [3, 3, '2026-09-15']); assert.deepEqual(hot.h2, [2, 1, '2026-09-15']);   // the Hot & Cold post does not count
+  assert.deepEqual(hot.pt1, [1, 0, '2026-09-02']); assert.deepEqual(hot.pt2, [2, 2, '2026-09-09']);   // pitchers are measured against pitcher sheets only
 });
 
 console.log(`\n${passed} tests passed`);

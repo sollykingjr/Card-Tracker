@@ -71,6 +71,39 @@ export async function listPriceHistory(env, ids) {
   return { prices };
 }
 
+// How often each player has been on the weekly Hot Sheet (the hitter and pitcher sheets are separate posts, so a player's
+// "sheets" are the ones for his own side). Returns {id: [times, straight, lastDate]}; "straight" counts back from the newest sheet.
+export async function listHotSheet(env) {
+  const posts = (await env.DB.prepare(`SELECT post_id, published_at FROM prospect_posts WHERE status = 'confirmed' AND post_type = 'hot_sheet' AND title LIKE '%Hot Sheet%' ORDER BY published_at, post_id`).all()).results;
+  if (!posts.length) return { hot: {} };
+  const ids = new Set(posts.map(p => p.post_id));
+  const side = new Map((await env.DB.prepare(`SELECT prospect_id, side FROM prospect_current`).all()).results.map(r => [r.prospect_id, r.side]));
+  const members = new Map(posts.map(p => [p.post_id, new Set()]));
+  for (const t of ['prospect_snapshots', 'prospect_prices']) {
+    for (const r of (await env.DB.prepare(`SELECT DISTINCT post_id, prospect_id FROM ${t}`).all()).results) if (ids.has(r.post_id)) members.get(r.post_id).add(r.prospect_id);
+  }
+  const sheets = { hitter: [], pitcher: [] };   // each post goes to the side most of its players are on
+  for (const p of posts) {
+    let h = 0, pi = 0;
+    for (const id of members.get(p.post_id)) { if (side.get(id) === 'pitcher') pi++; else if (side.get(id) === 'hitter') h++; }
+    if (h + pi) sheets[pi > h ? 'pitcher' : 'hitter'].push(p);
+  }
+  const hot = {};
+  for (const s of ['hitter', 'pitcher']) {
+    const list = sheets[s];
+    for (const [id, sd] of side) {
+      if (sd !== s) continue;
+      let n = 0, last = null;
+      for (const p of list) if (members.get(p.post_id).has(id)) { n++; last = p.published_at; }
+      if (!n) continue;
+      let straight = 0;
+      for (let i = list.length - 1; i >= 0 && members.get(list[i].post_id).has(id); i--) straight++;
+      hot[id] = [n, straight, last];
+    }
+  }
+  return { hot };
+}
+
 export async function listCurrent(env) {
   const { results } = await env.DB.prepare(`SELECT c.*, p.name, COALESCE(c.graduated_manual, c.graduated_auto) AS graduated,
     (SELECT s.buy_rating FROM prospect_snapshots s WHERE s.prospect_id = c.prospect_id AND s.buy_rating IS NOT NULL AND s.dated < c.scored_dated ORDER BY s.dated DESC, s.id DESC LIMIT 1) AS prev_buy_rating,
