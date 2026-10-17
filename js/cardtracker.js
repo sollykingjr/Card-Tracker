@@ -212,6 +212,7 @@ function ctGetTags(c) {
 
 let ctSoldTagsOpen = {};
 function ctRenderTags(idx) {
+  ctRenderListing(idx);
   const box = document.getElementById('ct-tags');
   const c = cards[idx];
   if (!box || !c) return;
@@ -952,12 +953,19 @@ function ctToggleMenu(e) {
 
 let ctOpenCardIdx = null;
 
-// From prospect screens: a listed card opens its eBay listing summary, any other card opens its page.
+// From prospect screens: open the card's page in the collection (the eBay listing link lives inside it when listed).
 function ctOpenOwned(itemId) {
   const i = cards.findIndex(c => c.itemId === itemId);
-  if (i < 0) return;
-  if (ctGetTags(cards[i]).includes('Listed') && typeof emlOpenForCard === 'function') emlOpenForCard(itemId);
-  else ctOpenCard(i);
+  if (i >= 0) ctOpenCard(i);
+}
+
+// Slot in the card modal: a way into the eBay listing when the card is listed.
+function ctRenderListing(idx) {
+  const box = document.getElementById('ct-listing');
+  const c = cards[idx];
+  if (!box || !c) return;
+  const listed = c.itemId && !c.salePrice && ctGetTags(c).includes('Listed');
+  box.innerHTML = listed ? `<button onclick="emlOpenForCard('${c.itemId.replace(/'/g,"\\'")}')" style="width:100%;height:44px;border:1px solid var(--acc-bdr);border-radius:10px;background:var(--acc-bg);color:var(--acc);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">View eBay listing →</button>` : '';
 }
 
 function ctOpenCard(idx) {
@@ -1014,6 +1022,7 @@ function ctOpenCard(idx) {
        <button onclick="ctSearchOn(${idx}, 'ebay')" style="flex:1;height:40px;border:1px solid var(--bdr2);border-radius:10px;background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">eBay</button>
      </div>
     <div id="ct-inhand" style="margin-top:12px"></div>
+    <div id="ct-listing" style="margin-top:12px"></div>
     <div id="ct-tags" style="margin-top:14px"></div>
     <div id="ct-scans" style="margin-top:14px"></div>
     <div id="ct-sale" style="margin-top:14px"></div>
@@ -1023,6 +1032,8 @@ function ctOpenCard(idx) {
   document.getElementById('mwrap').classList.add('on');
   ctRenderTags(idx);
   ctRenderInHand(idx);
+  ctRenderListing(idx);
+  ctLoadTags(); ctLoadInHand();
   if (c.itemId) ctLoadScans(c.itemId);
   if (CARD_DB_URL && c.itemId && c.salePrice) ctLoadSaleBreakdown(c.itemId);
 }
