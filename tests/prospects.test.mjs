@@ -251,7 +251,7 @@ await t('app export, posts list and post detail (sheet-shaped arrays for the exi
       ('hs','prospect-master-sheet','Hot Sheet · 2026-04-14','hot_sheet','2026-04-14','x','confirmed','Imported 1'),
       ('bs','prospect-master-sheet','Buy Score · 2026-05-31','rankings','2026-05-31','x','confirmed','Imported 1'),
       ('pend','prospect-analytics','Pending one','analysis','2026-10-01','x','pending','nope');
-    INSERT INTO prospect_takes (post_id, prospect_id, stance, summary, key_points, dated) VALUES ('pa','dax-kilby','none','Long baseline note','[]','2026-03-12');
+    INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, key_points, dated) VALUES ('pa','dax-kilby','none','Long baseline note','[]','2026-03-12');
     INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('pa','dax-kilby','hobby rank',20,'2026-03-12'),('pa','dax-kilby','MLB',4,'2026-03-12'),('hs','dax-kilby','hobby rank',44,'2026-04-14'),('bs','kade-anderson','top 100 pitchers',1,'2026-05-31');
     INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES ('pa','dax-kilby','2026-03-12',8400,NULL),('hs','dax-kilby','2026-04-14',8453,5320),('bs','kade-anderson','2026-05-31',12800,15000);
     INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES ('pa','dax-kilby','2026-03-12','NYY',19.3,NULL,4,NULL),('hs','dax-kilby','2026-04-14','NYY',19.4,'A+',2.3,NULL),('bs','kade-anderson','2026-05-31','SEA',21.8,NULL,4.5,'Strong Buy');`);

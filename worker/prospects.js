@@ -653,7 +653,7 @@ export async function exportForApp(env) {
   const out = { players: [], top200: [], top100: [], origTop200: [], origTop100: [], hotsheet: [], buyScores: [] };
   const baseline = new Map();   // first "Players All" row per prospect = the baseline entry the old sheet had
   for (const r of rows.slice().sort((a, b) => String(a.dated).localeCompare(String(b.dated)))) {
-    const date = usDate(r.dated), pos = posLabel(r.side, r.ranks), note = r.take ? r.take.summary : null;
+    const date = usDate(r.dated), pos = posLabel(r.side, r.ranks), note = r.take ? (r.take.analysis || r.take.summary) : null;
 
     const isBaseline = r.source === 'prospect-master-sheet' && /^Players All/.test(r.title || '');
     if (isBaseline && !baseline.has(r.prospect_id)) {
@@ -679,22 +679,21 @@ export async function exportForApp(env) {
   return out;
 }
 
-// A player's notes, fetched when his modal opens (the startup export carries no text). Imported sheet notes are his own words, so they count as the analysis.
+// A player's notes, fetched when his modal opens (the startup export carries no text). Imported sheet notes are stored as analysis (his own words), like every other post.
 export async function playerTakes(env, name, offset = 0, limit = 3) {
   const { results: found } = await env.DB.prepare(`SELECT prospect_id FROM prospects WHERE norm_name = ?`).bind(normName(name)).all();
   if (!found.length) return { found: false, total: 0, latest: { note: null, summary: null }, takes: [] };
   const ids = found.map(f => f.prospect_id), ph = ids.map(() => '?').join(',');
   const base = `FROM prospect_takes t JOIN prospect_posts p ON p.post_id = t.post_id WHERE p.status = 'confirmed' AND t.prospect_id IN (${ph})`;
-  const cols = `t.dated, t.stance, t.summary, t.analysis, t.key_points, p.title, p.post_id, p.source`;
-  const shape = t => { const imp = t.source === 'prospect-master-sheet';
-    return { dated: t.dated, stance: t.stance, title: t.title, post_id: t.post_id, analysis: t.analysis || (imp ? t.summary : null), summary: imp ? null : t.summary, key_points: JSON.parse(t.key_points || '[]') }; };
+  const cols = `t.dated, t.stance, t.summary, t.analysis, t.key_points, p.title, p.post_id`;
+  const shape = t => ({ dated: t.dated, stance: t.stance, title: t.title, post_id: t.post_id, analysis: t.analysis, summary: t.summary, key_points: JSON.parse(t.key_points || '[]') });
   const one = async extra => { const r = await env.DB.prepare(`SELECT ${cols} ${base} ${extra} ORDER BY t.dated DESC, t.id DESC LIMIT 1`).bind(...ids).first(); return r ? shape(r) : null; };
   const total = (await env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...ids).first()).n;
   const lim = Math.min(Math.max(+limit || 3, 1), 10), off = Math.max(+offset || 0, 0);
   const { results } = await env.DB.prepare(`SELECT ${cols} ${base} ORDER BY t.dated DESC, t.id DESC LIMIT ? OFFSET ?`).bind(...ids, lim, off).all();
   return { found: true, total, latest: {
-      note: await one(`AND (t.analysis IS NOT NULL OR p.source = 'prospect-master-sheet')`),
-      summary: await one(`AND COALESCE(p.source, '') <> 'prospect-master-sheet' AND t.summary IS NOT NULL`)
+      note: await one(`AND t.analysis IS NOT NULL`),
+      summary: await one(`AND t.summary IS NOT NULL`)
     }, takes: results.map(shape) };
 }
 
