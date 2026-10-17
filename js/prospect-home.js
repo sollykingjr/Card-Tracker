@@ -132,8 +132,8 @@ function phHomeLists(data, owned) {
   const scoreSince = newestScore ? phDaysAgo(newestScore, 21) : '';
   const noteSince = newestNote ? phDaysAgo(newestNote, 7) : '';
   const byBs = (a, b) => (b.buy_rating ?? -1) - (a.buy_rating ?? -1) || (b.price_cents ?? -1) - (a.price_cents ?? -1);
-  // Score went up (or was first given) and is now a 4+, and not already someone you own
-  const buys = data.filter(p => !p.graduated && !own(p) && p.buy_rating >= 4 && p.scored_dated >= scoreSince && (p.prev_buy_rating == null || p.buy_rating > p.prev_buy_rating)).sort(byBs).slice(0, 16);   // the screen trims this to two full rows
+  // Score went up (or was first given) and is now a 4+; players you own stay in, so you can see when to buy more
+  const buys = data.filter(p => !p.graduated && p.buy_rating >= 4 && p.scored_dated >= scoreSince && (p.prev_buy_rating == null || p.buy_rating > p.prev_buy_rating)).sort(byBs).slice(0, 16);   // the screen trims this to two full rows
   // Players you hold whose score moved (drops first)
   const mine = data.filter(p => own(p) && p.prev_buy_rating != null && p.buy_rating != null && p.buy_rating !== p.prev_buy_rating && p.scored_dated >= phDaysAgo(newestScore || '2000-01-01', 45))
     .sort((a, b) => (a.buy_rating - a.prev_buy_rating) - (b.buy_rating - b.prev_buy_rating)).slice(0, 10);
@@ -164,7 +164,7 @@ function renderProspectHome() {
     const sec = (title, sub, inner, go) => inner ? `<section class="ph-s"><h2${go ? ` class="ph-go" data-go="${go}"` : ''}>${title}</h2>${sub ? `<p>${sub}</p>` : ''}${inner}</section>` : '';
     phLoadHist(L.mine.map(p => p.prospect_id));
     const withNote = p => ({ ...p, note: L.noteFor(p) });
-    html = sec('Worth a look', 'Buy Score rose to 4 or higher on players you don\'t own', L.buys.length ? `<div class="ph-tiles">${L.buys.map(p => phTile(p, owned)).join('')}</div>` : '')
+    html = sec('Worth a look', 'Buy Score rose to 4 or higher', L.buys.length ? `<div class="ph-tiles">${L.buys.map(p => phTile(p, owned)).join('')}</div>` : '')
       + `<div class="ph-cols">`
       + sec('Your players', 'Buy Score changed since his previous score', L.mine.map(p => phRow(withNote(p), owned)).join(''), 'port')
       + sec('From his latest posts', L.newestNote ? 'notes since ' + phDate(phDaysAgo(L.newestNote, 7)) : '', L.notes.map(p => phNote(p, owned)).join(''), 'posts')
