@@ -1442,13 +1442,16 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
     const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const endDate = item.endDate ? new Date(item.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
     const ev = getListingExpectedValue(item.title);
+    const prospect = resolveItemPlayer(item.title);
     let priceColor = '#fff';
     let evHtml = '';
     if (ev !== null) {
       const pct = (safeNum(item.price) - ev) / ev * 100;
       priceColor = pct <= -10 ? '#4ade80' : pct >= 10 ? '#f87171' : '#eab308';
-      evHtml = ` <span class="sr-listing-ev" style="color:#fff">Exp: ${fmtMoney(ev)}</span>`;
+      evHtml = ` <span class="sr-listing-ev" style="color:#fff">Est: ${fmtMoney(ev)}</span>`;
     }
+    // Opens the prospect's modal (notes, history, score) for the player named in the title
+    if (prospect) evHtml += ` <button class="sr-listing-prospect" data-n="${String(prospect.name).replace(/"/g, '&quot;')}" onclick="phShowModal(this.dataset.n)">Prospect ›</button>`;
     const itemId = item.url.match(/itm\/(\d+)/)?.[1];
     return `
       <div class="sr-listing-card" data-i="${idx}">

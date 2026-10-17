@@ -1899,3 +1899,5 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 
 .ph-m-listbtn { width: 100%; height: 42px; margin: 2px 0 10px; border: 1px solid var(--acc-bdr); border-radius: 10px; background: var(--acc-bg); color: var(--acc); font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
 .ph-m-listrow { display: flex; gap: 8px; flex-wrap: wrap; } .ph-m-listrow .ph-m-listbtn { flex: 1; min-width: 140px; }
+
+.sr-listing-prospect { display: block; margin-top: 3px; padding: 2px 8px; border: 1px solid var(--acc-bdr); border-radius: 12px; background: var(--acc-bg); color: var(--acc); font-size: 10px; font-weight: 700; font-family: inherit; cursor: pointer; }
