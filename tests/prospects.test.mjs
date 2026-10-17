@@ -549,6 +549,7 @@ await t('current-state row: score with its own price and date, newest price and 
     INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents) VALUES
     ('p2','bob-b','2026-09-15',2500),('p3','bob-b','2026-09-22',3100),('p4','eli-e','2026-10-01',900);
     INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, dated) VALUES ('p4','bob-b','none','His words','2026-10-01');`);
+  raw.exec("INSERT INTO prospect_snapshots (post_id, prospect_id, dated, buy_rating) VALUES ('p1','bob-b','2026-09-01',3.9)");
   await refreshCurrent(env);
   const by = Object.fromEntries((await listCurrent(env)).players.map(p => [p.prospect_id, p]));
   const b = by['bob-b'];
@@ -557,6 +558,7 @@ await t('current-state row: score with its own price and date, newest price and 
   assert.equal(b.rank, 47); assert.equal(b.rank_list, 'hobby rank'); assert.equal(b.rank_dated, '2026-09-22');                                              // newest rank wins, whatever the label
   assert.equal(b.age, 20.2); assert.equal(b.level, 'A+'); assert.equal(b.team, 'ATL'); assert.equal(b.last_note_dated, '2026-10-01'); assert.equal(b.side, 'hitter');
   assert.equal(b.graduated, 0);
+  assert.equal(b.prev_buy_rating, 3.9); assert.equal(b.prev_scored_dated, '2026-09-01'); assert.equal(b.latest_note, 'His words'); assert.equal(b.latest_note_dated, '2026-10-01');   // the score before this one, and the newest note
   assert.equal(by['ann-a'].graduated, 1); assert.equal(by['ann-a'].graduated_since, '2026-09-15');   // top 100 on the first full list, missing from the next
   assert.equal(by['cal-c'].graduated, 1);
   assert.equal(by['dan-d'].graduated, 0);                                                            // #150 dropping off is not a graduation

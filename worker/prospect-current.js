@@ -62,6 +62,11 @@ export async function setGraduated(env, prospectId, value) {
 }
 
 export async function listCurrent(env) {
-  const { results } = await env.DB.prepare(`SELECT c.*, p.name, COALESCE(c.graduated_manual, c.graduated_auto) AS graduated FROM prospect_current c JOIN prospects p USING (prospect_id)`).all();
+  const { results } = await env.DB.prepare(`SELECT c.*, p.name, COALESCE(c.graduated_manual, c.graduated_auto) AS graduated,
+    (SELECT s.buy_rating FROM prospect_snapshots s WHERE s.prospect_id = c.prospect_id AND s.buy_rating IS NOT NULL AND s.dated < c.scored_dated ORDER BY s.dated DESC, s.id DESC LIMIT 1) AS prev_buy_rating,
+    (SELECT s.dated FROM prospect_snapshots s WHERE s.prospect_id = c.prospect_id AND s.buy_rating IS NOT NULL AND s.dated < c.scored_dated ORDER BY s.dated DESC, s.id DESC LIMIT 1) AS prev_scored_dated,
+    (SELECT substr(COALESCE(t.summary, t.analysis), 1, 280) FROM prospect_takes t WHERE t.prospect_id = c.prospect_id AND COALESCE(t.summary, t.analysis) IS NOT NULL ORDER BY t.dated DESC, t.id DESC LIMIT 1) AS latest_note,
+    (SELECT t.dated FROM prospect_takes t WHERE t.prospect_id = c.prospect_id AND COALESCE(t.summary, t.analysis) IS NOT NULL ORDER BY t.dated DESC, t.id DESC LIMIT 1) AS latest_note_dated
+    FROM prospect_current c JOIN prospects p USING (prospect_id)`).all();
   return { players: results };
 }

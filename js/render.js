@@ -205,6 +205,14 @@ function render() {
   document.getElementById('hdr').style.display = (isInbox||isPosts) ? 'none' : '';   // no player search on the Inbox / Posts
   if(isInbox){ renderProspectInbox(); return; }
   if(isPosts){ renderSortChips(); renderPostsView(); return; }
+  if(tab==='all'){ renderSortChips(); renderProspectHome(); return; }
+  if((tab==='hs'||tab==='port') && prospectDataReady!==true){   // these screens read the older arrays: wait for them
+    if(prospectDataReady==='err'){ document.getElementById('list').innerHTML='<div class="err"><strong>Could not load data</strong><br>Check your connection and tap refresh.</div>'; return; }
+    document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Loading prospects…</div>';
+    if(!prospectDataLoaded) loadProspectData();
+    phWaitOld().then(()=>{ if(section==='prospects' && (tab==='hs'||tab==='port')) render(); });
+    return;
+  }
   const isHS=tab==='hs', isPort=tab==='port', isWatch=tab==='watch';
   const showChips=!isHS&&!isPort&&!isWatch;
   renderSortChips();

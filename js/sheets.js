@@ -207,6 +207,8 @@ async function fetchBatch(ranges) {
 }
 
 let prospectDataLoaded = false;
+let prospectDataReady = false;   // true once the older Sheet-shaped prospect arrays (used by the player modal, Hot Sheet, Portfolio) have loaded; 'err' if that failed
+const phWaitOld = () => new Promise(res => { const t = setInterval(() => { if (prospectDataReady !== false) { clearInterval(t); res(); } }, 150); });
 const CARDS_CACHE_KEY = 'ctCardsCache';
 
 function hydrateCardsFromCache() {
@@ -269,6 +271,7 @@ async function loadCardData() {
     if (section === 'home') { renderHome(); }
     else if (section === 'cardtracker') { renderCardTracker(); }
     else if (section === 'portfolio') { renderPortfolio(); }
+    else if (section === 'prospects' && tab === 'all' && typeof renderProspectHome === 'function') { renderProspectHome(); }
   } catch(e) {
     document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Make sure the sheet is shared as "Anyone with the link can view".</div>`;
     document.getElementById('cntlbl').textContent='Error';
@@ -276,11 +279,13 @@ async function loadCardData() {
   document.getElementById('rfab').classList.remove('spin');
 }
 
-async function loadProspectData() {
+async function loadProspectData(quiet) {   // quiet: load in the background without touching the list (the Prospects home reads its own data)
   if (prospectDataLoaded) return;
-  prospectDataLoaded = true;
+  prospectDataLoaded = true; prospectDataReady = false;
+  if (!quiet) {
   document.getElementById('cntlbl').textContent='Loading...';
   document.getElementById('list').innerHTML='<div class="spin"><div class="spin-ring"></div>Loading prospects…</div>';
+  }
   document.getElementById('rfab').classList.add('spin');
   try {
     // Prospect data now comes from the database (the Sheet is only kept for Parallel Multiplier).
@@ -324,9 +329,12 @@ async function loadProspectData() {
       });
     });
 
-    if (section === 'prospects') { render(); }
+    prospectDataReady = true;
+    if (section === 'prospects' && tab !== 'all') { render(); }
   } catch(e) {
-    if (tab === 'inbox' || tab === 'posts') { if (section === 'prospects') render(); }   // load failed, but these tabs don't need it
+    prospectDataReady = 'err';
+    if (quiet) { /* the home does not need these arrays; the modal says so if opened */ }
+    else if (tab === 'inbox' || tab === 'posts') { if (section === 'prospects') render(); }   // load failed, but these tabs don't need it
     else {
       document.getElementById('list').innerHTML=`<div class="err"><strong>Could not load data</strong><br>${e.message}<br><br>Check your connection and tap refresh.</div>`;
       document.getElementById('cntlbl').textContent='Error';

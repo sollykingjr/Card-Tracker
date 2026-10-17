@@ -37,7 +37,7 @@ const TEAM_NAMES = {
 
 // ── Sort options per tab ───────────────────────────────────────────────────────
 const SORT_OPTS = {
-  all:  [{k:'default',l:'BS'},{k:'rank',l:'Rank'},{k:'price',l:'Price'},{k:'owned',l:'$ Owned'}],
+  all:  [],
   hs:   [{k:'default',l:'Recent'},{k:'name',l:'Name'},{k:'owned',l:'$ Owned'}],
   posts:[{k:'default',l:'All'},{k:'rankings',l:'Rankings'},{k:'hot_sheet',l:'Hot Sheet'},{k:'analysis',l:'Analysis'},{k:'price_update',l:'Prices'}],
 };

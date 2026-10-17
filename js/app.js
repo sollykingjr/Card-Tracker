@@ -96,7 +96,10 @@ function setSection(s) {
     renderEbayListings();
   } else {
     document.getElementById('cntlbl').textContent = '';
-    if (!prospectDataLoaded) {
+    if (tab === 'all') {
+      render();
+      loadProspectData(true);   // the player modal still reads the older arrays; load them quietly
+    } else if (!prospectDataLoaded) {
       loadProspectData();
       if (tab === 'inbox' || tab === 'posts') render();   // these don't need the prospect arrays, so don't wait for them
     } else {
@@ -149,9 +152,10 @@ document.getElementById('rfab').addEventListener('click', () => {
     homeLoadClosingSoon();
   } else {
     loadCardData();
+    if (typeof phRefresh === 'function') phRefresh();
     if (prospectDataLoaded) {
       prospectDataLoaded = false;
-      loadProspectData();
+      loadProspectData(tab === 'all');
     }
   }
 });
