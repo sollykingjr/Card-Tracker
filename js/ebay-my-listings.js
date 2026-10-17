@@ -236,7 +236,7 @@ function emlRenderSummary() {
     ? 'Offers on' + (d.offerAuto ? ` · auto-accept $${d.offerAuto.toFixed(2)}` : '') + (d.offerMin ? ` · auto-decline below $${d.offerMin.toFixed(2)}` : '')
     : 'Offers off');
   const card = (typeof cards !== 'undefined' && d.sku) ? cards.find(c => c.itemId === d.sku) : null;
-  const cost = card && Number(card.cost) > 0 ? Number(card.cost) : 0;
+  const cost = card && Number(card.purchasePrice) > 0 ? Number(card.purchasePrice) : 0;
   const row = (k, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--bdr2);font-size:14px"><span style="color:var(--tx3)">${k}</span><span style="color:var(--tx);font-weight:600;text-align:right">${v}</span></div>` : '';
   const imgs = (d.images || []).slice(0, 3).map(u => `<img src="${emlEsc(u)}" style="height:110px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--surf2)">`).join('');
   const desc = String(d.description || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
