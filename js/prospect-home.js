@@ -37,30 +37,56 @@ function phOwnedMap() {
   return m;
 }
 
-// brief = the home lists (name, team, price, score and what changed); the full card is for search results.
-function phCard(p, owned, brief) {
+// Search results: the full card (score, price, expected value, rank, age, level).
+function phCard(p, owned) {
   const bs = p.buy_rating != null ? Number(p.buy_rating) : null;
-  const prev = p.prev_buy_rating != null ? Number(p.prev_buy_rating) : null;
   const o = owned.get(normName(p.name));
-  const bits = (brief ? [p.side === 'pitcher' ? 'Pitcher' : p.side === 'hitter' ? 'Hitter' : '', p.team || '']
-    : [p.side === 'pitcher' ? 'Pitcher' : p.side === 'hitter' ? 'Hitter' : '', p.team || '', p.rank != null ? '#' + p.rank : '', p.age != null ? 'age ' + p.age : '', p.level || ''])
+  const bits = [p.side === 'pitcher' ? 'Pitcher' : p.side === 'hitter' ? 'Hitter' : '', p.team || '', p.rank != null ? '#' + p.rank : '', p.age != null ? 'age ' + p.age : '', p.level || '']
     .filter(Boolean).map(pibEsc).join('</span><span>');
-  const chg = brief && prev != null && bs != null && prev !== bs
-    ? `<span class="ph-chg ${bs > prev ? 'up' : 'down'}">${phBs(prev)} → ${phBs(bs)}</span>` : '';
-  const sub = !brief && bs != null && p.scored_dated ? 'BS ' + phDate(p.scored_dated) : '';
-  const snip = brief && brief.note ? `<div class="ph-note">${pibEsc(brief.note)}</div>` : '';
-  return `<div class="card" data-ph="${pibEsc(p.name)}" ${snip ? 'style="align-items:flex-start"' : ''}>
+  const sub = bs != null && p.scored_dated ? 'BS ' + phDate(p.scored_dated) : '';
+  return `<div class="card" data-ph="${pibEsc(p.name)}">
     <div class="cbody">
       <div class="r1"><span class="pname">${pibEsc(p.name)}</span>${p.graduated ? '<span class="ph-grad">Graduated</span>' : ''}</div>
       <div class="r2"><span>${bits}</span>${o ? `<span class="inv-badge ${invTier(o.cost)}">${o.n} owned · $${o.cost.toFixed(0)}</span>` : ''}</div>
-      ${sub ? `<div class="r2" style="color:var(--tx3)">${pibEsc(sub)}</div>` : ''}${snip}
+      ${sub ? `<div class="r2" style="color:var(--tx3)">${pibEsc(sub)}</div>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
-      ${chg}
-      ${!brief && p.expected_cents != null ? `<span class="ph-exp">exp ${phMoney(p.expected_cents)}</span>` : ''}
+      ${p.expected_cents != null ? `<span class="ph-exp">exp ${phMoney(p.expected_cents)}</span>` : ''}
       ${p.price_cents != null ? `<div class="pbox">${phMoney(p.price_cents)}</div>` : '<div class="pbox empty">—</div>'}
       ${bs != null ? `<span class="hs-row-bs bs-${Math.floor(bs)}">${phBs(bs)}</span>` : '<span class="hs-row-bs bs-1">—</span>'}
     </div>
+  </div>`;
+}
+
+const phWho = p => [p.side === 'pitcher' ? 'Pitcher' : p.side === 'hitter' ? 'Hitter' : '', p.team || ''].filter(Boolean).map(pibEsc).join(' · ');
+
+// Worth a look: a swipe row of tiles, the score is the biggest thing on each.
+function phTile(p, owned) {
+  const bs = Number(p.buy_rating), prev = p.prev_buy_rating != null ? Number(p.prev_buy_rating) : null;
+  return `<div class="ph-tile" data-ph="${pibEsc(p.name)}">
+    <div class="ph-tile-bs bs-${Math.floor(bs)}">${phBs(bs)}</div>
+    <div class="ph-tile-name">${pibEsc(p.name)}</div>
+    <div class="ph-tile-sub">${phWho(p)}</div>
+    <div class="ph-tile-foot"><span>${p.price_cents != null ? phMoney(p.price_cents) : ''}</span><span class="ph-tile-was">${prev != null ? 'was ' + phBs(prev) : 'new score'}</span></div>
+  </div>`;
+}
+
+// Your players: plain rows, the change is the loudest thing and the edge is green or red.
+function phRow(p, owned) {
+  const bs = Number(p.buy_rating), prev = Number(p.prev_buy_rating), up = bs > prev, o = owned.get(normName(p.name));
+  return `<div class="ph-row ${up ? 'up' : 'down'}" data-ph="${pibEsc(p.name)}">
+    <div class="ph-row-chg"><small>${phBs(prev)}</small><b>${phBs(bs)}</b></div>
+    <div class="ph-row-main"><div class="ph-row-name">${pibEsc(p.name)}</div><div class="ph-row-sub">${phWho(p)}${o ? ` · ${o.n} owned` : ''}</div>${p.note ? `<div class="ph-note">${pibEsc(p.note)}</div>` : ''}</div>
+    <div class="ph-row-price">${p.price_cents != null ? phMoney(p.price_cents) : ''}</div>
+  </div>`;
+}
+
+// From his latest posts: reads like a note, no box.
+function phNote(p, owned) {
+  const o = owned.get(normName(p.name));
+  return `<div class="ph-item" data-ph="${pibEsc(p.name)}">
+    <div class="ph-item-head"><span class="ph-item-name">${pibEsc(p.name)}</span><span class="ph-item-meta">${phWho(p)}${o ? ' · you own' : ''}${p.buy_rating != null ? ' · score ' + phBs(p.buy_rating) : ''}</span></div>
+    <div class="ph-note">${pibEsc(p.latest_note)}</div>
   </div>`;
 }
 
@@ -103,10 +129,11 @@ function renderProspectHome() {
     html = rows.length ? rows.map(p => phCard(p, owned)).join('') : '<div class="empty-msg">No players match</div>';
   } else {
     const L = phHomeLists(phData, owned);
-    const sec = (title, sub, rows, mk) => rows.length ? `<div class="ph-sec"><span>${title}</span>${sub ? `<small>${sub}</small>` : ''}</div>${rows.map(mk).join('')}` : '';
-    html = sec('Worth a look', 'Buy Score went up to 4+, not owned', L.buys, p => phCard(p, owned, { note: L.noteFor(p) }))
-      + sec('Your players', 'Buy Score changed', L.mine, p => phCard(p, owned, { note: L.noteFor(p) }))
-      + sec('From his latest posts', L.newestNote ? 'notes since ' + phDate(phDaysAgo(L.newestNote, 7)) : '', L.notes, p => phCard(p, owned, { note: p.latest_note }));
+    const sec = (title, sub, inner) => inner ? `<section class="ph-s"><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}${inner}</section>` : '';
+    const withNote = p => ({ ...p, note: L.noteFor(p) });
+    html = sec('Worth a look', 'Buy Score rose to 4 or higher on players you don\'t own', L.buys.length ? `<div class="ph-tiles">${L.buys.map(p => phTile(p, owned)).join('')}</div>` : '')
+      + sec('Your players', 'Buy Score changed on cards you hold', L.mine.map(p => phRow(withNote(p), owned)).join(''))
+      + sec('From his latest posts', L.newestNote ? 'notes since ' + phDate(phDaysAgo(L.newestNote, 7)) : '', L.notes.map(p => phNote(p, owned)).join(''));
     html = (html || '<div class="empty-msg">Nothing new right now</div>') + `<div class="ph-foot">Search above to find any of the ${phData.length} players</div>`;
   }
   listEl.innerHTML = html;
@@ -123,5 +150,5 @@ async function phOpen(name) {
 }
 
 document.getElementById('list').addEventListener('click', e => {
-  const c = e.target.closest('.card[data-ph]'); if (c) phOpen(c.dataset.ph);
+  const c = e.target.closest('[data-ph]'); if (c) phOpen(c.dataset.ph);
 });

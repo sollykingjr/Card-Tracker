@@ -1742,13 +1742,45 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .pib-take { margin-top: 8px; }
 
 /* Prospects home */
-.ph-sec { display: flex; align-items: baseline; gap: 8px; margin: 14px 2px 6px; font-size: 13px; font-weight: 600; color: var(--tx); }
-.ph-sec:first-child { margin-top: 2px; }
-.ph-sec small { font-size: 11px; font-weight: 400; color: var(--tx3); }
+.ph-s { margin: 22px 0 6px; }
+.ph-s:first-child { margin-top: 6px; }
+.ph-s h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--tx); }
+.ph-s > p { margin: 2px 0 10px; font-size: 12px; color: var(--tx3); }
 .ph-grad { margin-left: 6px; padding: 1px 6px; border-radius: 5px; font-size: 10px; font-weight: 600; background: var(--surf2); color: var(--tx3); border: .5px solid var(--bdr2); vertical-align: middle; }
 .ph-exp { font-size: 11px; color: var(--tx3); font-family: 'DM Mono', monospace; }
-.ph-chg { font-size: 11px; font-family: 'DM Mono', monospace; }
-.ph-chg.up { color: var(--up); }
-.ph-chg.down { color: var(--dn, #f87171); }
-.ph-note { font-size: 12px; color: var(--tx2); line-height: 1.4; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.ph-foot { text-align: center; padding: 18px 10px 30px; color: var(--tx3); font-size: 12px; }
+.ph-foot { text-align: center; padding: 22px 10px 30px; color: var(--tx3); font-size: 12px; }
+.ph-note { font-size: 13px; color: var(--tx2); line-height: 1.5; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Worth a look: swipe row of tiles */
+.ph-tiles { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; margin: 0 -16px; padding: 2px 16px 8px; scrollbar-width: none; }
+.ph-tiles::-webkit-scrollbar { display: none; }
+.ph-tile { flex: 0 0 148px; scroll-snap-align: start; background: var(--surf); border: 1px solid var(--bdr); border-radius: 16px; padding: 12px 13px; cursor: pointer; display: flex; flex-direction: column; }
+.ph-tile:active { opacity: .75; }
+.ph-tile-bs { align-self: flex-start; font-family: 'DM Mono', monospace; font-size: 26px; font-weight: 700; line-height: 1; padding: 6px 10px; border-radius: 10px; }
+.ph-tile-name { margin-top: 10px; font-size: 14px; font-weight: 600; line-height: 1.25; color: var(--tx); min-height: 35px; }
+.ph-tile-sub { font-size: 11px; color: var(--tx3); margin-top: 2px; }
+.ph-tile-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--tx); }
+.ph-tile-was { font-size: 11px; font-weight: 400; color: var(--up); }
+@media (min-width: 768px) { .ph-tiles { margin: 0; padding: 2px 0 8px; flex-wrap: wrap; overflow: visible; } }
+
+/* Your players: rows with a colored edge */
+.ph-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0 12px 12px; border-bottom: .5px solid var(--bdr2); border-left: 3px solid var(--bdr); cursor: pointer; }
+.ph-row.up { border-left-color: var(--up); }
+.ph-row.down { border-left-color: var(--dn); }
+.ph-row:active { opacity: .7; }
+.ph-row-chg { flex: 0 0 52px; font-family: 'DM Mono', monospace; line-height: 1.1; }
+.ph-row-chg small { display: block; font-size: 11px; color: var(--tx3); text-decoration: line-through; }
+.ph-row-chg b { font-size: 22px; font-weight: 700; }
+.ph-row.up .ph-row-chg b { color: var(--up); }
+.ph-row.down .ph-row-chg b { color: var(--dn); }
+.ph-row-main { flex: 1; min-width: 0; }
+.ph-row-name { font-size: 15px; font-weight: 600; color: var(--tx); }
+.ph-row-sub { font-size: 12px; color: var(--tx3); margin-top: 1px; }
+.ph-row-price { font-size: 14px; font-weight: 600; color: var(--tx); padding-right: 2px; }
+
+/* From his latest posts: reads like a note */
+.ph-item { padding: 12px 0; border-bottom: .5px solid var(--bdr2); cursor: pointer; }
+.ph-item:active { opacity: .7; }
+.ph-item-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ph-item-name { font-size: 15px; font-weight: 600; color: var(--tx); }
+.ph-item-meta { font-size: 12px; color: var(--tx3); }
