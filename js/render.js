@@ -387,7 +387,7 @@ function showCardsSubview(type, name) {
           }
         }
       }
-      return `<div class="ct-entry owned">
+      return `<div class="ct-entry owned" style="cursor:pointer" onclick="ctOpenOwned('${String(c.itemId||'').replace(/'/g,"\\'")}')">
         <div class="ct-name">${c.fullCard||'—'}</div>
         <div class="ct-row">
           <div class="ct-stat"><div class="ct-l">Purchased</div><div class="ct-v">${fmtShortDate(c.datePurchased||c.transactionDate)}</div></div>

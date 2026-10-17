@@ -952,6 +952,14 @@ function ctToggleMenu(e) {
 
 let ctOpenCardIdx = null;
 
+// From prospect screens: a listed card opens its eBay listing summary, any other card opens its page.
+function ctOpenOwned(itemId) {
+  const i = cards.findIndex(c => c.itemId === itemId);
+  if (i < 0) return;
+  if (ctGetTags(cards[i]).includes('Listed') && typeof emlOpenForCard === 'function') emlOpenForCard(itemId);
+  else ctOpenCard(i);
+}
+
 function ctOpenCard(idx) {
   const c = cards[idx];
   if (!c) return;
