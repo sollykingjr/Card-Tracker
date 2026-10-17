@@ -60,8 +60,11 @@ async function intakeOpen() {
   await intakeRender();
 }
 
+let intakeCardsStale = false;
 function intakeClose() {
   document.getElementById('intake-wrap').classList.remove('on');
+  // Cards were changed while Intake was open: reload them once now, not after every confirm
+  if (intakeCardsStale) { intakeCardsStale = false; if (typeof loadCardData === 'function') loadCardData(); }
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -241,7 +244,7 @@ async function intakeComc(commit) {
 // After anything that changes the data: refresh counts, and reload cards when cards changed
 function intakeAfterChange(cardsChanged = true) {
   intakeRefreshCounts();
-  if (cardsChanged && typeof loadCardData === 'function') loadCardData();
+  if (cardsChanged) intakeCardsStale = true;   // reload deferred until Intake closes (see intakeClose)
 }
 
 // Load counts once at startup so the Collection button shows the right number
