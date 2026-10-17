@@ -746,6 +746,7 @@ body {
 .sb-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; background: var(--acc-bg); color: var(--acc); border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--acc-bdr); }
 .sb-chip-x { background: none; border: none; color: var(--acc); font-size: 14px; cursor: pointer; padding: 0; line-height: 1; font-family: inherit; }
 .sb-empty { font-size: 12px; color: var(--tx3); padding: 8px 0; }
+.sb-presets-label { font-size: 11px; font-weight: 700; color: var(--tx3); text-transform: uppercase; letter-spacing: .05em; margin: 4px 0 6px; }
 .sb-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .sb-preset-btn { padding: 5px 13px; border: 1px solid var(--bdr2); border-radius: 20px; background: var(--surf2); color: var(--tx2); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .2s; }
 .sb-preset-btn:active { opacity: .7; }

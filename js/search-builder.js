@@ -151,8 +151,8 @@ function sbGetAllPlayerNames() {
 }
 
 // The current Buy Score lists come from the backend (GET /prospect-buy-list): scores since the last Top Rankings post, graduated left out.
-async function sbGetBuyScorePlayers(min, max) {
-  const d = await pibCall('/prospect-buy-list?min=' + encodeURIComponent(min) + '&max=' + encodeURIComponent(max == null ? 5 : max));
+async function sbGetBuyScorePlayers(min, max, side) {
+  const d = await pibCall('/prospect-buy-list?min=' + encodeURIComponent(min) + '&max=' + encodeURIComponent(max == null ? 5 : max) + (side ? '&side=' + side : ''));
   return (d.players || []).map(p => ({ name: p.name, source: 'prospect' }));
 }
 
@@ -475,11 +475,13 @@ function sbRender() {
       <!-- Presets & Saved Searches -->
       <div class="sb-section">
         <div class="sb-section-title">Presets & Saved Searches</div>
+        ${['hitter', 'pitcher'].map(side => `
+        <div class="sb-presets-label">${side === 'hitter' ? 'Hitters' : 'Pitchers'}</div>
         <div class="sb-presets">
-          <button class="sb-preset-btn" onclick="sbApplyPresetRange(5.0, 5.0)">BS 5.0</button>
-          <button class="sb-preset-btn" onclick="sbApplyPresetRange(4.5, 4.99)">BS 4.5–4.99</button>
-          <button class="sb-preset-btn" onclick="sbApplyPresetRange(4.0, 4.49)">BS 4.0–4.49</button>
-        </div>
+          <button class="sb-preset-btn" onclick="sbApplyPresetRange(5.0, 5.0, '${side}')">BS 5.0</button>
+          <button class="sb-preset-btn" onclick="sbApplyPresetRange(4.5, 4.99, '${side}')">BS 4.5–4.99</button>
+          <button class="sb-preset-btn" onclick="sbApplyPresetRange(4.0, 4.49, '${side}')">BS 4.0–4.49</button>
+        </div>`).join('')}
         ${SB.savedSearches.length ? `
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
             ${SB.savedSearches.map((s,i) => `
@@ -855,8 +857,8 @@ async function sbApplyPreset(minScore) {
   sbUpdateOutput();
 }
 
-async function sbApplyPresetRange(min, max) {
-  const results = await sbGetBuyScorePlayers(min, max);
+async function sbApplyPresetRange(min, max, side) {
+  const results = await sbGetBuyScorePlayers(min, max, side);
 
   // Merge into existing pool
   results.forEach(p => {
