@@ -518,4 +518,25 @@ await t('screenshots in a long prose article are not sent to the model, short ta
   } finally { globalThis.fetch = realFetch; }
 });
 
+await t('one price row per player and date: a repeat from another post (or the same post) only fills in what is missing', async () => {
+  const env = { DB: makeDb() }, raw = env.DB._raw;
+  const mk = prices => ({ post_type: 'rankings', summary: 's', published_date: '2026-08-14', players: [{ name: 'Bo Davidson', team: 'ATL', prices }] });
+  const a = await submitPost(env, { text: 'x'.repeat(50) + 'one', extractor: fakeExtractor(mk([{ date: '2026-08-14', base_auto: 25.07 }])) });
+  await confirmPost(env, a.postId);
+  const b = await submitPost(env, { text: 'x'.repeat(50) + 'two', extractor: fakeExtractor(mk([{ date: '2026-08-14', base_auto: 25.07, expected: 40 }])) });
+  await confirmPost(env, b.postId);
+  let rows = raw.prepare('SELECT base_auto_cents b, expected_cents e FROM prospect_prices').all();
+  assert.equal(rows.length, 1); assert.equal(rows[0].b, 2507); assert.equal(rows[0].e, 4000);   // second post only added the Expected value
+  const c = await submitPost(env, { text: 'x'.repeat(50) + 'three', extractor: fakeExtractor(mk([{ date: '2026-08-14', base_auto: 25.07, expected: 40 }])) });
+  await confirmPost(env, c.postId);
+  assert.equal(raw.prepare('SELECT COUNT(*) n FROM prospect_prices').get().n, 1);   // an identical repeat adds nothing
+  const two = { post_type: 'rankings', summary: 's', published_date: '2026-09-11', players: [   // same player listed twice in one post, once with the Expected value
+    { name: 'Coy James', team: 'MIA', prices: [{ date: '2026-09-11', base_auto: 5.71 }] },
+    { name: 'Coy James', team: 'MIA', prices: [{ date: '2026-09-11', base_auto: 5.71, expected: 17.4 }] }] };
+  const d = await submitPost(env, { text: 'x'.repeat(50) + 'four', extractor: fakeExtractor(two) });
+  await confirmPost(env, d.postId);
+  rows = raw.prepare("SELECT base_auto_cents b, expected_cents e FROM prospect_prices WHERE dated = '2026-09-11'").all();
+  assert.equal(rows.length, 1); assert.equal(rows[0].e, 1740);
+});
+
 console.log(`\n${passed} tests passed`);

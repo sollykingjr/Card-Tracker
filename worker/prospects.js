@@ -542,6 +542,7 @@ export async function confirmPost(env, postId, edited = null) {
   const counts = { prospects: 0, takes: 0, rankings: 0, prices: 0, stats: 0, snapshots: 0 };
   const stmts = [];
   const prep = (sql, ...binds) => env.DB.prepare(sql).bind(...binds);
+  const newPrices = new Map();
   for (const p of ex.players) {
     const pid = await resolveProspect(env, p, dated);
     counts.prospects++;
@@ -549,14 +550,26 @@ export async function confirmPost(env, postId, edited = null) {
       postId, pid, p.take.stance, p.take.summary, p.take.analysis, JSON.stringify(p.take.key_points), p.post_rank, dated)); counts.takes++; }
     for (const r of p.rankings) { stmts.push(prep(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES (?,?,?,?,?)`,
       postId, pid, r.list, r.rank, dated)); counts.rankings++; }
-    for (const x of p.prices) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
-      postId, pid, x.date, x.base_auto_cents, x.expected_cents)); counts.prices++; }
+    // One price row per player and date, whichever post it comes from: a repeat only fills in what is missing (e.g. the Expected value).
+    if (p.prices.length) {
+      const onFile = (await env.DB.prepare(`SELECT id, dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ?`).bind(pid).all()).results;
+      for (const x of p.prices) {
+        const key = pid + '|' + x.date, old = onFile.find(r => r.dated === x.date), queued = newPrices.get(key);
+        if (old) {
+          if ((old.base_auto_cents == null && x.base_auto_cents != null) || (old.expected_cents == null && x.expected_cents != null))
+            stmts.push(prep(`UPDATE prospect_prices SET base_auto_cents = COALESCE(base_auto_cents, ?), expected_cents = COALESCE(expected_cents, ?) WHERE id = ?`, x.base_auto_cents, x.expected_cents, old.id));
+        } else if (queued) { queued.base_auto_cents ??= x.base_auto_cents; queued.expected_cents ??= x.expected_cents; }
+        else newPrices.set(key, { pid, date: x.date, base_auto_cents: x.base_auto_cents, expected_cents: x.expected_cents });
+      }
+    }
     if (p.age != null || p.level || p.buy_rating != null || p.action) {
       stmts.push(prep(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES (?,?,?,?,?,?,?,?)`,
         postId, pid, dated, p.team, p.age, p.level, p.buy_rating, p.action)); counts.snapshots++; }
     for (const s of p.stat_lines) { stmts.push(prep(`INSERT INTO prospect_stats (post_id, prospect_id, dated, context, level, age, stats_json) VALUES (?,?,?,?,?,?,?)`,
       postId, pid, dated, s.context, s.level, p.age, JSON.stringify(s.stats))); counts.stats++; }
   }
+  for (const x of newPrices.values()) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
+    postId, x.pid, x.date, x.base_auto_cents, x.expected_cents)); counts.prices++; }
   stmts.push(prep(`UPDATE prospect_posts SET status = 'confirmed', confirmed_at = datetime('now'), summary = ?, thesis = ?, post_type = ?, extraction_json = ? WHERE post_id = ?`,
     ex.summary, ex.thesis, ex.post_type, JSON.stringify(ex), postId));
   if (stmts.length) await env.DB.batch(stmts);   // all rows for the post land together or not at all
