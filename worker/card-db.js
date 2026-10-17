@@ -270,6 +270,11 @@ async function runPurchaseImport(env, days = LOOKBACK_DAYS) {
 }
 async function listPending(env) {
   const { results } = await env.DB.prepare(`SELECT * FROM pending_metadata WHERE status = 'pending' ORDER BY date_purchased`).all();
+  // Group same-name cards together (for copy/paste): by player from the suggested file name, else the eBay title; then by suggested name, then purchase date
+  const key = r => { try { return (r.suggested_name && parseFileName(r.suggested_name).player_name || r.ebay_title || '').toLowerCase().trim(); } catch (e) { return (r.ebay_title || '').toLowerCase().trim(); } };
+  const keyed = results.map(r => [key(r), r]);
+  keyed.sort((a, b) => a[0].localeCompare(b[0]) || String(a[1].suggested_name || '').localeCompare(String(b[1].suggested_name || '')) || String(a[1].date_purchased || '').localeCompare(String(b[1].date_purchased || '')));
+  results.splice(0, results.length, ...keyed.map(k => k[1]));
   return { pending: results.length, rows: results.map(r => ({ ...r,
     item: (r.item_cents / 100).toFixed(2), shipping: (r.shipping_cents / 100).toFixed(2), tax: (r.tax_cents / 100).toFixed(2),
     purchasePrice: (r.purchase_price_cents / 100).toFixed(2),
