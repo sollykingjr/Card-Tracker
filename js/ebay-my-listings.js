@@ -127,7 +127,7 @@ function emlRowHtml(l) {
     ? `<img src="${emlEsc(l.image)}" loading="lazy" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--surf2)">`
     : `<div style="width:52px;height:52px;border-radius:8px;flex-shrink:0;background:var(--surf2)"></div>`;
   return `
-    <div onclick="emlOpenEdit('${emlEsc(l.listingId)}')" style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid var(--bdr2);border-radius:12px;background:var(--bg2);margin-bottom:8px;cursor:pointer">
+    <div onclick="emlOpenSummary('${emlEsc(l.listingId)}')" style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid var(--bdr2);border-radius:12px;background:var(--bg2);margin-bottom:8px;cursor:pointer">
       ${img}
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:600;color:var(--tx);line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${emlEsc(l.title)}</div>
@@ -169,12 +169,12 @@ async function emlOpenForCard(itemId) {
   setSection('ebaylistings');
   if (!emlLoaded) await emlLoad();
   const l = emlListings.find(x => x.sku === itemId);
-  if (l) emlOpenEdit(l.listingId);
+  if (l) emlOpenSummary(l.listingId);
   else { emlBanner = ''; emlQuery = itemId; renderEbayListings(); }
 }
 
 // ── Edit sheet ──
-function emlSheet(inner) {
+function emlSheet(inner, heading) {
   let wrap = document.getElementById('eml-sheet');
   if (!wrap) {
     wrap = document.createElement('div');
@@ -186,7 +186,7 @@ function emlSheet(inner) {
   wrap.innerHTML = `
     <div id="eml-sheet-box" style="background:var(--bg2);width:100%;max-width:640px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:20px 20px 0 0;padding:18px 18px 32px;border:1px solid var(--bdr2);border-bottom:none;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div style="font-size:16px;font-weight:700;color:var(--tx)">Edit eBay Listing</div>
+        <div style="font-size:16px;font-weight:700;color:var(--tx)">${heading || 'Edit eBay Listing'}</div>
         <button onclick="emlCloseEdit()" style="background:none;border:none;color:var(--tx3);font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
       </div>
       ${inner}
@@ -198,19 +198,67 @@ function emlCloseEdit() {
   emlDetail = null;
 }
 
-async function emlOpenEdit(listingId) {
+async function emlFetchDetail(listingId, heading) {
   emlDetail = null;
-  emlSheet('<div class="spin"><div class="spin-ring"></div>Loading listing…</div>');
+  emlSheet('<div class="spin"><div class="spin-ring"></div>Loading listing…</div>', heading);
   try {
     const res = await fetch(`${WORKER_URL}/ebay-listing-detail?listingId=${encodeURIComponent(listingId)}`, { headers: { 'X-App-Key': APP_KEY } });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error((data.error && data.error.message) || data.error || `HTTP ${res.status}`);
-    if (!document.getElementById('eml-sheet')) return; // closed while loading
+    if (!document.getElementById('eml-sheet')) return false; // closed while loading
     emlDetail = data.listing;
-    emlRenderEdit();
+    return true;
   } catch (e) {
-    emlSheet(`<div style="color:var(--dn);font-size:14px;padding:12px 0">Couldn't load this listing: ${emlEsc(e.message)}</div>`);
+    emlSheet(`<div style="color:var(--dn);font-size:14px;padding:12px 0">Couldn't load this listing: ${emlEsc(e.message)}</div>`, heading);
+    return false;
   }
+}
+
+async function emlOpenEdit(listingId) {
+  if (await emlFetchDetail(listingId)) emlRenderEdit();
+}
+
+// Read-only summary first; "Edit listing" opens the edit sheet.
+async function emlOpenSummary(listingId) {
+  if (await emlFetchDetail(listingId, 'eBay Listing')) emlRenderSummary();
+}
+
+function emlRenderSummary() {
+  const d = emlDetail;
+  if (!d) return;
+  const isFixed = d.format !== 'auction';
+  const status = d.scheduled
+    ? `Scheduled · starts ${emlFmtTime(d.startTime)}`
+    : (isFixed ? 'Live · Buy It Now' : `Live · Auction · ${d.bidCount} bid${d.bidCount === 1 ? '' : 's'}${d.endTime ? ' · ' + emlTimeLeft(d.endTime) : ''}`);
+  const ship = (typeof EBAY_SHIPPING_OPTIONS !== 'undefined' && EBAY_SHIPPING_OPTIONS.find(o => o.id === d.shippingPolicyId));
+  const shipLabel = ship ? ship.label : (d.shippingPolicyId ? `Other policy (${d.shippingPolicyId})` : 'No shipping policy');
+  const offers = !isFixed ? '' : (d.allowOffers
+    ? 'Offers on' + (d.offerAuto ? ` · auto-accept $${d.offerAuto.toFixed(2)}` : '') + (d.offerMin ? ` · auto-decline below $${d.offerMin.toFixed(2)}` : '')
+    : 'Offers off');
+  const card = (typeof cards !== 'undefined' && d.sku) ? cards.find(c => c.itemId === d.sku) : null;
+  const cost = card && Number(card.cost) > 0 ? Number(card.cost) : 0;
+  const row = (k, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--bdr2);font-size:14px"><span style="color:var(--tx3)">${k}</span><span style="color:var(--tx);font-weight:600;text-align:right">${v}</span></div>` : '';
+  const imgs = (d.images || []).slice(0, 3).map(u => `<img src="${emlEsc(u)}" style="height:110px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--surf2)">`).join('');
+  const desc = String(d.description || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  emlSheet(`
+    ${imgs ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:12px">${imgs}</div>` : ''}
+    <div style="font-size:16px;font-weight:700;color:var(--tx);line-height:1.35">${emlEsc(d.title)}</div>
+    <div style="font-size:13px;color:var(--tx2);font-weight:600;margin-top:4px">${emlEsc(status)}</div>
+    <div style="font-size:28px;font-weight:800;color:var(--tx);margin:8px 0 6px">$${(d.price || 0).toFixed(2)}</div>
+    <div>
+      ${row(isFixed ? 'Format' : 'Starting bid', isFixed ? 'Buy It Now' : 'Auction')}
+      ${row('Offers', offers)}
+      ${row('Shipping', emlEsc(shipLabel))}
+      ${row('Watching', d.watchCount ? String(d.watchCount) : '')}
+      ${row('You paid', cost ? '$' + cost.toFixed(2) : '')}
+      ${row('Posted via', d.source === 'app' ? 'App' : (d.source === 'trading' ? 'Seller Hub' : ''))}
+      ${row('Listing #', emlEsc(d.listingId))}
+      ${row('Item ID', emlEsc(d.sku || ''))}
+    </div>
+    ${desc ? `<div style="font-size:13px;color:var(--tx2);line-height:1.5;margin-top:12px;max-height:96px;overflow:hidden">${emlEsc(desc.slice(0, 400))}${desc.length > 400 ? '…' : ''}</div>` : ''}
+    <button onclick="emlRenderEdit()" style="width:100%;height:46px;border:none;border-radius:10px;background:var(--acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:16px">Edit listing</button>
+    ${d.url ? `<a href="${emlEsc(d.url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;width:100%;height:42px;box-sizing:border-box;border:1px solid var(--bdr2);border-radius:10px;color:var(--acc);font-size:14px;font-weight:700;text-decoration:none;margin-top:10px">View on eBay ↗</a>` : ''}
+  `, 'eBay Listing');
 }
 
 function emlRenderEdit() {
