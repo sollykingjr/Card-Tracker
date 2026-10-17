@@ -3,6 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { refreshCurrent, setGraduated, listCurrent } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
@@ -537,6 +538,44 @@ await t('one price row per player and date: a repeat from another post (or the s
   await confirmPost(env, d.postId);
   rows = raw.prepare("SELECT base_auto_cents b, expected_cents e FROM prospect_prices WHERE dated = '2026-09-11'").all();
   assert.equal(rows.length, 1); assert.equal(rows[0].e, 1740);
+});
+
+await t('current-state row: score with its own price and date, newest price and rank, graduated from the full lists, manual switch', async () => {
+  const env = { DB: makeDb() }, raw = env.DB._raw;
+  const hit = (id, nm) => `('${id}','${nm}','${nm.toLowerCase()}','ATL','hitter')`;
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, org, side) VALUES ${hit('ann-a','Ann A')}, ${hit('bob-b','Bob B')}, ${hit('cal-c','Cal C')}, ${hit('dan-d','Dan D')}, ${hit('eli-e','Eli E')};
+    INSERT INTO prospect_posts (post_id, title, post_type, published_at, raw_text, status) VALUES ('p1','Top 200 · 9/1','rankings','2026-09-01','x','confirmed'),('p2','Top 200 · 9/15','rankings','2026-09-15','x','confirmed'),('p3','Hot Sheet · 9/22','hot_sheet','2026-09-22','x','confirmed'),('p4','Analysis · 10/1','analysis','2026-10-01','x','confirmed');`);
+  // two full 200-player lists; Ann (#40) and Dan (#150) drop off the second, Bob stays, Cal is #30 on the first only (also dropped), Eli never listed
+  const filler = (post, date, from, to) => { for (let r = from; r <= to; r++) raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name) VALUES ('f${r}-${post}','F ${r} ${post}','f ${r} ${post}') ON CONFLICT DO NOTHING; INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('${post}','f${r}-${post}','top 200 hitters',${r},'${date}')`); };
+  filler('p1', '2026-09-01', 1, 199); filler('p2', '2026-09-15', 1, 199);
+  raw.exec(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES
+    ('p1','ann-a','top 200 hitters',40,'2026-09-01'),('p1','dan-d','top 200 hitters',150,'2026-09-01'),('p1','cal-c','top 200 hitters',30,'2026-09-01'),('p1','bob-b','top 200 hitters',60,'2026-09-01'),
+    ('p2','bob-b','top 200 hitters',55,'2026-09-15'),('p3','bob-b','hobby rank',47,'2026-09-22');
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES
+    ('p2','bob-b','2026-09-15','ATL',20.1,'A+',4.4,'Strong Buy'),('p3','bob-b','2026-09-22','ATL',20.2,NULL,NULL,NULL),('p4','eli-e','2026-10-01','SEA',22,'AA',NULL,NULL);
+    INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES
+    ('p2','bob-b','2026-09-15',2500,4000),('p3','bob-b','2026-09-22',3100,NULL),('p4','eli-e','2026-10-01',900,NULL);
+    INSERT INTO prospect_takes (post_id, prospect_id, stance, analysis, dated) VALUES ('p4','bob-b','none','His words','2026-10-01');`);
+  await refreshCurrent(env);
+  const by = Object.fromEntries((await listCurrent(env)).players.map(p => [p.prospect_id, p]));
+  const b = by['bob-b'];
+  assert.equal(b.buy_rating, 4.4); assert.equal(b.scored_dated, '2026-09-15'); assert.equal(b.expected_cents, 4000); assert.equal(b.price_at_score_cents, 2500);   // score stays with its own price and date
+  assert.equal(b.price_cents, 3100); assert.equal(b.price_dated, '2026-09-22');                                                                              // newest price from a later post
+  assert.equal(b.rank, 47); assert.equal(b.rank_list, 'hobby rank'); assert.equal(b.rank_dated, '2026-09-22');                                              // newest rank wins, whatever the label
+  assert.equal(b.age, 20.2); assert.equal(b.level, 'A+'); assert.equal(b.team, 'ATL'); assert.equal(b.last_note_dated, '2026-10-01'); assert.equal(b.side, 'hitter');
+  assert.equal(b.graduated, 0);
+  assert.equal(by['ann-a'].graduated, 1); assert.equal(by['ann-a'].graduated_since, '2026-09-15');   // top 100 on the first full list, missing from the next
+  assert.equal(by['cal-c'].graduated, 1);
+  assert.equal(by['dan-d'].graduated, 0);                                                            // #150 dropping off is not a graduation
+  assert.equal(by['eli-e'].graduated, 0); assert.equal(by['eli-e'].buy_rating, null); assert.equal(by['eli-e'].price_cents, 900);
+  await setGraduated(env, 'ann-a', false); await setGraduated(env, 'dan-d', true); await refreshCurrent(env);   // his switch survives a rebuild
+  const by2 = Object.fromEntries((await listCurrent(env)).players.map(p => [p.prospect_id, p]));
+  assert.equal(by2['ann-a'].graduated, 0); assert.equal(by2['ann-a'].graduated_auto, 1); assert.equal(by2['dan-d'].graduated, 1);
+  await setGraduated(env, 'ann-a', null); assert.equal((await listCurrent(env)).players.find(p => p.prospect_id === 'ann-a').graduated, 1);
+  raw.exec(`INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('p3','ann-a','hobby rank',80,'2026-09-22')`);   // ranked again later: the tag clears
+  await refreshCurrent(env);
+  assert.equal((await listCurrent(env)).players.find(p => p.prospect_id === 'ann-a').graduated, 0);
+  await assert.rejects(() => setGraduated(env, 'nobody', true));
 });
 
 console.log(`\n${passed} tests passed`);

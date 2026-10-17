@@ -100,3 +100,19 @@ CREATE TABLE IF NOT EXISTS prospect_aliases (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (alias_norm, prospect_id)
 );
+
+-- One row per player with what the app needs first: his latest Buy Score (with the Expected Value and price from the day he scored it),
+-- the newest price, the newest rank, age/level/team, and Graduated. Rebuilt from the history tables whenever a post is confirmed (added 2026-10-17).
+CREATE TABLE IF NOT EXISTS prospect_current (
+  prospect_id TEXT PRIMARY KEY,
+  side TEXT,                             -- hitter | pitcher
+  team TEXT, age REAL, age_dated TEXT, level TEXT,
+  rank INTEGER, rank_dated TEXT, rank_list TEXT,   -- newest rank from a hot sheet ("hobby rank") or a Top 200/100 post: same ranking, different labels
+  buy_rating REAL, action TEXT, scored_dated TEXT, -- his latest Buy Score and the date he gave it
+  expected_cents INTEGER, price_at_score_cents INTEGER,   -- Expected Value and base auto price around that date
+  price_cents INTEGER, price_dated TEXT,           -- newest price from any post
+  last_note_dated TEXT, last_seen TEXT,
+  graduated_auto INTEGER NOT NULL DEFAULT 0, graduated_since TEXT,   -- was top 100 hitter / top 50 pitcher, then missing from the next full list
+  graduated_manual INTEGER,                        -- his switch in the player modal: 1 graduated, 0 not, NULL follow the automatic rule
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
