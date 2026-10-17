@@ -113,3 +113,24 @@ export async function listCurrent(env) {
     FROM prospect_current c JOIN prospects p USING (prospect_id)`).all();
   return { players: results };
 }
+
+// The current Buy Score lists used for bulk eBay searches and the Search Builder presets.
+// "Current" for a side = scored on or after that side's last Top Rankings post (Top 200 Hitters / Top 100 Pitchers).
+// Falls back to 14 days before his newest score on that side if there has never been a Top Rankings post. Graduated players are left out.
+// Returns {cutoffs:{hitter,pitcher}, players:[{name, side, buy, scored_dated}]}, highest score first.
+export async function listBuyList(env, min = 0, max = 5, side = null) {
+  const lo = Number.isFinite(+min) ? +min : 0, hi = Number.isFinite(+max) ? +max : 5;
+  const all = async (sql, ...b) => (await env.DB.prepare(sql).bind(...b).all()).results;
+  const lastTop = Object.fromEntries((await all(`SELECT list_name, MAX(dated) d FROM prospect_rankings WHERE list_name IN ('top 200 hitters', 'top 100 pitchers') GROUP BY list_name`)).map(r => [r.list_name, r.d]));
+  const rows = await all(`SELECT c.side, c.buy_rating, c.scored_dated, p.name, COALESCE(c.graduated_manual, c.graduated_auto) AS graduated
+    FROM prospect_current c JOIN prospects p USING (prospect_id) WHERE c.buy_rating IS NOT NULL AND c.scored_dated IS NOT NULL`);
+  const newest = {};
+  for (const r of rows) { const s = r.side || 'hitter'; if (!newest[s] || r.scored_dated > newest[s]) newest[s] = r.scored_dated; }
+  const back14 = d => d ? new Date(new Date(d + 'T12:00:00Z').getTime() - 14 * 86400000).toISOString().slice(0, 10) : null;
+  const cutoffs = { hitter: lastTop['top 200 hitters'] || back14(newest.hitter), pitcher: lastTop['top 100 pitchers'] || back14(newest.pitcher) };
+  const players = rows.filter(r => !r.graduated && (!side || (r.side || 'hitter') === side) && r.buy_rating >= lo && r.buy_rating <= hi
+      && r.scored_dated >= (cutoffs[r.side || 'hitter'] || ''))
+    .map(r => ({ name: r.name, side: r.side || 'hitter', buy: r.buy_rating, scored_dated: r.scored_dated }))
+    .sort((a, b) => b.buy - a.buy || a.name.localeCompare(b.name));
+  return { cutoffs, players };
+}

@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet } from '../worker/prospect-current.js';
+import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, searchPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
@@ -605,5 +605,17 @@ await t('searchPosts finds posts by player name or title', async () => {
   assert.deepEqual((await searchPosts(env, 'jo sm')).post_ids, ['a']);   // by player; pending posts never show
   assert.deepEqual((await searchPosts(env, 'pitch')).post_ids, ['b']);   // by title
   assert.deepEqual((await searchPosts(env, 'x')).post_ids, []);          // too short
+});
+await t('buy list: scores on or after the last Top Rankings post, per side, graduated left out', async () => {
+  const env = { DB: makeDb() }; const raw = env.DB._raw;
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('a','A Hit','a hit','hitter'),('b','B Old','b old','hitter'),('c','C Four','c four','hitter'),('d','D Pit','d pit','pitcher'),('e','E Grad','e grad','hitter');
+    INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES
+      ('a','hitter',5,'2026-10-07',0),('b','hitter',5,'2026-09-01',0),('c','hitter',4.5,'2026-09-25',0),('d','pitcher',5,'2026-10-05',0),('e','hitter',5,'2026-10-07',1);
+    INSERT INTO prospect_posts (post_id, title, post_type, published_at, raw_text, status) VALUES ('t1','Top 200','rankings','2026-09-25','x','confirmed');
+    INSERT INTO prospect_rankings (post_id, prospect_id, list_name, rank, dated) VALUES ('t1','a','top 200 hitters',1,'2026-09-25');`);
+  const r = await listBuyList(env, 5, 5);
+  assert.deepEqual(r.players.map(p => p.name), ['A Hit', 'D Pit']);       // B is older than the last list, E graduated
+  assert.equal(r.cutoffs.hitter, '2026-09-25'); assert.equal(r.cutoffs.pitcher, '2026-09-21');   // no pitcher list yet: 14 days before his newest pitcher score
+  assert.deepEqual((await listBuyList(env, 4, 4.99, 'hitter')).players.map(p => p.name), ['C Four']);   // on the cutoff date counts
 });
 console.log(`\n${passed} tests passed`);
