@@ -66,19 +66,6 @@ CREATE TABLE IF NOT EXISTS prospect_prices (
 );
 CREATE INDEX IF NOT EXISTS idx_prices_prospect ON prospect_prices(prospect_id, dated);
 
--- Performance lines (AFL, regular season, etc). Stats vary by post, so they are stored as JSON.
-CREATE TABLE IF NOT EXISTS prospect_stats (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  post_id TEXT NOT NULL,
-  prospect_id TEXT NOT NULL,
-  dated TEXT,
-  context TEXT,                          -- e.g. 'AFL 2026', '2026 season'
-  level TEXT,                            -- e.g. 'A/A+', 'AFL'
-  age REAL,
-  stats_json TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_stats_prospect ON prospect_stats(prospect_id, dated);
-
 -- Per-player facts as of a post/date: age, level, his Buy Rating and the Action label beside it (added 2026-10-15).
 CREATE TABLE IF NOT EXISTS prospect_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

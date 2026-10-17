@@ -31,15 +31,12 @@ const BOUNCE_BACK = {
   players: [
     { name: 'Ramiro Dominguez', team: 'MIN', side: 'hitter', age: 19.5, post_rank: 5, rankings: [{ list: 'hobby hitters', rank: 180 }],
       prices: [{ date: '2026-10-14', base_auto: 4.21 }],
-      stat_lines: [{ context: '2026 season', level: 'A/A+', stats: { HR: 12, SB: 27, 'BB%': 10.9, 'K%': 18.7, ISO: 0.174, 'wRC+': 105 } }],
       take: { stance: 'buy', summary: 'Elite pull-air rate and strong contact; power should come as he gets stronger.', key_points: ['PullAir% 93rd percentile', 'Pull% ranked #1 of 132 teens'] } },
     { name: 'Handelfry Encarnacion', team: 'MIL', side: 'hitter', age: 19.3, post_rank: 2, rankings: [{ list: 'hobby hitters', rank: 137 }],
       prices: [{ date: '2026-10-14', base_auto: 10.10 }],
-      stat_lines: [{ context: '2026 season', level: 'A', stats: { HR: 12, SB: 27, 'BB%': 16.2, 'K%': 17.7, ISO: 0.155, 'wRC+': 111 } }],
       take: { stance: 'buy', summary: 'Well-rounded, advanced zone feel; hype faded so the price dipped.', key_points: ['Only teen with K% under 20 and 10 HR/25 SB'] } },
     { name: 'Devin Fitz-Gerald', team: 'WAS', side: 'hitter', age: 21.2, post_rank: 1, rankings: [{ list: 'hobby hitters', rank: 53 }],
       prices: [{ date: '2026-10-14', base_auto: 15.79 }],
-      stat_lines: [{ context: '2026 season', level: 'A+/AA', stats: { HR: 20, SB: 15, 'BB%': 9.7, 'K%': 21.9, ISO: 0.191, 'wRC+': 107 } }],
       take: { stance: 'buy', summary: 'Promoted aggressively and struggled; finished strong. Price never recovered.', key_points: ['61 games above rookie ball at promotion'] } }
   ]
 };
@@ -49,15 +46,12 @@ const AFL = {
   players: [
     { name: 'Jhonny Severino', team: 'PIT', side: 'hitter', age: 21.9, rankings: [{ list: 'hobby hitters', rank: 228 }],
       prices: [{ date: '2026-10-12', base_auto: 25.93 }, { date: '2026-10-03', base_auto: 5.41 }],
-      stat_lines: [{ context: 'AFL 2026', level: 'AFL', stats: { PA: 15, OPS: 0.9 } }],
       take: { stance: 'watch', summary: 'Price up nearly 400% in ten days with no clear catalyst.', key_points: [] } },
     { name: 'Caleb Bonemer', team: 'CHW', side: 'hitter', age: 21.0, rankings: [{ list: 'hobby hitters', rank: 7 }],
       prices: [{ date: '2026-10-12', base_auto: 66.20, expected: 107.80 }, { date: '2026-10-03', base_auto: 70.17 }],
-      stat_lines: [{ context: 'AFL 2026', level: 'AFL', stats: { PA: 24, OPS: 1.008 } }],
       take: { stance: 'buy', summary: 'Hitting over 1.000 OPS yet price fell; already a buy.', key_points: ['Expected value $107.80'] } },
     { name: 'Jarlin Susana', team: 'WAS', side: 'pitcher', age: 22.6, rankings: [{ list: 'hobby pitchers', rank: 3 }],
-      prices: [{ date: '2026-10-12', base_auto: 57.86 }, { date: '2026-10-03', base_auto: 45.39 }],
-      stat_lines: [{ context: 'AFL 2026', level: 'AFL', stats: { IP: 5.2, ERA: 1.59, WHIP: 0.88, SO9: 12.7 } }] }
+      prices: [{ date: '2026-10-12', base_auto: 57.86 }, { date: '2026-10-03', base_auto: 45.39 }] }
   ]
 };
 
@@ -78,7 +72,7 @@ await t('sanitizeExtraction drops junk and converts dollars to cents', () => {
   const ex = sanitizeExtraction({
     post_type: 'bogus', summary: 'x',
     players: [{ name: ' ' }, { name: 'A B', age: 'abc', prices: [{ date: '10/12', base_auto: 5 }, { date: '2026-10-12', base_auto: '$5' }, { date: '2026-10-12', base_auto: 4.99 }],
-      rankings: [{ list: 'MLB', rank: 'x' }, { list: 'MLB', rank: 7 }], take: { stance: 'moon', summary: 'hi' }, stat_lines: [{ context: 'c', stats: {} }] }]
+      rankings: [{ list: 'MLB', rank: 'x' }, { list: 'MLB', rank: 7 }], take: { stance: 'moon', summary: 'hi' } }]
   });
   assert.equal(ex.post_type, 'other');
   assert.equal(ex.players.length, 1);
@@ -87,7 +81,6 @@ await t('sanitizeExtraction drops junk and converts dollars to cents', () => {
   assert.deepEqual(p.prices, [{ date: '2026-10-12', base_auto_cents: 499, expected_cents: null }]);
   assert.deepEqual(p.rankings, [{ list: 'MLB', rank: 7 }]);
   assert.equal(p.take.stance, 'none');
-  assert.equal(p.stat_lines.length, 0);
 });
 
 await t('cleaning twice gives the same result (confirm re-cleans what was stored)', () => {
@@ -153,13 +146,12 @@ await t('pending list flags new players; confirm writes every table', async () =
   assert.equal(pend.pending, 1);
   assert.ok(pend.posts[0].matches.every(m => m.status === 'new'));
   const c = await confirmPost(env, postId);
-  assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, stats: 0, snapshots: 3 });
+  assert.deepEqual(c.counts, { prospects: 3, takes: 3, rankings: 3, prices: 3, snapshots: 3 });
   assert.equal((await listPendingPosts(env)).pending, 0);
   const d = await prospectDetail(env, 'ramiro dominguez');
   assert.equal(d.matches[0].prospect.org, 'MIN');
   assert.equal(d.matches[0].prices[0].base_auto_cents, 421);
   assert.equal(d.matches[0].takes[0].key_points[0], 'PullAir% 93rd percentile');
-  assert.equal(d.matches[0].stats.length, 0);   // stats are no longer stored
 });
 
 await t('buy rating, action, level, age and expected-only rows are kept (Top 100 style table)', async () => {

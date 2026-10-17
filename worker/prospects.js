@@ -198,7 +198,6 @@ export function sanitizeExtraction(raw, fallbackDate = null) {
           if (!m) acc.push({ ...x }); else { m.base_auto_cents ??= x.base_auto_cents; m.expected_cents ??= x.expected_cents; }
           return acc;
         }, []),
-      stat_lines: [],   // stat lines are deliberately not extracted or stored (saves tokens; prospect_stats table stays unused)
       take
     };
   });
@@ -540,7 +539,7 @@ export async function confirmPost(env, postId, edited = null) {
   if (post.status !== 'pending') throw new Error(`post is already ${post.status}`);
   const ex = sanitizeExtraction(edited || JSON.parse(post.extraction_json || '{}'), post.published_at);
   const dated = ex.published_date || post.published_at || null;
-  const counts = { prospects: 0, takes: 0, rankings: 0, prices: 0, stats: 0, snapshots: 0 };
+  const counts = { prospects: 0, takes: 0, rankings: 0, prices: 0, snapshots: 0 };
   const stmts = [];
   const prep = (sql, ...binds) => env.DB.prepare(sql).bind(...binds);
   const newPrices = new Map();
@@ -566,8 +565,6 @@ export async function confirmPost(env, postId, edited = null) {
     if (p.age != null || p.level || p.buy_rating != null || p.action) {
       stmts.push(prep(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, team, age, level, buy_rating, action) VALUES (?,?,?,?,?,?,?,?)`,
         postId, pid, dated, p.team, p.age, p.level, p.buy_rating, p.action)); counts.snapshots++; }
-    for (const s of p.stat_lines) { stmts.push(prep(`INSERT INTO prospect_stats (post_id, prospect_id, dated, context, level, age, stats_json) VALUES (?,?,?,?,?,?,?)`,
-      postId, pid, dated, s.context, s.level, p.age, JSON.stringify(s.stats))); counts.stats++; }
   }
   for (const x of newPrices.values()) { stmts.push(prep(`INSERT INTO prospect_prices (post_id, prospect_id, dated, base_auto_cents, expected_cents) VALUES (?,?,?,?,?)`,
     postId, x.pid, x.date, x.base_auto_cents, x.expected_cents)); counts.prices++; }
@@ -597,9 +594,7 @@ export async function prospectDetail(env, name) {
         .map(t => ({ ...t, key_points: JSON.parse(t.key_points || '[]') })),
       rankings: await q(`SELECT dated, list_name, rank FROM prospect_rankings WHERE prospect_id = ? ORDER BY dated DESC`),
       prices: await q(`SELECT dated, base_auto_cents, expected_cents FROM prospect_prices WHERE prospect_id = ? ORDER BY dated DESC`),
-      snapshots: await q(`SELECT dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE prospect_id = ? ORDER BY dated DESC`),
-      stats: (await q(`SELECT dated, context, level, age, stats_json FROM prospect_stats WHERE prospect_id = ? ORDER BY dated DESC`))
-        .map(s => ({ ...s, stats: JSON.parse(s.stats_json), stats_json: undefined }))
+      snapshots: await q(`SELECT dated, team, age, level, buy_rating, action FROM prospect_snapshots WHERE prospect_id = ? ORDER BY dated DESC`)
     });
   }
   return { found: true, matches: out };
