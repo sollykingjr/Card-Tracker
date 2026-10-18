@@ -175,7 +175,13 @@ async function phSearchListings() {
       const l = await pibCall(`/prospect-buy-list?min=${s.prospectList.min}&max=${s.prospectList.max}&side=${side}`);
       if ((l.players || []).some(p => normName(p.name) === normName(name))) hits.push(s);
     }
-    if (!hits.length) { say('<div class="intake-meta">No Buy Score search covers him right now. Add one in Search Results (BS list), or he is not on the current list.</div>'); return; }
+    // Any other saved search with his name in its title or query
+    const nn = normName(name);
+    for (const s of (data.searches || [])) {
+      if (s.prospectList || hits.includes(s)) continue;
+      if (normName(s.label).includes(nn) || normName(s.query).includes(nn)) hits.push(s);
+    }
+    if (!hits.length) { say('<div class="intake-meta">No saved search covers him right now. Add one in Search Results, or he is not on the current Buy Score list.</div>'); return; }
     window._phListHits = { hits, groups: data.groups || [], name };
     if (hits.length === 1) return phOpenListings(0);
     say('<div class="ph-m-listrow">' + hits.map((s, i) => `<button class="ph-m-listbtn" onclick="phOpenListings(${i})">${pibEsc(s.label)}</button>`).join('') + '</div>');
