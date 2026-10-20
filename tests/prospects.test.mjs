@@ -621,16 +621,16 @@ await t('buy list: scores on or after the last Top Rankings post, per side, grad
 });
 await t('prospect list searches: query built from the current list, long lists split, ordinary searches untouched', async () => {
   const env = { DB: makeDb() }; const raw = env.DB._raw;
-  for (let i = 0; i < 30; i++) raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('h${i}','Hit ${String(i).padStart(2, '0')}','hit ${i}','hitter'); INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES ('h${i}','hitter',5,'2026-10-07',0);`);
+  for (let i = 0; i < PROSPECT_CHUNK + 5; i++) raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('h${i}','Hit ${String(i).padStart(3, '0')}','hit ${i}','hitter'); INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES ('h${i}','hitter',5,'2026-10-07',0);`);
   raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('p1','Pit One','pit one','pitcher'); INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES ('p1','pitcher',5,'2026-10-07',0);`);
   const plain = { id: 'x', label: 'Plain', query: 'foo' };
   const bulk = { id: 'b', label: 'BS 5 Hitters BIN', listingType: 'FIXED_PRICE', notify: true, prospectList: { min: 5, max: 5, side: 'hitter' } };
   const out = await expandProspectSearches(env, [plain, bulk]);
   assert.equal(out[0], plain);                                   // ordinary search passes through unchanged
   const chunks = out.slice(1);
-  assert.equal(chunks.length, 2); assert.equal(PROSPECT_CHUNK, 25);
-  assert(chunks[0].query.startsWith('Bowman Chrome Auto (Hit 00, Hit 01') && !chunks[0].query.includes('Pit One'));   // hitters only
-  assert.equal(chunks[0].query.split(',').length, 25); assert.equal(chunks[1].query.split(',').length, 5);
+  assert.equal(chunks.length, 2);
+  assert(chunks[0].query.startsWith('Bowman Chrome Auto (Hit 000, Hit 001') && !chunks[0].query.includes('Pit One'));   // hitters only
+  assert.equal(chunks[0].query.split(',').length, PROSPECT_CHUNK); assert.equal(chunks[1].query.split(',').length, 5);
   assert.equal(chunks[0].notify, true); assert.equal(chunks[1].notify, false);   // only the first chunk notifies
   assert(chunks.every(c => c.id === 'b' && c.label === bulk.label));
   assert(buildEbaySearchUrl(chunks[0]).includes('buyingOptions%3A%7BFIXED_PRICE%7D'));

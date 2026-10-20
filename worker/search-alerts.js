@@ -39,7 +39,7 @@ export function buildEbaySearchUrl(search, offset) {
 // A saved search can carry prospectList: {min, max, side, base}. Its eBay query is built here, every run, from the current Buy Score
 // list (GET /prospect-buy-list logic), so the search stays current on its own. Lists longer than PROSPECT_CHUNK names are split into
 // several queries that share the search's id, label and digest; only the first one sends a notification. Never saved back.
-export const PROSPECT_CHUNK = 25;
+export const PROSPECT_CHUNK = 100; // eBay read a 100-name (~1.5k char) query in full; see Test 1-3 runs 2026-10-19
 export async function expandProspectSearches(env, searches) {
   const out = [];
   for (const s of searches || []) {
