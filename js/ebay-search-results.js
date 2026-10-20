@@ -126,7 +126,6 @@ async function initSearchResults() {
               <button class="sr-chip-btn on" data-val="">Off</button>
               <button class="sr-chip-btn" data-val="5">BS 5.0</button>
               <button class="sr-chip-btn" data-val="4">BS 4.0–4.99</button>
-              <button class="sr-chip-btn" data-val="ev">Recent EV</button>
             </div>
           </div>
           <div id="sr-pl-detail" style="display:none">
@@ -135,12 +134,7 @@ async function initSearchResults() {
               <div class="sr-chip-row" id="sr-pl-side">
                 <button class="sr-chip-btn on" data-val="hitter">Hitters</button>
                 <button class="sr-chip-btn" data-val="pitcher">Pitchers</button>
-                <button class="sr-chip-btn" data-val="both" id="sr-pl-both" style="display:none">Both</button>
               </div>
-            </div>
-            <div class="sr-form-row" id="sr-pl-days-row" style="display:none">
-              <div class="sr-form-label">Expires after</div>
-              <input class="sr-input" id="sr-pl-days" type="number" min="1" max="365" value="30" style="max-width:90px"> <span style="font-size:12px;color:var(--tx3)">days without a new Expected Value</span>
             </div>
             <input class="sr-input" id="sr-pl-base" placeholder="Words every listing must match" value="Bowman Chrome Auto">
             <div class="sr-pl-note" id="sr-pl-count" style="font-size:12px;color:var(--tx3);margin:4px 0 8px"></div>
@@ -499,8 +493,9 @@ async function renderList() {
     html = '<div class="sr-empty">No searches yet. Add a group or standalone search above.</div>';
   }
 
-  list.innerHTML = html;
+  list.innerHTML = (typeof pwEntryTileHtml === 'function' ? pwEntryTileHtml() : '') + html;
   wireListEvents();
+  if (typeof pwWireEntry === 'function') pwWireEntry();
 
   // Fetch unseen counts (from the 7-day archive) in parallel and update badges
   const allKeys = [
@@ -1089,50 +1084,33 @@ function setChip(groupId, val) {
 // Prospect Buy Score list: the query is built on the server from the current list, so the query box is not used.
 function plRead() {
   const tier = getChipVal('sr-pl-tier'); if (!tier) return null;
-  const base = document.getElementById('sr-pl-base').value.trim(), side = getChipVal('sr-pl-side') || 'hitter';
-  // Recent EV: every non-graduated player with an Expected Value in the last N days (the expiry), either side or both
-  if (tier === 'ev') return { recentEvDays: Math.max(1, Math.min(365, parseInt(document.getElementById('sr-pl-days').value, 10) || 30)), side: side === 'both' ? undefined : side, base };
   const range = tier === '5' ? { min: 5, max: 5 } : { min: 4, max: 4.99 };
-  return { ...range, side: side === 'both' ? 'hitter' : side, base };
+  return { ...range, side: getChipVal('sr-pl-side') || 'hitter', base: document.getElementById('sr-pl-base').value.trim() };
 }
 function plWrite(pl) {
-  setChip('sr-pl-tier', pl ? (pl.recentEvDays ? 'ev' : pl.min >= 5 ? '5' : '4') : '');
-  setChip('sr-pl-side', pl ? (pl.side || 'both') : 'hitter');
-  document.getElementById('sr-pl-days').value = pl && pl.recentEvDays ? pl.recentEvDays : 30;
-  plPrevTier = pl && pl.recentEvDays ? 'ev' : null;   // an existing Recent EV search keeps the side it was saved with
+  setChip('sr-pl-tier', pl ? (pl.min >= 5 ? '5' : '4') : '');
+  setChip('sr-pl-side', pl ? pl.side : 'hitter');
   document.getElementById('sr-pl-base').value = pl ? (pl.base ?? 'Bowman Chrome Auto') : 'Bowman Chrome Auto';
   plRefresh();
 }
-let plPrevTier = null;   // picking Recent EV for the first time starts on Both sides
 async function plRefresh() {
-  const tierNow = getChipVal('sr-pl-tier');
-  if (tierNow === 'ev' && plPrevTier !== 'ev') setChip('sr-pl-side', 'both');
-  plPrevTier = tierNow;
   const pl = plRead(), on = !!pl;
   document.getElementById('sr-pl-detail').style.display = on ? '' : 'none';
   document.getElementById('sr-query').style.display = on ? 'none' : '';
-  const ev = on && !!pl.recentEvDays;
-  document.getElementById('sr-pl-days-row').style.display = ev ? '' : 'none';
-  document.getElementById('sr-pl-both').style.display = ev ? '' : 'none';
-  if (!ev && getChipVal('sr-pl-side') === 'both') setChip('sr-pl-side', 'hitter');
   const note = document.getElementById('sr-pl-count');
   if (!on) { note.textContent = ''; return; }
   note.textContent = 'Checking the list…';
   try {
-    const url = ev ? `${WORKER}/prospect-recent-ev-list?days=${pl.recentEvDays}${pl.side ? '&side=' + pl.side : ''}` : `${WORKER}/prospect-buy-list?min=${pl.min}&max=${pl.max}&side=${pl.side}`;
-    const d = await (await fetch(url, { headers: { 'X-App-Key': APP_KEY } })).json();
+    const d = await (await fetch(`${WORKER}/prospect-buy-list?min=${pl.min}&max=${pl.max}&side=${pl.side}`, { headers: { 'X-App-Key': APP_KEY } })).json();
     const n = (d.players || []).length, q = Math.max(1, Math.ceil(n / 100));
     const now = plRead();
-    if (now && JSON.stringify(now) === JSON.stringify(pl)) note.textContent = ev
-      ? `${n} player${n === 1 ? '' : 's'} with an Expected Value in the last ${pl.recentEvDays} days and a first auto on file (about ${q} eBay quer${q > 1 ? 'ies' : 'y'} per run). Players drop off on their own.`
-      : `${n} ${pl.side}${n === 1 ? '' : 's'} on the list now (about ${q} eBay quer${q > 1 ? 'ies' : 'y'}). It updates itself with each new rankings post.`;
+    if (now && JSON.stringify(now) === JSON.stringify(pl)) note.textContent = `${n} ${pl.side}${n === 1 ? '' : 's'} on the list now (about ${q} eBay quer${q > 1 ? 'ies' : 'y'}). It updates itself with each new rankings post.`;
   } catch (e) { note.textContent = ''; }
 }
 
 function wireForm() {
   wireChips('sr-pl-tier'); wireChips('sr-pl-side');
   document.querySelectorAll('#sr-pl-tier .sr-chip-btn, #sr-pl-side .sr-chip-btn').forEach(b => b.addEventListener('click', plRefresh));
-  document.getElementById('sr-pl-days').addEventListener('change', plRefresh);
   wireChips('sr-seller-mode-chips');
   wireChips('sr-category-chips');
   wireChips('sr-sport-chips');
@@ -1465,6 +1443,9 @@ function renderDigestItems(allItems, sortMode, filterText, key, showAll = false)
       if (!b.endDate) return -1;
       return new Date(a.endDate) - new Date(b.endDate);
     });
+  } else if (sortMode === 'deal') {   // Prospect Watch: biggest discount to the estimate first, no estimate last
+    const pct = i => { const e = listingEstInfo(i.title, i.price); return e && e.pct !== null ? e.pct : 9999; };
+    items.sort((a, b) => pct(a) - pct(b));
   } else if (sortMode === 'oldest') {
     items.sort((a, b) => new Date(a.date) - new Date(b.date));
   } else {
