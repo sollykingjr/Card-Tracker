@@ -3,6 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { watchSearches, sanitizeWatchSettings, getWatchSettings, handleWatchSettings, builtInWatchSearches } from '../worker/prospect-watch.js';
 import { expandProspectSearches, buildEbaySearchUrl, PROSPECT_CHUNK, PROSPECT_MAX_QUERY } from '../worker/search-alerts.js';
 import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList, listRecentEvList } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, searchPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
@@ -665,5 +666,32 @@ await t('recent Expected Value list: window, graduated, first-auto requirement, 
   const out = await expandProspectSearches(env, [{ id: 'r', label: 'Recent EV BIN', notify: true, listingType: 'FIXED_PRICE', prospectList: { recentEvDays: 30, base: 'Bowman Chrome Auto' } }]);
   assert.equal(out.length, 1);
   assert.equal(out[0].query, 'Bowman Chrome Auto (Aa Fresh, Gg Old Score New Ev, Bb Month)');
+});
+await t('Prospect Watch: built-in BIN hourly + Auction nightly searches, settings clamp and persist, expansion uses the expiry', async () => {
+  const kv = new Map(); const CACHE = { get: async k => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, v); } };
+  const env = { DB: makeDb(), CACHE }; const raw = env.DB._raw;
+  assert.deepEqual(await getWatchSettings(env), { enabled: true, days: 30, dealPct: 40 });
+  assert.deepEqual(sanitizeWatchSettings({ days: 9999, dealPct: -5 }), { enabled: true, days: 365, dealPct: 1 });
+  assert.deepEqual(sanitizeWatchSettings({ days: 'abc' }), { enabled: true, days: 30, dealPct: 40 });
+  const [bin, auc] = watchSearches({ enabled: true, days: 14, dealPct: 40 });
+  assert.equal(bin.listingType, 'FIXED_PRICE'); assert.equal(bin.schedule, 'hourly'); assert.equal(bin.digestKey, 'prospect_watch_bin_digest');
+  assert.equal(auc.listingType, 'AUCTION'); assert.equal(auc.schedule, 'nightly'); assert.equal(auc.digestKey, 'prospect_watch_auction_digest');
+  assert.equal(bin.prospectList.recentEvDays, 14); assert.equal(bin.notify, false);
+  assert.deepEqual(watchSearches({ enabled: false, days: 30, dealPct: 40 }), []);
+  const cors = {};
+  const post = await handleWatchSettings({ method: 'POST', json: async () => ({ days: 21, dealPct: 35 }) }, env, cors);
+  assert.deepEqual((await post.json()).settings, { enabled: true, days: 21, dealPct: 35 });
+  assert.equal((await builtInWatchSearches(env))[0].prospectList.recentEvDays, 21);   // saved setting reaches the searches
+  const day = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('w1','Win One','win one','hitter'),('w2','Win Two','win two','pitcher'),('w3','Old Three','old three','hitter');
+    INSERT INTO prospect_current (prospect_id, side) VALUES ('w1','hitter'),('w2','pitcher'),('w3','hitter');
+    INSERT INTO prospect_snapshots (post_id, prospect_id, dated, expected_cents) VALUES ('p','w1','${day(3)}',500),('p','w2','${day(20)}',500),('p','w3','${day(25)}',500);
+    INSERT INTO bowman_first_cards (name, norm_name, prospect_id, year, pc, product, card_number, card_type) VALUES ('a','a','w1',2025,2,'Bowman Chrome','CPA-A','auto'),('b','b','w2',2025,2,'Bowman Chrome','CPA-B','auto'),('c','c','w3',2025,2,'Bowman Chrome','CPA-C','auto');`);
+  const out = await expandProspectSearches(env, await builtInWatchSearches(env));
+  assert.equal(out.length, 2);   // one query each for BIN and Auction
+  assert(out.every(q => q.query === 'Bowman Chrome Auto (Win One, Win Two)'));   // 21-day expiry: the 3- and 20-day players are in, the 25-day player is out
+  await handleWatchSettings({ method: 'POST', json: async () => ({ days: 10 }) }, env, cors);
+  const short = await expandProspectSearches(env, await builtInWatchSearches(env));
+  assert(short[0].query.includes('Win One') && !short[0].query.includes('Win Two') && !short[0].query.includes('Old Three'));   // 10-day expiry drops them
 });
 console.log(`\n${passed} tests passed`);

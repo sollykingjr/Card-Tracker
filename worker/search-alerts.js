@@ -1,6 +1,7 @@
 // ── search-alerts.js — eBay search building, cron jobs, digests, run/mark-seen
 import { notifyCronFailure } from './misc.js';
 import { listBuyList, listRecentEvList } from './prospect-current.js';
+import { builtInWatchSearches } from './prospect-watch.js';
 
 export function buildEbaySearchUrl(search, offset) {
   const filters = [];
@@ -124,7 +125,7 @@ export function filterFirstAutos(items, map) {
 export async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
-  data.searches = await expandProspectSearches(env, data.searches || []);
+  data.searches = await expandProspectSearches(env, [...(data.searches || []), ...(await builtInWatchSearches(env))]);   // saved searches + the built-in Prospect Watch pair
   const firstAutoMap = await loadFirstAutoMap(env, data.searches);
   const searches = (data.searches || []).filter(s => !s.groupId);
   const groups = data.groups || [];
@@ -340,7 +341,7 @@ for (const search of searches) {
 export async function checkNightlySearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
-  data.searches = await expandProspectSearches(env, data.searches || []);
+  data.searches = await expandProspectSearches(env, [...(data.searches || []), ...(await builtInWatchSearches(env))]);   // saved searches + the built-in Prospect Watch pair
   const firstAutoMap = await loadFirstAutoMap(env, data.searches);
   const groups = (data.groups || []).filter(g => g.schedule === 'nightly');
   const searches = (data.searches || []).filter(s => !s.groupId && s.schedule === 'nightly');
@@ -626,7 +627,7 @@ export async function clearPlayerDigests(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
   const groupKeys = (data.groups || []).map(g => g.digestKey);
-  const searchKeys = (data.searches || []).filter(s => !s.groupId).map(s => s.digestKey);
+  const searchKeys = [...(data.searches || []).filter(s => !s.groupId), ...(await builtInWatchSearches(env))].map(s => s.digestKey);
   for (const key of [...groupKeys, ...searchKeys]) {
     await env.CACHE.delete(key);
   }
@@ -750,7 +751,7 @@ export async function handleRunSearch(request, env, cors) {
     const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
     // Check if it's a group or standalone search
     const group = (data.groups || []).find(g => g.digestKey === digestKey);
-    const search = !group ? (data.searches || []).find(s => s.digestKey === digestKey) : null;
+    const search = !group ? ((data.searches || []).find(s => s.digestKey === digestKey) || (await builtInWatchSearches(env)).find(s => s.digestKey === digestKey)) : null;
     if (!group && !search) return new Response(JSON.stringify({ error: 'not found' }), {
       status: 404, headers: { ...cors, 'Content-Type': 'application/json' }
     });

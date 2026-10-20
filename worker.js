@@ -18,6 +18,7 @@ import { handleEbayPublish, handleEbayListingStatus, handleEbayFeePreview, handl
 import { handleEbayMyListings, handleEbayListingDetail, handleEbayListingUpdate, handleEbayListingEnd } from './worker/ebay-listings.js';
 import { handleCardDb, runCardSyncJobs, runBackupJob } from './worker/card-db.js';
 import { handleProspects } from './worker/prospects.js';
+import { handleWatchSettings } from './worker/prospect-watch.js';
 
 
 
@@ -26,6 +27,7 @@ const PROTECTED_ROUTES = new Set([
   'POST:/save-title',
   'POST:/run-search',
   'POST:/search-alerts',
+  'POST:/prospect-watch-settings',
   'POST:/sb-data',
   'POST:/mark-seen',
   'POST:/mark-seen-urls',
@@ -117,6 +119,7 @@ export default {
     if (path === '/daily-stats') return handleDailyStats(env, cors);  
     if (path === '/player-digest') return handlePlayerDigest(request, env, cors);
     if (path === '/player-digest-json') return handlePlayerDigestJson(request, env, cors);
+    if (path === '/prospect-watch-settings') return handleWatchSettings(request, env, cors);
     if (path === '/search-alerts' && request.method === 'GET') return handleSearchAlertsGet(env, cors);
     if (path === '/run-search' && request.method === 'POST') return handleRunSearch(request, env, cors);
     if (path === '/search-alerts' && request.method === 'POST') return handleSearchAlertsPost(request, env, cors);
