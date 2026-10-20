@@ -2,7 +2,7 @@
 // Every recent-EV prospect's first Bowman auto, pooled from the two built-in searches (BIN hourly, Auctions nightly).
 // Reads the same 7-day archives and uses the same card renderer and Mark Seen / Mark All Seen as any other search result.
 const PW_KEYS = { bin: 'prospect_watch_bin_digest', auction: 'prospect_watch_auction_digest' };
-let pw = { items: [], settings: { enabled: true, days: 30, dealPct: 40 }, tier: '', type: 'all', dealsOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
+let pw = { items: [], settings: { enabled: true, days: 30, dealPct: 40 }, tier: '', type: 'all', dealsOnly: false, targetOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
 
 const pwH = () => ({ 'Content-Type': 'application/json', 'X-App-Key': APP_KEY });
 const pwEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -23,6 +23,8 @@ function pwEnrich(items) {
   }
   return items;
 }
+const PW_TARGET_PCT = 15;   // On target = a BIN priced within 15% (either side) of its estimate
+const pwIsTarget = i => i.type === 'BIN' && i._est && i._est.pct !== null && Math.abs(i._est.pct) <= PW_TARGET_PCT;
 const pwIsDeal = i => i.type === 'BIN' && i._est && i._est.pct !== null && i._est.pct <= -pw.settings.dealPct;
 const pwTierOk = (i, tier) => !tier || (i._bs !== null && i._bs >= (tier === '5' ? 5 : 4));
 
@@ -51,6 +53,7 @@ function pwView() {
   return pw.items.filter(i => pwTierOk(i, pw.tier)
     && (pw.type === 'all' || (pw.type === 'bin' ? i.type === 'BIN' : i.type === 'Auction'))
     && (!pw.dealsOnly || pwIsDeal(i))
+    && (!pw.targetOnly || pwIsTarget(i))
     && (!ft || foldText(i.title).includes(ft) || (i._p && foldText(i._p.name).includes(ft))));
 }
 
@@ -77,7 +80,7 @@ function pwRender() {
   if (deal) {
     const h = pwDealHtml();
     deal.innerHTML = h; deal.style.display = h ? '' : 'none';
-    deal.onclick = () => { pw.dealsOnly = true; pw.sort = 'deal'; pwRender(); };
+    deal.onclick = () => { pw.dealsOnly = true; pw.targetOnly = false; pw.sort = 'deal'; pwRender(); };
   }
   const view = pwView();
   updateDigestCount(view, pw.showAll);
@@ -85,6 +88,7 @@ function pwRender() {
   document.querySelectorAll('#pw-type-seg [data-val]').forEach(b => b.classList.toggle('on', b.dataset.val === pw.type));
   const sortSel = document.getElementById('pw-sort'); if (sortSel) sortSel.value = pw.sort;
   document.getElementById('pw-deals-btn')?.classList.toggle('on', pw.dealsOnly);
+  document.getElementById('pw-target-btn')?.classList.toggle('on', pw.targetOnly);
   const sa = document.getElementById('sr-show-all-btn');
   if (sa) { sa.classList.toggle('on', pw.showAll); sa.textContent = pw.showAll ? 'Showing all · switch to unseen only' : 'Show seen listings too'; }
 }
@@ -109,7 +113,7 @@ async function showProspectWatch() {
   if (srResumeCleanup) srResumeCleanup();
   srClearResume();
   srSeller = { sel: new Set(), text: '' };
-  pw = { ...pw, items: [], tier: '', type: 'all', dealsOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
+  pw = { ...pw, items: [], tier: '', type: 'all', dealsOnly: false, targetOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
   const root = document.getElementById('sr-root');
   root.innerHTML = `
     <div class="sr-wrap">
@@ -139,6 +143,7 @@ async function showProspectWatch() {
           <button data-val="auction">Auctions</button>
         </div>
         <button class="sr-chip-btn" id="pw-deals-btn">Deals only</button>
+        <button class="sr-chip-btn" id="pw-target-btn">On target</button>
         <select class="pw-select" id="pw-sort" aria-label="Sort">
           <option value="newest">Newest</option>
           <option value="deal">Best deal</option>
@@ -159,7 +164,8 @@ async function showProspectWatch() {
   document.getElementById('sr-back-btn').onclick = async () => { await initSearchResults(); window.scrollTo(0, srUIState.scrollY); };
   document.getElementById('pw-search').oninput = e => { pw.text = e.target.value.trim(); pwRender(); };
   document.querySelectorAll('#pw-type-seg [data-val]').forEach(b => b.onclick = () => { pw.type = b.dataset.val; pwRender(); });
-  document.getElementById('pw-deals-btn').onclick = () => { pw.dealsOnly = !pw.dealsOnly; pwRender(); };
+  document.getElementById('pw-deals-btn').onclick = () => { pw.dealsOnly = !pw.dealsOnly; if (pw.dealsOnly) pw.targetOnly = false; pwRender(); };
+  document.getElementById('pw-target-btn').onclick = () => { pw.targetOnly = !pw.targetOnly; if (pw.targetOnly) pw.dealsOnly = false; pwRender(); };
   document.getElementById('pw-sort').onchange = e => { pw.sort = e.target.value; pwRender(); };
   document.getElementById('sr-show-all-btn').onclick = () => { pw.showAll = !pw.showAll; closeMenu(); pwRender(); };
 
