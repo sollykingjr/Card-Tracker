@@ -1,6 +1,6 @@
 // ── prospects.js — prospect-analytics posts: paste/email in → Claude extracts → review → D1.
 // Nothing is written to the prospect tables until a post is confirmed. The full original text is always kept.
-import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList } from './prospect-current.js';
+import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList, listRecentEvList } from './prospect-current.js';
 const DEFAULT_MODEL = 'claude-haiku-5-5';   // one setting: switch to 'claude-sonnet-5-5' (env PROSPECT_MODEL) if screenshots misread
 const MAX_TEXT = 120000;
 
@@ -820,7 +820,7 @@ export async function submitEmail(env, b, deps = {}) {
 }
 
 // ── Routes (called from worker.js) ────────────────────────────────────────────
-const PROSPECT_ROUTES = new Set(['GET:/prospect-buy-list', 'GET:/prospect-posts-search', 'POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect-current', 'GET:/prospect-price-history', 'GET:/prospect-hotsheet', 'POST:/prospect-graduate', 'GET:/prospect']);
+const PROSPECT_ROUTES = new Set(['GET:/prospect-buy-list', 'GET:/prospect-recent-ev-list', 'GET:/prospect-posts-search', 'POST:/prospect-extract', 'GET:/prospect-pending', 'GET:/prospect-counts', 'GET:/prospect-usage', 'POST:/prospect-confirm', 'POST:/prospect-reject', 'POST:/prospect-email', 'GET:/prospect-export', 'GET:/prospect-takes', 'GET:/prospect-posts', 'GET:/prospect-post', 'GET:/prospect-current', 'GET:/prospect-price-history', 'GET:/prospect-hotsheet', 'POST:/prospect-graduate', 'GET:/prospect']);
 
 export async function handleProspects(request, env, cors) {
   const url = new URL(request.url);
@@ -843,6 +843,7 @@ export async function handleProspects(request, env, cors) {
       case '/prospect-takes': return out(await playerTakes(env, url.searchParams.get('name') || '', url.searchParams.get('offset'), url.searchParams.get('limit')));
       case '/prospect-current': return out(await listCurrent(env));
       case '/prospect-buy-list': return out(await listBuyList(env, url.searchParams.get('min') ?? 0, url.searchParams.get('max') ?? 5, url.searchParams.get('side') || null));
+      case '/prospect-recent-ev-list': return out(await listRecentEvList(env, url.searchParams.get('days') ?? 30, url.searchParams.get('side') || null, url.searchParams.get('first_auto') !== '0'));
       case '/prospect-hotsheet': return out(await listHotSheet(env));
       case '/prospect-price-history': return out(await listPriceHistory(env, (url.searchParams.get('ids') || '').split(',')));
       case '/prospect-graduate': { const b = await request.json(); return out(await setGraduated(env, b.prospect_id, b.graduated)); }

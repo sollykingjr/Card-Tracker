@@ -134,3 +134,21 @@ export async function listBuyList(env, min = 0, max = 5, side = null) {
     .sort((a, b) => b.buy - a.buy || a.name.localeCompare(b.name));
   return { cutoffs, players };
 }
+
+// Broad "recent Expected Value" list for bulk eBay searches: every non-graduated player with an Expected Value dated within the last `days` days
+// (any snapshot, not just the newest score), so a player drops off on their own when nothing new has been posted for that long.
+// requireFirstAuto keeps only players that have a first auto on file in bowman_first_cards (the searches only target that card).
+// Returns {since, players:[{name, side, buy, ev_dated}]}, highest Buy Score first (unscored last), then newest Expected Value.
+export async function listRecentEvList(env, days = 30, side = null, requireFirstAuto = false) {
+  const n = Number.isFinite(+days) && +days > 0 ? Math.min(+days, 365) : 30;
+  const since = new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const { results } = await env.DB.prepare(`SELECT p.prospect_id, p.name, c.side, c.buy_rating, MAX(s.dated) AS ev_dated,
+      (SELECT COUNT(*) FROM bowman_first_cards b WHERE b.prospect_id = p.prospect_id AND b.card_type = 'auto') AS autos
+    FROM prospect_snapshots s JOIN prospect_current c ON c.prospect_id = s.prospect_id JOIN prospects p ON p.prospect_id = s.prospect_id
+    WHERE s.expected_cents IS NOT NULL AND s.dated >= ? AND COALESCE(c.graduated_manual, c.graduated_auto, 0) = 0
+    GROUP BY p.prospect_id`).bind(since).all();
+  const players = results.filter(r => (!side || (r.side || 'hitter') === side) && (!requireFirstAuto || r.autos > 0))
+    .map(r => ({ name: r.name, side: r.side || 'hitter', buy: r.buy_rating, ev_dated: r.ev_dated }))
+    .sort((a, b) => (b.buy ?? -1) - (a.buy ?? -1) || b.ev_dated.localeCompare(a.ev_dated) || a.name.localeCompare(b.name));
+  return { since, total: results.length, players };
+}

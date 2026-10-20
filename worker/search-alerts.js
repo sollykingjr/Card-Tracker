@@ -1,6 +1,6 @@
 // ── search-alerts.js — eBay search building, cron jobs, digests, run/mark-seen
 import { notifyCronFailure } from './misc.js';
-import { listBuyList } from './prospect-current.js';
+import { listBuyList, listRecentEvList } from './prospect-current.js';
 
 export function buildEbaySearchUrl(search, offset) {
   const filters = [];
@@ -36,7 +36,7 @@ export function buildEbaySearchUrl(search, offset) {
 }
 
 // ── Prospect Buy Score list searches ──────────────────────────────────────────
-// A saved search can carry prospectList: {min, max, side, base}. Its eBay query is built here, every run, from the current Buy Score
+// A saved search can carry prospectList: {min, max, side, base} or {recentEvDays, side?, base}. Its eBay query is built here, every run, from the current Buy Score
 // list (GET /prospect-buy-list logic), so the search stays current on its own. Lists longer than PROSPECT_CHUNK names are split into
 // several queries that share the search's id, label and digest; only the first one sends a notification. Never saved back.
 export const PROSPECT_MAX_QUERY = 1500; // longest query confirmed read in full by eBay is 1,528 characters
@@ -46,7 +46,8 @@ export async function expandProspectSearches(env, searches) {
   for (const s of searches || []) {
     if (!s.prospectList) { out.push(s); continue; }
     const pl = s.prospectList;
-    const r = await listBuyList(env, pl.min, pl.max, pl.side || null);
+    // recentEvDays: every non-graduated player with an Expected Value in the last N days (both sides unless one is set), only those with a first auto on file
+    const r = pl.recentEvDays ? await listRecentEvList(env, pl.recentEvDays, pl.side || null, pl.requireFirstAuto !== false) : await listBuyList(env, pl.min, pl.max, pl.side || null);
     const names = r.players.map(p => p.name.replace(/[(),"]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
     const base = String(pl.base ?? 'Bowman Chrome Auto').trim();
     // A chunk ends at PROSPECT_CHUNK names or PROSPECT_MAX_QUERY characters, whichever comes first, so a list of long names never goes past the tested length.

@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { expandProspectSearches, buildEbaySearchUrl, PROSPECT_CHUNK, PROSPECT_MAX_QUERY } from '../worker/search-alerts.js';
-import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList } from '../worker/prospect-current.js';
+import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList, listRecentEvList } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, searchPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
 function makeDb() {
@@ -643,5 +643,27 @@ await t('prospect list searches: a chunk also ends at the character cap when nam
   assert(out.every(c => c.query.length <= PROSPECT_MAX_QUERY), 'no query over the cap');
   assert.equal(out.flatMap(c => c.query.replace(/^.*\(|\)$/g, '').split(', ')).length, 80);   // nobody lost or repeated
   assert.deepEqual(out.map(c => c.notify), out.map((c, i) => i === 0));
+});
+await t('recent Expected Value list: window, graduated, first-auto requirement, and the saved search built from it', async () => {
+  const env = { DB: makeDb() }; const raw = env.DB._raw;
+  const day = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const mk = (id, name, side, ev, evDays, buy, grad = null, auto = true) => {
+    raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('${id}','${name}','${name.toLowerCase()}','${side}')`);
+    raw.exec(`INSERT INTO prospect_current (prospect_id, side, buy_rating, graduated_manual) VALUES ('${id}','${side}',${buy ?? 'NULL'},${grad ?? 'NULL'})`);
+    if (ev) raw.exec(`INSERT INTO prospect_snapshots (post_id, prospect_id, dated, buy_rating, expected_cents) VALUES ('p','${id}','${day(evDays)}',${buy ?? 'NULL'},${ev})`);
+    if (auto) raw.exec(`INSERT INTO bowman_first_cards (name, norm_name, prospect_id, year, pc, product, card_number, card_type) VALUES ('${name}','${name.toLowerCase()}','${id}',2025,2,'Bowman Chrome','CPA-X','auto')`);
+  };
+  mk('a', 'Aa Fresh', 'hitter', 500, 3, 4.5); mk('b', 'Bb Month', 'pitcher', 800, 29, null); mk('c', 'Cc Stale', 'hitter', 900, 45, 4);
+  mk('d', 'Dd Grad', 'hitter', 900, 2, 5, 1); mk('e', 'Ee NoEv', 'hitter', null, 0, 3); mk('f', 'Ff NoAuto', 'hitter', 700, 1, 3, null, false);
+  mk('g', 'Gg Old Score New Ev', 'hitter', 600, 5, null);
+  const all = await listRecentEvList(env, 30, null, true);
+  assert.deepEqual(all.players.map(p => p.name), ['Aa Fresh', 'Gg Old Score New Ev', 'Bb Month']);   // scored first, then newest EV; stale/graduated/no-EV/no-auto left out
+  assert.deepEqual((await listRecentEvList(env, 30, 'pitcher', true)).players.map(p => p.name), ['Bb Month']);
+  assert.deepEqual((await listRecentEvList(env, 7, null, true)).players.map(p => p.name), ['Aa Fresh', 'Gg Old Score New Ev']);   // shorter window drops older EVs
+  assert.deepEqual((await listRecentEvList(env, 60, null, true)).players.map(p => p.name).sort(), ['Aa Fresh', 'Bb Month', 'Cc Stale', 'Gg Old Score New Ev']);
+  assert.deepEqual((await listRecentEvList(env, 30, null, false)).players.map(p => p.name).includes('Ff NoAuto'), true);   // first-auto requirement can be switched off
+  const out = await expandProspectSearches(env, [{ id: 'r', label: 'Recent EV BIN', notify: true, listingType: 'FIXED_PRICE', prospectList: { recentEvDays: 30, base: 'Bowman Chrome Auto' } }]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].query, 'Bowman Chrome Auto (Aa Fresh, Gg Old Score New Ev, Bb Month)');
 });
 console.log(`\n${passed} tests passed`);
