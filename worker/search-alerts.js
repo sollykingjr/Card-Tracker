@@ -104,6 +104,8 @@ export async function loadFirstAutoMap(env, searches) {
   } catch (e) { return null; }
 }
 
+const NOT_CARD_CODES = ['PSA', 'BGS', 'SGC', 'CGC', 'CSG', 'HGA', 'DNA', 'MLB', 'USA', 'GEM'];
+
 // items: raw eBay item summaries. Returns only listings that can be the matched player's first auto.
 export function filterFirstAutos(items, map) {
   if (!map || !items.length) return items;
@@ -114,11 +116,31 @@ export function filterFirstAutos(items, map) {
     if (!name) return true;
     const fa = map.get(name);
     if (!t.includes(String(fa.year))) return false;
-    const codes = [...String(item.title).toUpperCase().matchAll(/\b(CPA|CDA)[-\s]?([A-Z]{1,4})\b/g)].map(m => m[1] + '-' + m[2]);
+    // Other products' autos are never the first auto: Sapphire / Selections inserts, and any card code that is not CPA-/CDA- (BMA-KW, BCP-163, ...)
+    if (/\b(sapphire|selections)\b/.test(t)) return false;
+    const upper = String(item.title).toUpperCase();
+    for (const m of upper.matchAll(/\b([A-Z]{2,4})-[A-Z0-9]{1,5}\b/g)) if (!['CPA', 'CDA', ...NOT_CARD_CODES].includes(m[1])) return false;
+    const codes = [...upper.matchAll(/\b(CPA|CDA)[-\s]?([A-Z]{1,4})\b/g)].map(m => m[1] + '-' + m[2]);
     if (codes.length && !codes.includes(fa.card)) return false;
     if (fa.product !== 'Bowman Draft' && /\bdraft\b/.test(t) && !codes.includes(fa.card)) return false;
     return true;
   });
+}
+
+
+// Re-checks listings already stored in the digests of prospect searches (kept 7 days), so ones saved before a filter change disappear too.
+export async function pruneProspectDigests(env, searches, map) {
+  if (!map) return;
+  const keys = new Set((searches || []).filter(s => s.prospectList && s.digestKey).map(s => s.digestKey));
+  for (const k of keys) for (const key of [k, k + '_archive']) {
+    try {
+      const raw = await env.CACHE.get(key);
+      if (!raw) continue;
+      const arr = JSON.parse(raw);
+      const kept = filterFirstAutos(arr, map);
+      if (kept.length !== arr.length) await env.CACHE.put(key, JSON.stringify(kept));
+    } catch (e) { /* best effort */ }
+  }
 }
 
 // ── [14] checkPlayerSearches ──────────────────────────────────────────────────
@@ -127,6 +149,7 @@ export async function checkPlayerSearches(env) {
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
   data.searches = await expandProspectSearches(env, [...(data.searches || []), ...(await builtInWatchSearches(env))]);   // saved searches + the built-in Prospect Watch pair
   const firstAutoMap = await loadFirstAutoMap(env, data.searches);
+  await pruneProspectDigests(env, data.searches, firstAutoMap);
   const searches = (data.searches || []).filter(s => !s.groupId);
   const groups = data.groups || [];
   if (searches.length === 0 && groups.length === 0) return;
@@ -343,6 +366,7 @@ export async function checkNightlySearches(env) {
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
   data.searches = await expandProspectSearches(env, [...(data.searches || []), ...(await builtInWatchSearches(env))]);   // saved searches + the built-in Prospect Watch pair
   const firstAutoMap = await loadFirstAutoMap(env, data.searches);
+  await pruneProspectDigests(env, data.searches, firstAutoMap);
   const groups = (data.groups || []).filter(g => g.schedule === 'nightly');
   const searches = (data.searches || []).filter(s => !s.groupId && s.schedule === 'nightly');
   if (groups.length === 0 && searches.length === 0) return;
@@ -782,6 +806,7 @@ export async function handleRunSearch(request, env, cors) {
       : [search]);
     const allItems = [];
     const firstAutoMap = await loadFirstAutoMap(env, searchList);
+    await pruneProspectDigests(env, searchList, firstAutoMap);
 
     for (const s of searchList) {
       if (!s.query && !s.seller) continue;

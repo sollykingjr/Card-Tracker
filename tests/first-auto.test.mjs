@@ -37,4 +37,8 @@ assert.deepEqual(keep(['2026 Bowman Chrome Auto Dax Kilby CPA-DK']), [], '2026 K
 assert.deepEqual(keep(['2025 Bowman Draft Chrome Auto Gary Gill Hill']), [], 'Draft word on a non-Draft first auto dropped');
 assert.equal(keep(['2019 Bowman Chrome Auto Somebody Else']).length, 1, 'unknown player fails open');
 assert.equal(filterFirstAutos([it('x')], null).length, 1, 'no map fails open');
+assert.deepEqual(keep(['2025 Bowman Chrome Dax Kilby Blue Mojo Auto /150 BMA-DK']), [], 'other auto codes (BMA-) dropped');
+assert.deepEqual(keep(['2025 Bowman Draft Chrome Dax Kilby Auto BCP-12']), [], 'base-card codes dropped');
+assert.deepEqual(keep(['2025 Bowman Draft Sapphire Dax Kilby Selections Auto']), [], 'Sapphire / Selections dropped');
+assert.equal(keep(['2025 Bowman Draft Chrome Dax Kilby Auto CPA-DK PSA 10 PSA-DNA']).length, 1, 'grader words are not card codes');
 console.log('first-auto: all passed');
