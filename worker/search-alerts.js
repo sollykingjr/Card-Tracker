@@ -71,11 +71,52 @@ export function dedupeNewItems(existing, incoming) {
   return out;
 }
 
+// ── First-auto filter ─────────────────────────────────────────────────────────
+// Prospect-list searches only want each player's FIRST Bowman auto (the earliest CPA-/CDA- card in bowman_first_cards).
+// The eBay query stays name-only ("Bowman Chrome Auto (names)"); listings are checked against the player's first auto here, after the fetch.
+// Fail-open: no table, no player match or no first-auto row for that player keeps the listing, as before.
+const normTitle = t => String(t || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[.'’`]/g, '').replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+
+export async function loadFirstAutoMap(env, searches) {
+  if (!(searches || []).some(s => s.prospectList)) return null;
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT p.prospect_id, p.norm_name, b.year, b.product, b.card_number FROM bowman_first_cards b
+       JOIN prospects p ON p.prospect_id = b.prospect_id WHERE b.card_type = 'auto' ORDER BY b.year, b.pc, b.id`).all()).results;
+    const map = new Map(); // norm name -> first auto
+    const seen = new Set();
+    for (const r of rows) {
+      if (seen.has(r.prospect_id)) continue; // rows are ordered earliest first
+      seen.add(r.prospect_id);
+      map.set(normTitle(r.norm_name), { year: r.year, product: r.product, card: String(r.card_number || '').toUpperCase() });
+    }
+    return map.size ? map : null;
+  } catch (e) { return null; }
+}
+
+// items: raw eBay item summaries. Returns only listings that can be the matched player's first auto.
+export function filterFirstAutos(items, map) {
+  if (!map || !items.length) return items;
+  const names = [...map.keys()].sort((a, b) => b.length - a.length);
+  return items.filter(item => {
+    const t = ' ' + normTitle(item.title) + ' ';
+    const name = names.find(n => t.includes(' ' + n + ' '));
+    if (!name) return true;
+    const fa = map.get(name);
+    if (!t.includes(String(fa.year))) return false;
+    const codes = [...String(item.title).toUpperCase().matchAll(/\b(CPA|CDA)[-\s]?([A-Z]{1,4})\b/g)].map(m => m[1] + '-' + m[2]);
+    if (codes.length && !codes.includes(fa.card)) return false;
+    if (fa.product !== 'Bowman Draft' && /\bdraft\b/.test(t) && !codes.includes(fa.card)) return false;
+    return true;
+  });
+}
+
 // ── [14] checkPlayerSearches ──────────────────────────────────────────────────
 export async function checkPlayerSearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
   data.searches = await expandProspectSearches(env, data.searches || []);
+  const firstAutoMap = await loadFirstAutoMap(env, data.searches);
   const searches = (data.searches || []).filter(s => !s.groupId);
   const groups = data.groups || [];
   if (searches.length === 0 && groups.length === 0) return;
@@ -129,6 +170,7 @@ export async function checkPlayerSearches(env) {
         page++;
       }
 
+      if (search.prospectList) items = filterFirstAutos(items, firstAutoMap);
       if (search.excludeKeywords) {
         const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
         items = items.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
@@ -220,6 +262,7 @@ for (const search of searches) {
 
     // Apply exclude/include keyword filters
     let filteredItems = newItems;
+    if (search.prospectList) filteredItems = filterFirstAutos(filteredItems, firstAutoMap);
     if (search.excludeKeywords) {
       const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
       filteredItems = filteredItems.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
@@ -289,6 +332,7 @@ export async function checkNightlySearches(env) {
   const saved = await env.CACHE.get('player_search_alerts');
   const data = saved ? JSON.parse(saved) : { groups: [], searches: [] };
   data.searches = await expandProspectSearches(env, data.searches || []);
+  const firstAutoMap = await loadFirstAutoMap(env, data.searches);
   const groups = (data.groups || []).filter(g => g.schedule === 'nightly');
   const searches = (data.searches || []).filter(s => !s.groupId && s.schedule === 'nightly');
   if (groups.length === 0 && searches.length === 0) return;
@@ -354,6 +398,7 @@ export async function checkNightlySearches(env) {
       });
     }
 
+      if (search.prospectList) newItems = filterFirstAutos(newItems, firstAutoMap);
       if (search.excludeKeywords) {
         const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
         newItems = newItems.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
@@ -430,6 +475,7 @@ export async function checkNightlySearches(env) {
       });
     }
 
+    if (search.prospectList) items = filterFirstAutos(items, firstAutoMap);
     if (search.excludeKeywords) {
       const excl = search.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
       items = items.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));
@@ -725,6 +771,7 @@ export async function handleRunSearch(request, env, cors) {
       ? data.searches.filter(s => s.groupId === group.id && (!searchId || s.id === searchId))
       : [search]);
     const allItems = [];
+    const firstAutoMap = await loadFirstAutoMap(env, searchList);
 
     for (const s of searchList) {
       if (!s.query && !s.seller) continue;
@@ -739,6 +786,7 @@ export async function handleRunSearch(request, env, cors) {
         filtered = [...filtered, ...backfill];
       }
 
+      if (s.prospectList) filtered = filterFirstAutos(filtered, firstAutoMap);
       if (s.excludeKeywords) {
         const excl = s.excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
         filtered = filtered.filter(item => !excl.some(kw => item.title.toLowerCase().includes(kw)));

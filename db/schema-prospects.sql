@@ -101,3 +101,12 @@ CREATE TABLE IF NOT EXISTS prospect_current (
   graduated_manual INTEGER,                        -- his switch in the player modal: 1 graduated, 0 not, NULL follow the automatic rule
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Every Bowman-family card checklist row known per player (autos and base). A player's FIRST auto = earliest year, then pc (1 Bowman, 2 Chrome, 3 Draft).
+-- Used by search-alerts.js filterFirstAutos so prospect-list searches only alert on that card.
+CREATE TABLE IF NOT EXISTS bowman_first_cards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, norm_name TEXT, prospect_id TEXT, year INTEGER, pc INTEGER, product TEXT,
+  card_number TEXT, team TEXT, additional TEXT, source TEXT DEFAULT 'tracker', note TEXT, updated_at TEXT, card_type TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_bfc_prospect ON bowman_first_cards(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_bfc_norm ON bowman_first_cards(norm_name);
