@@ -39,6 +39,7 @@ export function buildEbaySearchUrl(search, offset) {
 // A saved search can carry prospectList: {min, max, side, base}. Its eBay query is built here, every run, from the current Buy Score
 // list (GET /prospect-buy-list logic), so the search stays current on its own. Lists longer than PROSPECT_CHUNK names are split into
 // several queries that share the search's id, label and digest; only the first one sends a notification. Never saved back.
+export const PROSPECT_MAX_QUERY = 1500; // longest query confirmed read in full by eBay is 1,528 characters
 export const PROSPECT_CHUNK = 100; // eBay read a 100-name (~1.5k char) query in full; see Test 1-3 runs 2026-10-19
 export async function expandProspectSearches(env, searches) {
   const out = [];
@@ -48,9 +49,16 @@ export async function expandProspectSearches(env, searches) {
     const r = await listBuyList(env, pl.min, pl.max, pl.side || null);
     const names = r.players.map(p => p.name.replace(/[(),"]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
     const base = String(pl.base ?? 'Bowman Chrome Auto').trim();
-    for (let i = 0; i < names.length; i += PROSPECT_CHUNK) {
-      out.push({ ...s, query: `${base} (${names.slice(i, i + PROSPECT_CHUNK).join(', ')})`.trim(), notify: i === 0 ? s.notify : false });
+    // A chunk ends at PROSPECT_CHUNK names or PROSPECT_MAX_QUERY characters, whichever comes first, so a list of long names never goes past the tested length.
+    const chunks = [];
+    let cur = [];
+    for (const n of names) {
+      const len = `${base} (${[...cur, n].join(', ')})`.length;
+      if (cur.length && (cur.length >= PROSPECT_CHUNK || len > PROSPECT_MAX_QUERY)) { chunks.push(cur); cur = []; }
+      cur.push(n);
     }
+    if (cur.length) chunks.push(cur);
+    chunks.forEach((c, i) => out.push({ ...s, query: `${base} (${c.join(', ')})`.trim(), notify: i === 0 ? s.notify : false }));
   }
   return out;
 }

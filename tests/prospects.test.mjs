@@ -3,7 +3,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { expandProspectSearches, buildEbaySearchUrl, PROSPECT_CHUNK } from '../worker/search-alerts.js';
+import { expandProspectSearches, buildEbaySearchUrl, PROSPECT_CHUNK, PROSPECT_MAX_QUERY } from '../worker/search-alerts.js';
 import { refreshCurrent, setGraduated, listCurrent, listPriceHistory, listHotSheet, listBuyList } from '../worker/prospect-current.js';
 import { typoMatch, submitPost, listPendingPosts, confirmPost, rejectPost, prospectDetail, sanitizeExtraction, normName, handleProspects, costMicros, usageSummary, exportForApp, playerTakes, listPosts, searchPosts, postDetail, htmlToText, emailImageUrls, submitEmail, extractWithClaude, reviewFlags, stanceFromTable, notifyNewPost } from '../worker/prospects.js';
 
@@ -634,5 +634,14 @@ await t('prospect list searches: query built from the current list, long lists s
   assert.equal(chunks[0].notify, true); assert.equal(chunks[1].notify, false);   // only the first chunk notifies
   assert(chunks.every(c => c.id === 'b' && c.label === bulk.label));
   assert(buildEbaySearchUrl(chunks[0]).includes('buyingOptions%3A%7BFIXED_PRICE%7D'));
+});
+await t('prospect list searches: a chunk also ends at the character cap when names are long', async () => {
+  const env = { DB: makeDb() }; const raw = env.DB._raw;
+  for (let i = 0; i < 80; i++) raw.exec(`INSERT INTO prospects (prospect_id, name, norm_name, side) VALUES ('l${i}','Longname Prospectsurname ${String(i).padStart(2, '0')}','l${i}','hitter'); INSERT INTO prospect_current (prospect_id, side, buy_rating, scored_dated, graduated_auto) VALUES ('l${i}','hitter',5,'2026-10-07',0);`);
+  const out = await expandProspectSearches(env, [{ id: 'b', label: 'Long', notify: true, prospectList: { min: 5, max: 5, side: 'hitter' } }]);
+  assert(out.length > 1);
+  assert(out.every(c => c.query.length <= PROSPECT_MAX_QUERY), 'no query over the cap');
+  assert.equal(out.flatMap(c => c.query.replace(/^.*\(|\)$/g, '').split(', ')).length, 80);   // nobody lost or repeated
+  assert.deepEqual(out.map(c => c.notify), out.map((c, i) => i === 0));
 });
 console.log(`\n${passed} tests passed`);
