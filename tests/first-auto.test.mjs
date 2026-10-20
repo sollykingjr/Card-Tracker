@@ -41,4 +41,5 @@ assert.deepEqual(keep(['2025 Bowman Chrome Dax Kilby Blue Mojo Auto /150 BMA-DK'
 assert.deepEqual(keep(['2025 Bowman Draft Chrome Dax Kilby Auto BCP-12']), [], 'base-card codes dropped');
 assert.deepEqual(keep(['2025 Bowman Draft Sapphire Dax Kilby Selections Auto']), [], 'Sapphire / Selections dropped');
 assert.equal(keep(['2025 Bowman Draft Chrome Dax Kilby Auto CPA-DK PSA 10 PSA-DNA']).length, 1, 'grader words are not card codes');
+assert.deepEqual(keep(['2025 Topps Bowman Chrome Dax Kilby CPA-DK Mojo Refractor Auto']), [], 'Mojo dropped');
 console.log('first-auto: all passed');

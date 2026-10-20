@@ -117,7 +117,7 @@ export function filterFirstAutos(items, map) {
     const fa = map.get(name);
     if (!t.includes(String(fa.year))) return false;
     // Other products' autos are never the first auto: Sapphire / Selections inserts, and any card code that is not CPA-/CDA- (BMA-KW, BCP-163, ...)
-    if (/\b(sapphire|selections)\b/.test(t)) return false;
+    if (/\b(sapphire|selections|mojo)\b/.test(t)) return false;
     const upper = String(item.title).toUpperCase();
     for (const m of upper.matchAll(/\b([A-Z]{2,4})-[A-Z0-9]{1,5}\b/g)) if (!['CPA', 'CDA', ...NOT_CARD_CODES].includes(m[1])) return false;
     const codes = [...upper.matchAll(/\b(CPA|CDA)[-\s]?([A-Z]{1,4})\b/g)].map(m => m[1] + '-' + m[2]);
