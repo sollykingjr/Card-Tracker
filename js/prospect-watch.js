@@ -26,17 +26,23 @@ function pwEnrich(items) {
 const pwIsDeal = i => i.type === 'BIN' && i._est && i._est.pct !== null && i._est.pct <= -pw.settings.dealPct;
 const pwTierOk = (i, tier) => !tier || (i._bs !== null && i._bs >= (tier === '5' ? 5 : 4));
 
-// The entry tile pinned at the top of Search Results
+// The entry tile pinned at the top of Search Results: shows the live numbers so you know whether to open it
 function pwEntryTileHtml() {
-  return `<div class="sr-tile-card pw-entry"><div class="sr-tile-row"><div class="sr-tile-main" id="pw-entry-main"><div class="sr-tile-name">🎯 Prospect Watch</div></div><span id="pw-entry-badge" class="sr-count-badge"></span></div></div>`;
+  return `<div class="sr-tile-card pw-entry"><div class="sr-tile-row"><div class="sr-tile-main" id="pw-entry-main"><div class="sr-tile-name">🎯 Prospect Watch</div><div class="pw-entry-sub" id="pw-entry-sub">&nbsp;</div></div><span id="pw-entry-badge" class="sr-count-badge"></span><span class="pw-entry-go">›</span></div></div>`;
 }
 async function pwWireEntry() {
   const main = document.getElementById('pw-entry-main');
   if (main) main.onclick = () => { srUIState.scrollY = window.scrollY; showProspectWatch(); };
   try {
-    const counts = await Promise.all(Object.values(PW_KEYS).map(k => fetch(`${WORKER}/player-digest-json?key=${k}_archive`).then(r => r.json()).then(d => (d.items || []).filter(i => !i.seen).length).catch(() => 0)));
-    const n = counts[0] + counts[1], badge = document.getElementById('pw-entry-badge');
+    await pwLoadSettings();
+    const unseen = (await pwFetchItems()).filter(i => !i.seen);
+    const badge = document.getElementById('pw-entry-badge'), sub = document.getElementById('pw-entry-sub');
+    const n = unseen.length;
     if (badge && n > 0) { badge.textContent = n > 999 ? '1K+' : String(n); badge.style.display = 'inline-flex'; }
+    if (sub) {
+      const s5 = unseen.filter(i => pwTierOk(i, '5')).length, s4 = unseen.filter(i => pwTierOk(i, '4')).length, d = unseen.filter(pwIsDeal).length;
+      sub.innerHTML = n ? `<b>${s5}</b> BS 5 · <b>${s4}</b> BS 4+ · <b>${d}</b> deal${d === 1 ? '' : 's'}` : 'Nothing new';
+    }
   } catch (e) {}
 }
 
@@ -50,33 +56,37 @@ function pwView() {
 
 function pwTilesHtml() {
   const unseen = pw.items.filter(i => !i.seen);
-  const tile = (tier, label) => {
-    const set = unseen.filter(i => pwTierOk(i, tier));
-    const deals = set.filter(pwIsDeal).sort((a, b) => a._est.pct - b._est.pct);
-    const best = deals[0];
-    return `<button class="pw-tile${pw.tier === tier ? ' on' : ''}" data-tier="${tier}">
-      <div class="pw-tile-label">${label}</div>
-      <div class="pw-tile-n">${set.length}<span> new</span></div>
-      <div class="pw-tile-sub">${deals.length} BIN deal${deals.length === 1 ? '' : 's'} ${pw.settings.dealPct}%+ under</div>
-      <div class="pw-tile-best">${best ? `${pwEsc(best._p.name)} ${best._est.pct}% · $${pwEsc(best.price)}` : '&nbsp;'}</div></button>`;
-  };
-  return tile('5', 'Buy Score 5') + tile('4', 'Buy Score 4+') + tile('', 'All players');
+  const pill = (tier, label) => `<button class="pw-pill${pw.tier === tier ? ' on' : ''}" data-tier="${tier}"><span class="pw-pill-l">${label}</span><span class="pw-pill-n">${unseen.filter(i => pwTierOk(i, tier)).length}</span></button>`;
+  return pill('5', 'BS 5') + pill('4', 'BS 4+') + pill('', 'All');
+}
+// One-line strip: the best unseen BIN deal in the current tier (tap to show deals only, best first)
+function pwDealHtml() {
+  const deals = pw.items.filter(i => !i.seen && pwTierOk(i, pw.tier) && pwIsDeal(i)).sort((a, b) => a._est.pct - b._est.pct);
+  if (!deals.length) return '';
+  const best = deals[0];
+  return `<span class="pw-deal-l">🔥 ${deals.length} deal${deals.length === 1 ? '' : 's'} ${pw.settings.dealPct}%+ under</span><span class="pw-deal-b">${pwEsc(best._p.name)} ${best._est.pct}% · $${pwEsc(best.price)}</span>`;
 }
 
 function pwRender() {
   const tiles = document.getElementById('pw-tiles');
   if (tiles) {
     tiles.innerHTML = pwTilesHtml();
-    tiles.querySelectorAll('.pw-tile').forEach(b => b.onclick = () => { pw.tier = pw.tier === b.dataset.tier ? '' : b.dataset.tier; pwRender(); });
+    tiles.querySelectorAll('.pw-pill').forEach(b => b.onclick = () => { pw.tier = pw.tier === b.dataset.tier ? '' : b.dataset.tier; pwRender(); });
+  }
+  const deal = document.getElementById('pw-deal');
+  if (deal) {
+    const h = pwDealHtml();
+    deal.innerHTML = h; deal.style.display = h ? '' : 'none';
+    deal.onclick = () => { pw.dealsOnly = true; pw.sort = 'deal'; pwRender(); };
   }
   const view = pwView();
   updateDigestCount(view, pw.showAll);
   renderDigestItems(view, pw.sort, '', 'pw', pw.showAll);
-  document.querySelectorAll('#pw-type-chips .sr-chip-btn').forEach(b => b.classList.toggle('on', b.dataset.val === pw.type));
-  document.querySelectorAll('#pw-sort-chips .sr-chip-btn').forEach(b => b.classList.toggle('on', b.dataset.val === pw.sort));
+  document.querySelectorAll('#pw-type-seg [data-val]').forEach(b => b.classList.toggle('on', b.dataset.val === pw.type));
+  const sortSel = document.getElementById('pw-sort'); if (sortSel) sortSel.value = pw.sort;
   document.getElementById('pw-deals-btn')?.classList.toggle('on', pw.dealsOnly);
   const sa = document.getElementById('sr-show-all-btn');
-  if (sa) { sa.classList.toggle('on', pw.showAll); sa.textContent = pw.showAll ? 'Unseen Only' : 'Show All'; }
+  if (sa) { sa.classList.toggle('on', pw.showAll); sa.textContent = pw.showAll ? 'Showing all · switch to unseen only' : 'Show seen listings too'; }
 }
 
 // Mark listings seen: each one in its own search's archive and today's digest, like the other result pages
@@ -108,46 +118,58 @@ async function showProspectWatch() {
         <div class="sr-digest-title">🎯 Prospect Watch</div>
         <div class="sr-digest-actions">
           <button class="sr-mark-past-btn" id="sr-mark-past-btn" title="Mark everything you've scrolled past as seen">Mark Seen</button>
-          <button class="sr-mark-seen-btn" id="sr-mark-seen-btn">Mark All Seen</button>
         </div>
       </div>
-      <div class="pw-tiles" id="pw-tiles"></div>
-      <div class="sr-digest-controls">
-        <input class="sr-search-input" id="pw-search" placeholder="Search by player or title...">
-        <div class="sr-chip-row" id="pw-type-chips">
-          <button class="sr-chip-btn on" data-val="all">All</button>
-          <button class="sr-chip-btn" data-val="bin">BIN</button>
-          <button class="sr-chip-btn" data-val="auction">Auctions</button>
-          <button class="sr-chip-btn" id="pw-deals-btn">Deals only</button>
+      <div class="pw-pills" id="pw-tiles"></div>
+      <button class="pw-deal" id="pw-deal" style="display:none"></button>
+      <div class="pw-bar">
+        <input class="sr-search-input" id="pw-search" placeholder="Search player or title...">
+        <button class="pw-more-btn" id="pw-more-btn" aria-label="More">⋯</button>
+        <div class="pw-menu" id="pw-menu" style="display:none">
+          <button class="pw-menu-item" id="sr-show-all-btn">Show seen listings too</button>
+          <button class="pw-menu-item" id="sr-mark-seen-btn">Mark all shown as seen</button>
+          <button class="pw-menu-item" id="pw-run-btn">Run searches now</button>
+          <button class="pw-menu-item" id="pw-settings-btn">⚙ Settings</button>
         </div>
-        <div class="sr-chip-row" id="pw-sort-chips">
-          <button class="sr-chip-btn on" data-val="newest">Newest</button>
-          <button class="sr-chip-btn" data-val="deal">Best deal</button>
-          <button class="sr-chip-btn" data-val="ending">Ending soon</button>
-        </div>
-        <div class="sr-chip-row">
-          <button class="sr-chip-btn" id="sr-show-all-btn">Show All</button>
-          <button class="sr-chip-btn" id="pw-run-btn">Run now</button>
-          <button class="sr-chip-btn" id="pw-settings-btn">⚙ Settings</button>
-        </div>
-        <div id="pw-settings" class="pw-settings" style="display:none"></div>
       </div>
+      <div class="pw-filters">
+        <div class="pw-seg" id="pw-type-seg">
+          <button class="on" data-val="all">All</button>
+          <button data-val="bin">BIN</button>
+          <button data-val="auction">Auctions</button>
+        </div>
+        <button class="sr-chip-btn" id="pw-deals-btn">Deals only</button>
+        <select class="pw-select" id="pw-sort" aria-label="Sort">
+          <option value="newest">Newest</option>
+          <option value="deal">Best deal</option>
+          <option value="ending">Ending soon</option>
+        </select>
+      </div>
+      <div id="pw-settings" class="pw-settings" style="display:none"></div>
       <div class="sr-digest-count" id="sr-digest-count">—</div>
       <div id="sr-digest-list"><div class="sr-loading">Loading...</div></div>
     </div>`;
 
+  const menu = document.getElementById('pw-menu');
+  const closeMenu = () => { menu.style.display = 'none'; };
+  document.getElementById('pw-more-btn').onclick = e => { e.stopPropagation(); menu.style.display = menu.style.display === 'none' ? '' : 'none'; };
+  menu.onclick = e => e.stopPropagation();
+  root.querySelector('.sr-wrap').addEventListener('click', closeMenu);
+
   document.getElementById('sr-back-btn').onclick = async () => { await initSearchResults(); window.scrollTo(0, srUIState.scrollY); };
   document.getElementById('pw-search').oninput = e => { pw.text = e.target.value.trim(); pwRender(); };
-  document.querySelectorAll('#pw-type-chips [data-val]').forEach(b => b.onclick = () => { pw.type = b.dataset.val; pwRender(); });
+  document.querySelectorAll('#pw-type-seg [data-val]').forEach(b => b.onclick = () => { pw.type = b.dataset.val; pwRender(); });
   document.getElementById('pw-deals-btn').onclick = () => { pw.dealsOnly = !pw.dealsOnly; pwRender(); };
-  document.querySelectorAll('#pw-sort-chips .sr-chip-btn').forEach(b => b.onclick = () => { pw.sort = b.dataset.val; pwRender(); });
-  document.getElementById('sr-show-all-btn').onclick = () => { pw.showAll = !pw.showAll; pwRender(); };
+  document.getElementById('pw-sort').onchange = e => { pw.sort = e.target.value; pwRender(); };
+  document.getElementById('sr-show-all-btn').onclick = () => { pw.showAll = !pw.showAll; closeMenu(); pwRender(); };
 
   document.getElementById('sr-mark-seen-btn').onclick = async (e) => {
     const btn = e.currentTarget, list = pwView().filter(i => !i.seen);
+    closeMenu();
     if (!list.length) return;
+    if (!confirm(`Mark ${list.length} listing${list.length === 1 ? '' : 's'} as seen?`)) return;
     btn.disabled = true;
-    try { await pwMark(list); pwRender(); } catch (err) { btn.textContent = 'Failed — try again'; setTimeout(() => { btn.textContent = 'Mark All Seen'; }, 1500); }
+    try { await pwMark(list); pwRender(); } catch (err) { btn.textContent = 'Failed — try again'; setTimeout(() => { btn.textContent = 'Mark all shown as seen'; }, 1500); }
     btn.disabled = false;
   };
   document.getElementById('sr-mark-past-btn').onclick = async (e) => {
@@ -172,12 +194,12 @@ async function showProspectWatch() {
 
   // Run now: pull everything live for both searches, then reload (first-time fill, or a refresh between cron runs)
   document.getElementById('pw-run-btn').onclick = async (e) => {
-    const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Running…';
+    const btn = e.currentTarget; closeMenu(); btn.disabled = true; btn.textContent = 'Running…';
     try {
       await Promise.all(Object.values(PW_KEYS).map(k => fetch(`${WORKER}/run-search`, { method: 'POST', headers: pwH(), body: JSON.stringify({ digestKey: k }) })));
       pw.items = await pwFetchItems(); pwRender();
     } catch (err) {}
-    btn.disabled = false; btn.textContent = 'Run now';
+    btn.disabled = false; btn.textContent = 'Run searches now';
   };
 
   const panel = document.getElementById('pw-settings');
@@ -198,7 +220,7 @@ async function showProspectWatch() {
       } catch (err) { msg.textContent = 'Could not save'; }
     };
   };
-  document.getElementById('pw-settings-btn').onclick = () => { pw.showSettings = !pw.showSettings; panel.style.display = pw.showSettings ? '' : 'none'; if (pw.showSettings) drawSettings(); };
+  document.getElementById('pw-settings-btn').onclick = () => { closeMenu(); pw.showSettings = !pw.showSettings; panel.style.display = pw.showSettings ? '' : 'none'; if (pw.showSettings) drawSettings(); };
 
   if (typeof phLoad === 'function' && !phData) { try { await phLoad(); } catch (e) {} }
   await pwLoadSettings();
