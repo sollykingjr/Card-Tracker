@@ -51,8 +51,11 @@ const getParallelMultiplier=(cardName,playerName)=>{
   let cn=(cardName||'').toLowerCase();
   if(playerName) cn = cn.split(playerName.toLowerCase()).join(' ');
   if(!cn.includes('auto')) return null;
-  const colorMatch = parallelMultipliers.find(p=>p.parallel && p.parallel.toLowerCase()!=='refractor' && cn.includes(p.parallel.toLowerCase()));
-  const match = colorMatch || parallelMultipliers.find(p=>p.parallel && p.parallel.toLowerCase()==='refractor' && cn.includes('refractor'));
+  // Team names contain color words (Red Sox, Reds, Blue Jays...) - blank them so they don't read as parallels
+  cn = cn.replace(/\b(red sox|white sox|blue jays?|reds|yellow jackets)\b/g, ' ');
+  const has = w => new RegExp('(?<![a-z0-9])'+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![a-z0-9])').test(cn);
+  const colorMatch = parallelMultipliers.find(p=>p.parallel && p.parallel.toLowerCase()!=='refractor' && has(p.parallel.toLowerCase()));
+  const match = colorMatch || parallelMultipliers.find(p=>p.parallel && p.parallel.toLowerCase()==='refractor' && has('refractor'));
   return match ? (parseFloat(match.multiplier)||1) : 1;
 };
 
