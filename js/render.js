@@ -507,6 +507,7 @@ function wlRenderCards() {
     const rawTitle = item.savedTitle || item.title || '';
     const safeTitle = rawTitle.replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
     const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
+    const est = listingEstInfo(safeTitle, item.currentPrice);
 
     return `<div class="wl-card${isSelected ? ' wl-selected' : ''}" ${cardClickAttr}>
       ${item.image ? (watchlistSelectMode
@@ -518,6 +519,7 @@ function wlRenderCards() {
         <button class="wl-remove-btn" onclick="event.stopPropagation();removeSingleFromWatchlist('${item.itemId}', this)">Remove</button>
       </div>
       <div class="wl-title-display" onclick="event.stopPropagation();window.open('${ebayUrl}','_blank')">${safeTitle}</div>
+      ${est ? `<div class="wl-est" style="color:${est.color}">${est.text}</div>` : ''}
       <div class="wl-btns">
         <button class="wl-btn" onclick="event.stopPropagation();openEditNameModal('${item.itemId}', ${i})">Edit Name</button>
         <button class="wl-btn" onclick="event.stopPropagation();openSearchOptionsModal('${item.itemId}', ${i})">Search Options</button>

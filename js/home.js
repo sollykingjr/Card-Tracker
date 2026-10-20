@@ -152,7 +152,8 @@ function homeRenderClosingSoon() {
     const ebayUrl = `https://www.ebay.com/itm/${item.itemId}`;
     const player = resolveItemPlayer(safeTitle);
     const playerPrice = player ? (player.price_cents || 0) / 100 : 0;
-    const playerPriceHtml = playerPrice > 0 ? ` · Player: $${playerPrice.toFixed(2)}` : '';
+    const est = listingEstInfo(safeTitle, item.currentPrice);
+    const playerPriceHtml = est ? ` · <span style="color:${est.color}">${est.text}</span>` : (playerPrice > 0 ? ` · Player: $${playerPrice.toFixed(2)}` : '');
     return `
       <div class="recent-row" style="align-items:flex-start">
         <div class="recent-info">

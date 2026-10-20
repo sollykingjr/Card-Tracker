@@ -799,6 +799,7 @@ body {
 /* ── Watchlist ────────────────────────────────────────────────────────────── */
 .wl-card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 14px; padding: 12px 13px; margin-bottom: 8px; box-shadow: var(--shadow-sm); }
 .wl-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.wl-est { font-size: 12px; font-weight: 600; margin: 2px 0 8px; font-family: 'DM Mono', monospace; }
 .wl-countdown { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: var(--surf2); color: var(--tx2); font-family: 'DM Mono', monospace; }
 .wl-countdown.wl-soon { background: var(--b35-bg); color: var(--b35-tx); }
 .wl-countdown.wl-urgent { background: rgba(248,113,113,.1); color: var(--dn); }

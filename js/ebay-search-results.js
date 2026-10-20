@@ -1358,7 +1358,12 @@ function resolveItemPlayer(title) {
   }
   return best;
 }
+// Slabbed cards (PSA/BGS/SGC/CGC/CSG/HGA) get no estimate: the base-auto price x parallel multiplier is for raw cards. "PSA/DNA" only authenticates the signature.
+function isGradedTitle(title) {
+  return /\b(psa|bgs|sgc|cgc|csg|hga)\b/i.test(String(title || '').replace(/psa\s*\/?\s*dna/gi, ' '));
+}
 function getListingExpectedValue(title) {
+  if (isGradedTitle(title)) return null;
   const player = resolveItemPlayer(title);
   if (!player) return null;
   const mult = getParallelMultiplier(title, player.name);
@@ -1366,6 +1371,16 @@ function getListingExpectedValue(title) {
   const base = (player.price_cents || 0) / 100;
   if (base <= 0) return null;
   return base * mult;
+}
+// Estimated value vs the asking price / current bid, for the Watchlist and Home cards: {ev, pct (negative = under), color, text} or null.
+function listingEstInfo(title, price) {
+  const ev = getListingExpectedValue(title);
+  const pr = parseFloat(price);
+  if (ev === null || !(ev > 0)) return null;
+  if (!(pr > 0)) return { ev, pct: null, color: 'var(--tx2)', text: `Est ${fmtMoney(ev)}` };
+  const pct = Math.round((pr - ev) / ev * 100);
+  const color = pct <= -10 ? '#4ade80' : pct >= 10 ? '#f87171' : '#eab308';
+  return { ev, pct, color, text: `Est ${fmtMoney(ev)} · ${Math.abs(pct)}% ${pct <= 0 ? 'under' : 'over'}` };
 }
 // The listings currently on screen, in display order (card i on screen = srRenderedItems[i])
 let srRenderedItems = [];
