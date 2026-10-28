@@ -1909,25 +1909,30 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .pw-entry-sub { font-size: 12px; color: var(--tx2); margin-top: 3px; }
 .pw-entry-sub b { color: var(--tx); font-family: 'DM Mono', monospace; }
 .pw-entry-go { color: var(--acc); font-size: 22px; line-height: 1; flex-shrink: 0; }
-.pw-pills { display: flex; gap: 8px; margin: 2px 0 8px; }
+.pw-pills { display: flex; gap: 8px; margin: 6px 0 12px; }
 .pw-pill { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; background: var(--surf); border: 1px solid var(--bdr2); border-radius: 12px; color: var(--tx2); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-width: 0; }
 .pw-pill.on { border-color: var(--acc); background: var(--acc-bg); color: var(--acc); }
 .pw-pill-n { font-family: 'DM Mono', monospace; font-size: 15px; color: var(--tx); }
 .pw-pill.on .pw-pill-n { color: var(--acc); }
-.pw-deal { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0 0 10px; padding: 8px 12px; background: rgba(74,222,128,.10); border: 1px solid rgba(74,222,128,.28); border-radius: 10px; color: var(--tx); font-family: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.pw-deal { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0 0 12px; padding: 10px 12px; background: rgba(74,222,128,.10); border: 1px solid rgba(74,222,128,.28); border-radius: 10px; color: var(--tx); font-family: inherit; font-size: 12px; cursor: pointer; text-align: left; }
 .pw-deal-l { font-weight: 700; color: #4ade80; flex-shrink: 0; }
 .pw-deal-b { color: var(--tx2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.pw-bar { position: relative; display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.pw-bar { position: relative; display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
 .pw-bar .sr-search-input { min-width: 0; }
 .pw-more-btn { width: 38px; height: 38px; flex-shrink: 0; background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 10px; color: var(--tx2); font-size: 20px; line-height: 1; cursor: pointer; font-family: inherit; }
 .pw-menu { position: absolute; right: 0; top: 44px; z-index: 30; min-width: 230px; background: var(--surf); border: 1px solid var(--bdr2); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 4px; }
 .pw-menu-item { display: block; width: 100%; text-align: left; padding: 11px 12px; background: none; border: none; border-radius: 8px; color: var(--tx); font-family: inherit; font-size: 14px; cursor: pointer; }
 .pw-menu-item:active, .pw-menu-item.on { background: var(--acc-bg); }
-.pw-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.pw-seg { display: flex; flex: 1; min-width: 0; background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 20px; padding: 2px; }
-.pw-seg button { flex: 1; padding: 5px 8px; background: none; border: none; border-radius: 18px; color: var(--tx2); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.pw-filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.pw-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pw-chips .pw-select { margin-left: auto; }
+.pw-seg { display: flex; width: 100%; min-width: 0; background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 20px; padding: 2px; }
+.pw-seg button { flex: 1; padding: 8px 8px; background: none; border: none; border-radius: 18px; color: var(--tx2); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .pw-seg button.on { background: var(--acc-bg); color: var(--acc); }
 .pw-select { height: 30px; padding: 0 8px; background: var(--surf2); border: 1px solid var(--bdr2); border-radius: 20px; color: var(--tx2); font-family: inherit; font-size: 12px; font-weight: 600; flex-shrink: 0; }
 .pw-settings { width: 100%; padding: 10px 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--tx2); }
 .pw-set-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .pw-set-row .sr-input { width: 70px; margin: 0; }
+.pw-chips { gap: 6px; flex-wrap: nowrap; }
+.pw-chips .sr-chip-btn { padding: 6px 10px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.pw-chips .pw-select { flex: 1 1 0; min-width: 0; max-width: 96px; padding: 0 4px; margin-left: auto; }

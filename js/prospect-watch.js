@@ -2,7 +2,11 @@
 // Every recent-EV prospect's first Bowman auto, pooled from the two built-in searches (BIN hourly, Auctions nightly).
 // Reads the same 7-day archives and uses the same card renderer and Mark Seen / Mark All Seen as any other search result.
 const PW_KEYS = { bin: 'prospect_watch_bin_digest', auction: 'prospect_watch_auction_digest' };
-let pw = { items: [], settings: { enabled: true, days: 30, dealPct: 40 }, tier: '', type: 'all', dealsOnly: false, targetOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
+let pw = { items: [], settings: { enabled: true, days: 30, dealPct: 40 }, tier: '', type: 'all', dealsOnly: false, targetOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false, capOn: true };
+
+// Price cap: listings above it are hidden unless you switch it off with the price chip. The amount is a per-device setting (default $200).
+const pwMaxPrice = () => { try { const v = parseFloat(localStorage.getItem('pwMaxPrice')); return v > 0 ? v : 200; } catch (e) { return 200; } };
+const pwInPrice = i => !pw.capOn || !(parseFloat(i.price) > pwMaxPrice());
 
 const pwH = () => ({ 'Content-Type': 'application/json', 'X-App-Key': APP_KEY });
 const pwEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -37,7 +41,7 @@ async function pwWireEntry() {
   if (main) main.onclick = () => { srUIState.scrollY = window.scrollY; showProspectWatch(); };
   try {
     await pwLoadSettings();
-    const unseen = (await pwFetchItems()).filter(i => !i.seen);
+    const unseen = (await pwFetchItems()).filter(i => !i.seen && pwInPrice(i));
     const badge = document.getElementById('pw-entry-badge'), sub = document.getElementById('pw-entry-sub');
     const n = unseen.length;
     if (badge && n > 0) { badge.textContent = n > 999 ? '1K+' : String(n); badge.style.display = 'inline-flex'; }
@@ -50,7 +54,7 @@ async function pwWireEntry() {
 
 function pwView() {
   const ft = pw.text ? foldText(pw.text) : '';
-  return pw.items.filter(i => pwTierOk(i, pw.tier)
+  return pw.items.filter(i => pwTierOk(i, pw.tier) && pwInPrice(i)
     && (pw.type === 'all' || (pw.type === 'bin' ? i.type === 'BIN' : i.type === 'Auction'))
     && (!pw.dealsOnly || pwIsDeal(i))
     && (!pw.targetOnly || pwIsTarget(i))
@@ -58,13 +62,13 @@ function pwView() {
 }
 
 function pwTilesHtml() {
-  const unseen = pw.items.filter(i => !i.seen);
+  const unseen = pw.items.filter(i => !i.seen && pwInPrice(i));
   const pill = (tier, label) => `<button class="pw-pill${pw.tier === tier ? ' on' : ''}" data-tier="${tier}"><span class="pw-pill-l">${label}</span><span class="pw-pill-n">${unseen.filter(i => pwTierOk(i, tier)).length}</span></button>`;
   return pill('5', 'BS 5') + pill('4', 'BS 4+') + pill('', 'All');
 }
 // One-line strip: the best unseen BIN deal in the current tier (tap to show deals only, best first)
 function pwDealHtml() {
-  const deals = pw.items.filter(i => !i.seen && pwTierOk(i, pw.tier) && pwIsDeal(i)).sort((a, b) => a._est.pct - b._est.pct);
+  const deals = pw.items.filter(i => !i.seen && pwInPrice(i) && pwTierOk(i, pw.tier) && pwIsDeal(i)).sort((a, b) => a._est.pct - b._est.pct);
   if (!deals.length) return '';
   const best = deals[0];
   return `<span class="pw-deal-l">🔥 ${deals.length} deal${deals.length === 1 ? '' : 's'} ${pw.settings.dealPct}%+ under</span><span class="pw-deal-b">${pwEsc(best._p.name)} ${best._est.pct}% · $${pwEsc(best.price)}</span>`;
@@ -89,6 +93,7 @@ function pwRender() {
   const sortSel = document.getElementById('pw-sort'); if (sortSel) sortSel.value = pw.sort;
   document.getElementById('pw-deals-btn')?.classList.toggle('on', pw.dealsOnly);
   document.getElementById('pw-target-btn')?.classList.toggle('on', pw.targetOnly);
+  const cap = document.getElementById('pw-cap-btn'); if (cap) { cap.classList.toggle('on', pw.capOn); cap.textContent = pw.capOn ? `Under $${pwMaxPrice()}` : 'Any price'; }
   const sa = document.getElementById('sr-show-all-btn');
   if (sa) { sa.classList.toggle('on', pw.showAll); sa.textContent = pw.showAll ? 'Showing all · switch to unseen only' : 'Show seen listings too'; }
 }
@@ -113,7 +118,7 @@ async function showProspectWatch() {
   if (srResumeCleanup) srResumeCleanup();
   srClearResume();
   srSeller = { sel: new Set(), text: '' };
-  pw = { ...pw, items: [], tier: '', type: 'all', dealsOnly: false, targetOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
+  pw = { ...pw, capOn: true, items: [], tier: '', type: 'all', dealsOnly: false, targetOnly: false, sort: 'newest', text: '', showAll: false, showSettings: false };
   const root = document.getElementById('sr-root');
   root.innerHTML = `
     <div class="sr-wrap">
@@ -142,13 +147,16 @@ async function showProspectWatch() {
           <button data-val="bin">BIN</button>
           <button data-val="auction">Auctions</button>
         </div>
-        <button class="sr-chip-btn" id="pw-deals-btn">Deals only</button>
-        <button class="sr-chip-btn" id="pw-target-btn">On target</button>
-        <select class="pw-select" id="pw-sort" aria-label="Sort">
-          <option value="newest">Newest</option>
-          <option value="deal">Best deal</option>
-          <option value="ending">Ending soon</option>
-        </select>
+        <div class="pw-chips">
+          <button class="sr-chip-btn" id="pw-deals-btn">Deals</button>
+          <button class="sr-chip-btn" id="pw-target-btn">On target</button>
+          <button class="sr-chip-btn on" id="pw-cap-btn"></button>
+          <select class="pw-select" id="pw-sort" aria-label="Sort">
+            <option value="newest">Newest</option>
+            <option value="deal">Best deal</option>
+            <option value="ending">Ending soon</option>
+          </select>
+        </div>
       </div>
       <div id="pw-settings" class="pw-settings" style="display:none"></div>
       <div class="sr-digest-count" id="sr-digest-count">—</div>
@@ -166,6 +174,7 @@ async function showProspectWatch() {
   document.querySelectorAll('#pw-type-seg [data-val]').forEach(b => b.onclick = () => { pw.type = b.dataset.val; pwRender(); });
   document.getElementById('pw-deals-btn').onclick = () => { pw.dealsOnly = !pw.dealsOnly; if (pw.dealsOnly) pw.targetOnly = false; pwRender(); };
   document.getElementById('pw-target-btn').onclick = () => { pw.targetOnly = !pw.targetOnly; if (pw.targetOnly) pw.dealsOnly = false; pwRender(); };
+  document.getElementById('pw-cap-btn').onclick = () => { pw.capOn = !pw.capOn; pwRender(); };
   document.getElementById('pw-sort').onchange = e => { pw.sort = e.target.value; pwRender(); };
   document.getElementById('sr-show-all-btn').onclick = () => { pw.showAll = !pw.showAll; closeMenu(); pwRender(); };
 
@@ -215,9 +224,11 @@ async function showProspectWatch() {
       <label class="pw-set-row"><input type="checkbox" id="pw-set-on" ${s.enabled ? 'checked' : ''}> Watch is on</label>
       <label class="pw-set-row">A player expires after <input class="sr-input" id="pw-set-days" type="number" min="1" max="365" value="${s.days}"> days with no new Expected Value</label>
       <label class="pw-set-row">A BIN is a deal when it is <input class="sr-input" id="pw-set-deal" type="number" min="1" max="95" value="${s.dealPct}"> % or more under its estimate</label>
+      <label class="pw-set-row">Hide listings over $<input class="sr-input" id="pw-set-max" type="number" min="1" value="${pwMaxPrice()}"> (this device)</label>
       <button class="sr-chip-btn on" id="pw-set-save">Save</button> <span id="pw-set-msg" style="font-size:12px;color:var(--tx3)"></span>`;
     document.getElementById('pw-set-save').onclick = async () => {
       const msg = document.getElementById('pw-set-msg'); msg.textContent = 'Saving…';
+      try { const mp = parseFloat(document.getElementById('pw-set-max').value); if (mp > 0) localStorage.setItem('pwMaxPrice', String(mp)); } catch (e) {}
       try {
         const r = await fetch(`${WORKER}/prospect-watch-settings`, { method: 'POST', headers: pwH(), body: JSON.stringify({
           enabled: document.getElementById('pw-set-on').checked, days: document.getElementById('pw-set-days').value, dealPct: document.getElementById('pw-set-deal').value }) });
