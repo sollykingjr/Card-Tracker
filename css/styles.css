@@ -1794,6 +1794,11 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-row-sub { font-size: 12px; color: var(--tx3); margin-top: 1px; }
 .ph-row-price { font-size: 14px; font-weight: 600; color: var(--tx); padding-right: 2px; }
 
+/* Recent players: first 10 until "Show all"; two columns on wide screens */
+.ph-recent:not(.all) > .ph-item:nth-child(n+11) { display: none; }
+@media (min-width: 900px) { .ph-recent { display: grid; grid-template-columns: 1fr 1fr; gap: 0 36px; } }
+.ph-more { margin: 10px 0 0; padding: 7px 14px; border-radius: 16px; background: var(--surf2); border: .5px solid var(--bdr2); color: var(--tx2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+
 /* From his latest posts: reads like a note */
 .ph-item { padding: 12px 0; border-bottom: .5px solid var(--bdr2); cursor: pointer; }
 .ph-item:active { opacity: .7; }
@@ -1804,6 +1809,7 @@ textarea.intake-in { min-height: 52px; resize: vertical; }
 .ph-item-nums { display: flex; align-items: baseline; gap: 10px; flex-shrink: 0; }
 .ph-item-price { font-size: 14px; font-weight: 600; color: var(--tx); }
 .ph-item-bs { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 700; color: var(--tx2); }
+.ph-item-bs.top { color: var(--sc-top); }
 .ph-item-bs.hi { color: var(--b5-tx); }
 .ph-item-bs.mid { color: var(--b35-tx); }
 .ph-item-bs.lo { color: var(--dn); }

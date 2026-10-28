@@ -113,19 +113,21 @@ function phRow(p, owned) {
 }
 
 // From his latest posts: reads like a note, with the score (green up / red down) and the card price on the right.
-function phNote(p, owned) {
+function phNote(p, owned, showDate) {
   const o = owned.get(normName(p.name));
   const bs = p.buy_rating != null ? Number(p.buy_rating) : null, prev = p.prev_buy_rating != null ? Number(p.prev_buy_rating) : null;
   const tone = phTone(bs);
   return `<div class="ph-item" data-ph="${pibEsc(p.name)}">
     <div class="ph-item-head">
-      <div class="ph-item-id"><span class="ph-item-name">${pibEsc(p.name)}</span><span class="ph-item-meta">${phWho(p)}${o ? ' · you own' : ''}</span></div>
+      <div class="ph-item-id"><span class="ph-item-name">${pibEsc(p.name)}</span><span class="ph-item-meta">${phWho(p)}${o ? ' · you own' : ''}${showDate && p.latest_note_dated ? ' · ' + phDate(p.latest_note_dated) : ''}</span></div>
       <div class="ph-item-nums">${p.price_cents != null ? `<span class="ph-item-price">${phMoney(p.price_cents)}</span>` : ''}${bs != null ? `<span class="ph-item-bs ${tone}">${phBs(bs)}</span>` : ''}</div>
     </div>
     <div class="ph-note">${pibEsc(p.latest_note)}</div>
   </div>`;
 }
 
+const PH_RECENT_N = 10;   // Recent players shows this many until "Show all"
+let phRecentAll = false;
 const phDaysAgo = (d, n) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0, 10); };
 
 // What to show on the home, from the data (kept apart from the drawing so it can be tested).
@@ -146,7 +148,10 @@ function phHomeLists(data, owned) {
   const notes = data.filter(p => !shown.has(p.prospect_id) && p.latest_note && p.latest_note_dated >= noteSince && (own(p) || p.buy_rating >= 4))
     .sort((a, b) => (own(b) - own(a)) || byBs(a, b)).slice(0, 8);
   const noteFor = p => p.latest_note && p.latest_note_dated >= noteSince ? p.latest_note : '';
-  return { buys, mine, notes, noteFor, newestScore, newestNote };
+  // Recent players: everyone in his newest posts (any score), newest post first, then highest Buy Score
+  const recent = data.filter(p => p.latest_note && p.latest_note_dated >= noteSince)
+    .sort((a, b) => b.latest_note_dated.localeCompare(a.latest_note_dated) || byBs(a, b));
+  return { buys, mine, notes, recent, noteFor, newestScore, newestNote };
 }
 
 function renderProspectHome() {
@@ -169,6 +174,9 @@ function renderProspectHome() {
     phLoadHist(L.mine.map(p => p.prospect_id));
     const withNote = p => ({ ...p, note: L.noteFor(p) });
     html = sec('Worth a look', 'Buy Score rose to 4 or higher', L.buys.length ? `<div class="ph-tiles">${L.buys.map(p => phTile(p, owned)).join('')}</div>` : '')
+      + sec('Recent players', L.recent.length ? `${L.recent.length} player${L.recent.length === 1 ? '' : 's'} in his posts since ${phDate(phDaysAgo(L.newestNote, 7))}` : '',
+          L.recent.length ? `<div class="ph-recent${phRecentAll ? ' all' : ''}">${L.recent.map(p => phNote(p, owned, true)).join('')}</div>`
+            + (L.recent.length > PH_RECENT_N ? `<button class="ph-more" data-more="recent">${phRecentAll ? 'Show fewer' : 'Show all ' + L.recent.length}</button>` : '') : '')
       + `<div class="ph-cols">`
       + sec('Your players', 'Buy Score changed since his previous score', L.mine.map(p => phRow(withNote(p), owned)).join(''), 'port')
       + sec('From his latest posts', L.newestNote ? 'notes since ' + phDate(phDaysAgo(L.newestNote, 7)) : '', L.notes.map(p => phNote(p, owned)).join(''), 'posts')
@@ -193,6 +201,7 @@ async function phOpen(name) {
   return phShowModal(name);
 }
 document.getElementById('list').addEventListener('click', e => {
+  const m = e.target.closest('[data-more]'); if (m) { phRecentAll = !phRecentAll; renderProspectHome(); return; }
   const g = e.target.closest('[data-go]'); if (g) { const t = document.querySelector(`#tabs .tab[data-t="${g.dataset.go}"]`); if (t) t.click(); return; }   // section titles open Portfolio / Posts
   const c = e.target.closest('[data-ph]'); if (c) phOpen(c.dataset.ph);
 });
