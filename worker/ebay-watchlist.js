@@ -357,25 +357,3 @@ export async function handleRemoveFromWatch(request, env, cors) {
   }
 }
 
-export async function handleSetSnipe(request, env, cors) {
-  try {
-    const { itemId, maxBid } = await request.json();
-    if (!itemId || !maxBid) return new Response(JSON.stringify({ error: 'missing itemId or maxBid' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
-    });
-
-    const url = `https://www.gixen.com/api.php?username=${encodeURIComponent(env.GIXEN_USERNAME)}&password=${encodeURIComponent(env.GIXEN_PASSWORD)}&itemid=${encodeURIComponent(itemId)}&maxbid=${encodeURIComponent(maxBid)}&main=1`;
-    const res = await fetch(url);
-    const text = await res.text();
-
-    const ok = text.includes('ERROR_CODE=0');
-    return new Response(JSON.stringify({ ok: false, raw: text }), {
-      headers: { ...cors, 'Content-Type': 'application/json' }
-    });
-  } catch(e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-    });
-  }
-}
-

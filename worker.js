@@ -1,6 +1,6 @@
 // ── worker.js — entry point: router + imports
 import { notifyCronFailure, handleDailyStats, sendDailyStatsNotification, handleTestPromotions, handleSbDataGet, handleSbDataPost, handleRateLimitCheck, handleMarketplaceInsightsTest } from './worker/misc.js';
-import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleSetSnipe, handleAddToWatch, handleRemoveFromWatch, refreshWatchlistCache } from './worker/ebay-watchlist.js';
+import { handleAuth, handleCallback, handleWatchlist, handleSaveTitle, handleAddToWatch, handleRemoveFromWatch, refreshWatchlistCache } from './worker/ebay-watchlist.js';
 import { reconcileListingTags } from './worker/ebay-selling.js';
 import {
   checkPlayerSearches, checkNightlySearches, sendPlayerDigestNotification, clearPlayerDigests,
@@ -31,7 +31,6 @@ const PROTECTED_ROUTES = new Set([
   'POST:/sb-data',
   'POST:/mark-seen',
   'POST:/mark-seen-urls',
-  'POST:/set-snipe',
   'POST:/watch-add',
   'POST:/watch-remove',
   'POST:/scan-batch',
@@ -127,7 +126,6 @@ export default {
     if (path === '/sb-data' && request.method === 'POST') return handleSbDataPost(request, env, cors);
     if (path === '/mark-seen' && request.method === 'POST') return handleMarkSeen(request, env, cors);
     if (path === '/mark-seen-urls' && request.method === 'POST') return handleMarkSeenUrls(request, env, cors);
-    if (path === '/set-snipe' && request.method === 'POST') return handleSetSnipe(request, env, cors);
     if (path === '/watch-add' && request.method === 'POST') return handleAddToWatch(request, env, cors);
     if (path === '/watch-remove' && request.method === 'POST') return handleRemoveFromWatch(request, env, cors);
     if (path === '/debug-raw-watchlist' && request.method === 'GET') return handleDebugRawWatchlist(request, env, cors);
